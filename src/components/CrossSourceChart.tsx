@@ -105,27 +105,29 @@ export default function CrossSourceChart({ points, dayEvents = {}, threshold = 3
 
       {hoveredPoint && (
         <div
-          className="pointer-events-none absolute top-1 z-10 w-72 rounded-lg border border-slate-200 bg-white p-2.5 text-xs shadow-lg"
+          className="pointer-events-none absolute top-1 z-10 w-72 rounded-lg border border-slate-200 bg-white p-2.5 text-xs shadow-lg dark:border-slate-700 dark:bg-slate-800"
           style={{ left: `${leftPct}%`, transform: 'translateX(-50%)' }}
         >
-          <div className="mb-1 font-medium text-slate-800">
+          <div className="mb-1 font-medium text-slate-800 dark:text-slate-100">
             {hoveredPoint.date} · 最高 {hoveredPoint.maxSources} 家源 / {hoveredPoint.eventCount} 个事件
           </div>
           {hoveredEvents.length === 0 ? (
-            <div className="text-slate-500">当日暂无跨源事件</div>
+            <div className="text-slate-500 dark:text-slate-400">当日暂无跨源事件</div>
           ) : (
             <ul className="space-y-1.5">
               {hoveredEvents.slice(0, 4).map((e) => (
                 <li key={e.eventKey}>
-                  <div className="text-slate-700">
+                  <div className="text-slate-700 dark:text-slate-200">
                     {e.title.length > 36 ? `${e.title.slice(0, 36)}…` : e.title}
                   </div>
-                  <div className="text-slate-500">
+                  <div className="text-slate-500 dark:text-slate-400">
                     {e.sourceCount} 源 / {e.articleCount} 条 · {e.sources.join('、') || '（来源未知）'}
                   </div>
                 </li>
               ))}
-              {hoveredEvents.length > 4 && <li className="text-slate-400">…另有 {hoveredEvents.length - 4} 个事件</li>}
+              {hoveredEvents.length > 4 && (
+                <li className="text-slate-400 dark:text-slate-500">…另有 {hoveredEvents.length - 4} 个事件</li>
+              )}
             </ul>
           )}
         </div>

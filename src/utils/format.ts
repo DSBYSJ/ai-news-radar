@@ -9,15 +9,16 @@ export const CATEGORY_LABELS: Record<string, string> = {
   other: '其他',
 }
 
+/** 低饱和「莫兰迪」色系：不刺眼、深浅两套主题下都耐看 */
 export const CATEGORY_COLORS: Record<string, string> = {
-  model_release: '#dc2626',
-  product_update: '#2563eb',
-  research_paper: '#7c3aed',
-  open_source: '#059669',
-  funding: '#d97706',
-  policy: '#0891b2',
-  opinion: '#db2777',
-  other: '#9ca3af',
+  model_release: '#b1776f', // 陶土红
+  product_update: '#7f9bb3', // 雾蓝
+  research_paper: '#9a8fb5', // 灰紫
+  open_source: '#7fa98f', // 鼠尾草绿
+  funding: '#c9a06a', // 驼色
+  policy: '#7fa7a8', // 灰青
+  opinion: '#b98fa8', // 藕粉
+  other: '#a3a8b0', // 灰
 }
 
 export const CATEGORY_ORDER = [

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import type { ReactNode } from 'react'
 import { api } from './api.ts'
 import ListPage from './pages/ListPage.tsx'
 import SummaryPage from './pages/SummaryPage.tsx'
@@ -6,12 +7,50 @@ import TrendPage from './pages/TrendPage.tsx'
 import type { Health, SourceItem } from './types.ts'
 
 type Tab = 'list' | 'trend' | 'summary'
+type Theme = 'light' | 'dark'
+
+function initialTheme(): Theme {
+  const saved = localStorage.getItem('theme')
+  if (saved === 'light' || saved === 'dark') return saved
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+}
+
+function Pill({ children }: { children: ReactNode }) {
+  return (
+    <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+      {children}
+    </span>
+  )
+}
+
+function SunIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+    </svg>
+  )
+}
+
+function MoonIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />
+    </svg>
+  )
+}
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('list')
+  const [theme, setTheme] = useState<Theme>(initialTheme)
   const [health, setHealth] = useState<Health | null>(null)
   const [sources, setSources] = useState<SourceItem[]>([])
   const [running, setRunning] = useState<string>('')
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', theme === 'dark')
+    localStorage.setItem('theme', theme)
+  }, [theme])
 
   const loadMeta = useCallback(async () => {
     try {
@@ -41,58 +80,65 @@ export default function App() {
     }
   }
 
+  const actionBtn =
+    'rounded-full border border-slate-300 bg-white px-3.5 py-1.5 text-xs text-slate-700 transition duration-150 ' +
+    'hover:-translate-y-0.5 hover:border-slate-400 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50 ' +
+    'dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-slate-500'
+
   return (
-    <div className="mx-auto max-w-5xl p-4">
-      <header className="mb-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="mx-auto max-w-5xl p-4 md:p-6">
+      <header className="mb-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h1 className="text-lg font-semibold text-slate-900">AI 资讯趋势雷达</h1>
-            <p className="text-xs text-slate-500">
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-50">
+              AI 资讯趋势雷达
+            </h1>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
               不是资讯阅读器 —— 看的是「变化」：哪个方向在升温，哪些事件被多家独立源印证
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => void run('collect')}
-              disabled={running !== ''}
-              className="rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs hover:bg-slate-50 disabled:opacity-50"
-            >
+            <button type="button" onClick={() => void run('collect')} disabled={running !== ''} className={actionBtn}>
               采集
+            </button>
+            <button type="button" onClick={() => void run('process')} disabled={running !== ''} className={actionBtn}>
+              加工
             </button>
             <button
               type="button"
-              onClick={() => void run('process')}
-              disabled={running !== ''}
-              className="rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs hover:bg-slate-50 disabled:opacity-50"
+              aria-label="切换深色模式"
+              onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+              className={actionBtn}
             >
-              加工
+              {theme === 'dark' ? <SunIcon /> : <MoonIcon />}
             </button>
           </div>
         </div>
 
-        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
           {health ? (
             <>
-              <span className="rounded bg-slate-100 px-2 py-0.5">v{health.version}</span>
-              <span className="rounded bg-slate-100 px-2 py-0.5">源 {health.sources}</span>
-              <span className="rounded bg-slate-100 px-2 py-0.5">原始 {health.rawItems}</span>
-              <span className="rounded bg-slate-100 px-2 py-0.5">成品 {health.articles}</span>
-              <span className="rounded bg-slate-100 px-2 py-0.5">事件 {health.events}</span>
-              <span className={`rounded px-2 py-0.5 ${health.aiEnabled ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
+              <Pill>v{health.version}</Pill>
+              <Pill>源 {health.sources}</Pill>
+              <Pill>原始 {health.rawItems}</Pill>
+              <Pill>成品 {health.articles}</Pill>
+              <Pill>事件 {health.events}</Pill>
+              <span className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
+                <span className={`inline-block h-1.5 w-1.5 rounded-full ${health.aiEnabled ? 'bg-emerald-500' : 'bg-amber-500'}`} />
                 AI {health.aiEnabled ? '已启用' : '未配置（启发式兜底）'}
               </span>
-              <span className={`rounded px-2 py-0.5 ${health.authEnabled ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
+              <span className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
+                <span className={`inline-block h-1.5 w-1.5 rounded-full ${health.authEnabled ? 'bg-emerald-500' : 'bg-amber-500'}`} />
                 鉴权 {health.authEnabled ? '已开启' : '未开启（本地）'}
               </span>
             </>
           ) : (
-            <span>后端未连接（先启动 server：cd server && npm start）</span>
+            <span className="text-slate-500 dark:text-slate-400">后端未连接（先启动 server：cd server && npm start）</span>
           )}
-          {running && <span className="text-slate-600">{running}</span>}
+          {running && <span className="text-slate-600 dark:text-slate-300">{running}</span>}
         </div>
 
-        <nav className="mt-3 flex gap-1 border-b border-slate-200">
+        <nav className="mt-4 flex gap-1 border-b border-slate-200 dark:border-slate-800">
           {(
             [
               ['list', '资讯列表'],
@@ -104,8 +150,10 @@ export default function App() {
               key={key}
               type="button"
               onClick={() => setTab(key)}
-              className={`-mb-px border-b-2 px-3 py-2 text-sm ${
-                tab === key ? 'border-slate-900 font-medium text-slate-900' : 'border-transparent text-slate-500'
+              className={`-mb-px rounded-t-lg border-b-2 px-3.5 py-2 text-sm transition ${
+                tab === key
+                  ? 'border-violet-600 font-medium text-slate-900 dark:text-slate-100'
+                  : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
               }`}
             >
               {label}
