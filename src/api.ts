@@ -1,5 +1,6 @@
 import type {
   ArticlesResponse,
+  AskResult,
   CategoryRatioPoint,
   CrossSourceResponse,
   DailyPoint,
@@ -64,6 +65,7 @@ export const api = {
   runCollect: () => post<unknown>('/collect'),
   runProcess: () => post<unknown>('/process'),
   forecast: (days = 30, horizon = 7) => get<ForecastResponse>('/forecast', { days, horizon }),
+  ask: (question: string) => post<AskResult>('/ask', { question }),
   sentiment: (days = 30) => get<SentimentResponse>('/sentiment', { days }),
   entitySentiment: (entity: string, days = 30) =>
     get<EntitySentimentResponse>(`/sentiment/entity/${encodeURIComponent(entity)}`, { days }),

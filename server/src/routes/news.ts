@@ -3,6 +3,7 @@ import { rebuildEvents } from '../analytics/events.ts'
 import { categoryRatio, crossSource, dailyVolume, topEntities, velocity } from '../analytics/trend.ts'
 import { CATEGORY_LABELS, type Category } from '../ai/categories.ts'
 import { runProcessing } from '../ai/pipeline.ts'
+import { askQuestion } from '../ai/ask.ts'
 import { generateDailySummary, getSummary, listSummaries, yesterdayUtc } from '../ai/summary.ts'
 import { forecastVolume } from '../analytics/forecast.ts'
 import { dailySentiment, entitySentiment, sentimentAlerts, topEntitiesWithSentiment } from '../analytics/sentiment.ts'
@@ -215,6 +216,15 @@ export async function newsRoutes(app: FastifyInstance): Promise<void> {
       .prepare('SELECT id, name, url, kind, weight, enabled, last_fetch_at, last_status FROM sources ORDER BY id')
       .all(),
   }))
+
+  /** 自然语言问答（自用；统计类 = Text-to-SQL，归因类 = 向量检索 + 上下文） */
+  app.post('/api/news/ask', async (req, reply) => {
+    const body = (req.body ?? {}) as { question?: string }
+    const question = typeof body.question === 'string' ? body.question.trim() : ''
+    if (!question) return reply.code(400).send({ error: '请输入问题' })
+    if (question.length > 200) return reply.code(400).send({ error: '问题请控制在 200 字以内' })
+    return askQuestion(question)
+  })
 
   /** 短期热度预测（Holt 阻尼趋势，本地计算，无外部依赖） */
   app.get('/api/news/forecast', async (req) => {
