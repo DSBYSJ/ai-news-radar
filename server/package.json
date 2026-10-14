@@ -1,0 +1,31 @@
+{
+  "name": "ai-news-server",
+  "version": "0.3.0",
+  "private": true,
+  "description": "AI 资讯趋势雷达 · 后端（采集 / 存储 / 趋势统计）",
+  "type": "module",
+  "engines": {
+    "node": ">=22.6.0"
+  },
+  "scripts": {
+    "start": "node src/index.ts",
+    "dev": "node --watch src/index.ts",
+    "collect": "node src/collector/run.ts",
+    "process": "node src/ai/run.ts",
+    "pipeline": "node src/jobs/run.ts",
+    "summary": "node src/ai/summary-run.ts",
+    "clusters": "node src/analytics/clusters-run.ts",
+    "bursts": "node src/analytics/bursts-run.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test \"test/**/*.test.ts\"",
+    "bump:patch": "npm version patch --no-git-tag-version"
+  },
+  "dependencies": {
+    "fast-xml-parser": "^4.5.0",
+    "fastify": "^5.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.8.0"
+  }
+}
