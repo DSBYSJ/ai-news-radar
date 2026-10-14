@@ -64,6 +64,8 @@ export default function AskPanel() {
   const [msgs, setMsgs] = useState<Msg[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
+  // 手机端默认折叠（不占首屏）；桌面端始终展开
+  const [collapsed, setCollapsed] = useState(false)
 
   const send = async (question: string) => {
     const q = question.trim()
@@ -87,7 +89,8 @@ export default function AskPanel() {
 
   return (
     <section className="rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)] dark:border-slate-800 dark:bg-slate-900">
-      <header className="border-b border-slate-100 p-4 dark:border-slate-800">
+      <header className="flex items-start gap-2 border-b border-slate-100 p-4 dark:border-slate-800">
+        <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="rounded-full bg-violet-600 px-2.5 py-0.5 text-xs font-medium text-white">AI</span>
           <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">趋势问答助手</h3>
@@ -96,8 +99,17 @@ export default function AskPanel() {
           统计类问题走 Text-to-SQL，归因类问题走向量检索 + 当天统计上下文。
           <b className="text-slate-600 dark:text-slate-300">所有数字来自库内查询，所有引用都指向真实文章</b>，不会编造。
         </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setCollapsed((v) => !v)}
+          className="shrink-0 rounded-full border border-slate-300 px-2.5 py-1 text-[11px] text-slate-600 lg:hidden dark:border-slate-700 dark:text-slate-300"
+        >
+          {collapsed ? '展开' : '收起'}
+        </button>
       </header>
 
+      <div className={collapsed ? 'hidden lg:block' : ''}>
       <div className="max-h-[52vh] space-y-3 overflow-y-auto p-4 lg:max-h-[420px]">
         {msgs.length === 0 && (
           <div className="space-y-2">
@@ -199,6 +211,7 @@ export default function AskPanel() {
             提问
           </button>
         </div>
+      </div>
       </div>
     </section>
   )

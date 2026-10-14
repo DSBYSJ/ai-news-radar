@@ -35,6 +35,13 @@ export default function ListPage({ sources }: { sources: SourceItem[] }) {
 
   return (
     <div className="space-y-3">
+      <header>
+        <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">资讯列表</h2>
+        <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+          按时间倒序的成品条目。默认只给「标题 + 一句话」，一屏能扫更多条；需要细节再点开摘要与实体。
+        </p>
+      </header>
+
       <Filters value={filters} onChange={setFilters} sources={sources} />
 
       <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">

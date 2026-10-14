@@ -3,12 +3,13 @@ import type { ReactNode } from 'react'
 import { api } from './api.ts'
 import { useBurstFeed } from './hooks/useBurstFeed.ts'
 import ListPage from './pages/ListPage.tsx'
+import OverviewPage from './pages/OverviewPage.tsx'
 import SummaryPage from './pages/SummaryPage.tsx'
 import TrendPage from './pages/TrendPage.tsx'
 import type { Health, SourceItem } from './types.ts'
 import { CATEGORY_LABELS } from './utils/format.ts'
 
-type Tab = 'list' | 'trend' | 'summary'
+type Tab = 'overview' | 'list' | 'trend' | 'summary'
 type Theme = 'light' | 'dark'
 
 function initialTheme(): Theme {
@@ -43,7 +44,7 @@ function MoonIcon() {
 }
 
 export default function App() {
-  const [tab, setTab] = useState<Tab>('list')
+  const [tab, setTab] = useState<Tab>('overview')
   const [theme, setTheme] = useState<Theme>(initialTheme)
   const [health, setHealth] = useState<Health | null>(null)
   const [sources, setSources] = useState<SourceItem[]>([])
@@ -170,9 +171,10 @@ export default function App() {
         <nav className="mt-4 flex gap-1 border-b border-slate-200 dark:border-slate-800">
           {(
             [
-              ['list', '资讯列表'],
-              ['trend', '趋势分析'],
-              ['summary', '每日总结'],
+              ['overview', '概览'],
+              ['list', '资讯'],
+              ['trend', '趋势'],
+              ['summary', '简报'],
             ] as [Tab, string][]
           ).map(([key, label]) => (
             <button
@@ -191,7 +193,15 @@ export default function App() {
         </nav>
       </header>
 
-      {tab === 'list' ? <ListPage sources={sources} /> : tab === 'trend' ? <TrendPage /> : <SummaryPage />}
+      {tab === 'overview' ? (
+        <OverviewPage health={health} onNavigate={setTab} />
+      ) : tab === 'list' ? (
+        <ListPage sources={sources} />
+      ) : tab === 'trend' ? (
+        <TrendPage />
+      ) : (
+        <SummaryPage />
+      )}
 
       {/* 突发实时推送提示（右下角浮层） */}
       {toasts.length > 0 && (

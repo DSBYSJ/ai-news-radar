@@ -80,6 +80,13 @@ export default function SummaryPage() {
 
   return (
     <div className="space-y-4">
+      <header>
+        <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">每日总结</h2>
+        <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+          AI 每天自动生成昨日简报（综述 / 分类要点 / 关注方向），历史可回看；缺的日子可以手动补生成。
+        </p>
+      </header>
+
       <div className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] dark:border-slate-800 dark:bg-slate-900">
         <label className="flex flex-col gap-1 text-xs text-slate-500 dark:text-slate-400">
           生成指定日期（UTC）
