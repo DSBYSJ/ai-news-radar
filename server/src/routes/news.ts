@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { rebuildEvents } from '../analytics/events.ts'
 import { categoryRatio, crossSource, dailyVolume, topEntities, velocity } from '../analytics/trend.ts'
+import { widgetSnapshot } from '../analytics/widget.ts'
 import { CATEGORY_LABELS, type Category } from '../ai/categories.ts'
 import { runProcessing } from '../ai/pipeline.ts'
 import { askQuestion } from '../ai/ask.ts'
@@ -216,6 +217,9 @@ export async function newsRoutes(app: FastifyInstance): Promise<void> {
       .prepare('SELECT id, name, url, kind, weight, enabled, last_fetch_at, last_status FROM sources ORDER BY id')
       .all(),
   }))
+
+  /** 桌面小组件快照（轻量：几个关键数字 + 最新简报标题，字段稳定） */
+  app.get('/api/news/widget', async () => widgetSnapshot(getDb()))
 
   /** 自然语言问答（自用；统计类 = Text-to-SQL，归因类 = 向量检索 + 上下文） */
   app.post('/api/news/ask', async (req, reply) => {
