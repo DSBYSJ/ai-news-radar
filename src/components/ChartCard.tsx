@@ -98,12 +98,9 @@ export default function ChartCard({ level, title, hint, badge, children }: Props
               </span>
             </header>
             {hint && <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">{hint}</p>}
-            {/* 外层收窄 + 内层放大：视觉宽度正好等于容器宽，内容整体按 ZOOM 倍放大 */}
-            <div style={{ width: `${100 / ZOOM}%` }}>
-              <div style={{ transform: `scale(${ZOOM})`, transformOrigin: 'top left', width: `${100 * ZOOM}%` }}>
-                {children}
-              </div>
-            </div>
+            {/* 放大：用 zoom 而非 transform:scale —— zoom 会同时放大「视觉」与「布局尺寸」，
+                容器高度跟着变，既不会横向溢出、底部也不会被裁掉（Chromium / Safari / Firefox 126+ 均支持） */}
+            <div style={{ zoom: ZOOM }}>{children}</div>
           </div>
         </div>
       )}
