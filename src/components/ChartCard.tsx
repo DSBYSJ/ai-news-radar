@@ -41,7 +41,8 @@ export default function ChartCard({ level, title, hint, badge, children }: Props
   return (
     <>
       <section className="group relative rounded-xl border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04)] dark:border-slate-800 dark:bg-slate-900">
-        <header className="mb-4 flex flex-wrap items-center gap-2">
+        {/* pr-10：给右上角的绝对定位放大按钮预留位置，避免长标题压到按钮下面 */}
+        <header className="mb-4 flex flex-wrap items-center gap-2 pr-10">
           <button
             type="button"
             onClick={() => setZoomed(true)}
