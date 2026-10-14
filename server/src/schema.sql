@@ -109,3 +109,15 @@ CREATE TABLE IF NOT EXISTS daily_summaries (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+
+-- 9. 文章向量（自然语言问答的本地检索用）
+-- 说明：DeepSeek 没有 embeddings 接口，这里用零依赖的「哈希 TF 向量」（L2 归一化后存 BLOB）
+-- fingerprint = title+tldr+summary 的 sha1 前 16 位，内容变了自动重算，不需要手工维护
+CREATE TABLE IF NOT EXISTS article_vectors (
+  article_id  INTEGER PRIMARY KEY REFERENCES articles(id),
+  dim         INTEGER NOT NULL,
+  vec         BLOB    NOT NULL,     -- Float32Array(dim)
+  model       TEXT    NOT NULL,     -- 'hashed-tf-v1'
+  fingerprint TEXT    NOT NULL,
+  updated_at  TEXT    NOT NULL
+);

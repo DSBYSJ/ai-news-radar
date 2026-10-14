@@ -207,6 +207,26 @@ export interface EntitySentimentResponse {
   negative: number
 }
 
+export interface AskSource {
+  index: number
+  title: string
+  url: string
+  sourceName: string
+  date: string
+  snippet: string
+  similarity: number
+}
+
+export interface AskResult {
+  kind: 'stats' | 'attribution'
+  answer: string
+  sources: AskSource[]
+  cited?: number[]
+  sql?: string
+  mode: 'ai' | 'fallback'
+  note?: string
+}
+
 export interface GenerateSummaryResponse {
   ok: boolean
   date: string

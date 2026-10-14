@@ -6,7 +6,7 @@ import { DatabaseSync } from 'node:sqlite'
 
 const schemaSql = readFileSync(path.join(import.meta.dirname, '../src/schema.sql'), 'utf8')
 
-test('schema.sql：可在空库上建出 8 张表', () => {
+test('schema.sql：可在空库上建出 9 张表', () => {
   const db = new DatabaseSync(':memory:')
   db.exec(schemaSql)
   const rows = db
@@ -14,7 +14,17 @@ test('schema.sql：可在空库上建出 8 张表', () => {
     .all() as { name: string }[]
   assert.deepEqual(
     rows.map((r) => r.name),
-    ['articles', 'burst_detection', 'daily_summaries', 'event_clusters', 'events', 'mentions', 'raw_items', 'sources'],
+    [
+      'article_vectors',
+      'articles',
+      'burst_detection',
+      'daily_summaries',
+      'event_clusters',
+      'events',
+      'mentions',
+      'raw_items',
+      'sources',
+    ],
   )
   db.close()
 })

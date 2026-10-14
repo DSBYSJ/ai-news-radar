@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api.ts'
 import ChartCard from '../components/ChartCard.tsx'
+import AskPanel from '../components/AskPanel.tsx'
 import CrossSourceChart from '../components/CrossSourceChart.tsx'
 import LineChart from '../components/LineChart.tsx'
 import StackedBarChart from '../components/StackedBarChart.tsx'
@@ -97,7 +98,8 @@ export default function TrendPage() {
   const forecastBridge = Array(Math.max(0, histLen - 1)).fill(null) as null[]
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4 lg:flex-row">
+      <div className="min-w-0 flex-1 space-y-4">
       <div className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] dark:border-slate-800 dark:bg-slate-900">
         <label className="flex flex-col gap-1 text-xs text-slate-500 dark:text-slate-400">
           统计窗口
@@ -390,6 +392,13 @@ export default function TrendPage() {
           </p>
         </section>
       )}
+      </div>
+
+      <aside className="w-full shrink-0 lg:w-[380px]">
+        <div className="lg:sticky lg:top-4">
+          <AskPanel />
+        </div>
+      </aside>
     </div>
   )
 }

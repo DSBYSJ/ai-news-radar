@@ -13,18 +13,23 @@ export interface ChatResult {
  */
 export async function chat(
   prompt: string,
-  opts: { maxTokens?: number; temperature?: number; retries?: number } = {},
+  opts: { maxTokens?: number; temperature?: number; retries?: number; json?: boolean } = {},
 ): Promise<ChatResult> {
   if (!config.deepseek.apiKey) {
     return { ok: false, content: '', error: 'DEEPSEEK_API_KEY 未配置' }
   }
 
-  const body = {
+  const body: Record<string, unknown> = {
     model: config.deepseek.model,
     messages: [{ role: 'user', content: prompt }],
     temperature: opts.temperature ?? 0.2,
     max_tokens: opts.maxTokens ?? 2048,
-    response_format: { type: 'json_object' },
+  }
+
+  // DeepSeek 要求：用了 json_object 就必须在提示词里出现 "json" 字样，否则 400。
+  // 因此需要自由文本输出（如生成 SQL、归因分析）时必须显式 json:false。
+  if (opts.json !== false) {
+    body.response_format = { type: 'json_object' }
   }
 
   let lastError = ''
