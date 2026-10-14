@@ -137,12 +137,12 @@ export default function TrendPage() {
               areaColor="#3b82f6"
               reference={{ value: volumeMean, label: `均值 ${volumeMean.toFixed(1)}` }}
               dots
-              height={200}
+              height={240}
             />
           </ChartCard>
 
           <ChartCard level="第 2 层" title="分类占比趋势" hint="每根柱子 = 当天的构成占比，点击图例可隐藏某类。">
-            <StackedBarChart points={ratios} categories={CATEGORY_ORDER} height={230} />
+            <StackedBarChart points={ratios} categories={CATEGORY_ORDER} height={250} />
           </ChartCard>
 
           <ChartCard
@@ -214,7 +214,7 @@ export default function TrendPage() {
             title="跨源交叉度 + 突发检测"
             hint="柱高 = 当天事件被最多几家独立源报道；越过 3 家通常意味着真的重要。"
           >
-            <CrossSourceChart points={cross?.points ?? []} dayEvents={cross?.dayEvents} height={190} />
+            <CrossSourceChart points={cross?.points ?? []} dayEvents={cross?.dayEvents} height={210} />
             {((cross?.topEvents.length ?? 0) > 0 || (cross?.bursts.length ?? 0) > 0) && (
               <details className="mt-3 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700">
                 <summary className="cursor-pointer text-xs text-slate-500 dark:text-slate-400">
@@ -276,7 +276,7 @@ export default function TrendPage() {
                   categories={SENTIMENTS}
                   colors={SENTIMENT_COLORS}
                   labelMap={SENTIMENT_LABELS}
-                  height={200}
+                  height={230}
                 />
                 {sentiment.alerts.length > 0 ? (
                   <div className="mt-3 border-t border-slate-100 pt-2 dark:border-slate-800">
@@ -341,7 +341,7 @@ export default function TrendPage() {
                       tickFormat={(v) => `${Math.round(v * 100)}%`}
                       valueFormat={(v) => `${Math.round(v * 100)}%`}
                       dots
-                      height={170}
+                      height={190}
                     />
                   </div>
                 )}
