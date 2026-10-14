@@ -2,6 +2,14 @@
 
 版本号唯一来源：各 `package.json`。发布前照「升版本 → 写 changelog → 跑验证 → 推送部署」四步走。
 
+## 0.7.4（2026-10-14）
+
+**安卓 App 打包（网页版保持在线）**
+- 新建独立壳工程 `G:/glmscs/bike/ai-news-android`（Capacitor 7，加载 `https://dsbysj.cn/news/`）：应用名「AI 资讯雷达」，包名 `cn.dsbysj.ainews`，Debug APK 约 4 MB
+- 图标与启动图用 Pillow 直接生成全部密度资源（`make-android-res.py`）；服务器不可达时展示深色兜底页
+- 网页端配合做**安全区适配**（`env(safe-area-inset-*)` + `viewport-fit=cover`）：安卓 edge-to-edge 下内容不再顶到状态栏；桌面端无影响
+- ⚠️ **网页版继续保留**（`/news/` 不下架），App 与网页共用同一套登录与接口
+
 ## 0.7.3（2026-10-14）
 
 **修复：放大按钮压住卡片标题**
