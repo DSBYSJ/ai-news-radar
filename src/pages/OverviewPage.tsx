@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import { api } from '../api.ts'
 import AskPanel from '../components/AskPanel.tsx'
 import type { CrossSourceResponse, EntityItem, Health, SentimentResponse, SummaryListItem, VelocityResponse } from '../types.ts'
-import { CATEGORY_LABELS } from '../utils/format.ts'
+import { CATEGORY_COLORS, CATEGORY_LABELS } from '../utils/format.ts'
 
 type Nav = (tab: 'list' | 'trend' | 'summary') => void
 
@@ -106,7 +106,7 @@ export default function OverviewPage({ health, onNavigate }: Props) {
         {/* 关键指标 */}
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <Kpi
-            label={`今日收录（${today || '—'}）`}
+            label={`今日收录（${today ? today.slice(5) : '—'}）`}
             value={String(todayCount)}
             unit="条"
             hint={change === null || change === undefined ? '暂无环比' : `周环比 ${change >= 0 ? '↑' : '↓'} ${Math.abs(change)}%`}
@@ -186,18 +186,25 @@ export default function OverviewPage({ health, onNavigate }: Props) {
               <ul className="space-y-2">
                 {todayEvents.slice(0, 5).map((e) => (
                   <li key={e.eventKey} className="rounded-lg border border-slate-200 p-2.5 dark:border-slate-700">
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex flex-wrap items-center gap-1.5">
                       <span
-                        className={`rounded-full px-1.5 py-0.5 text-[11px] font-medium text-white ${
+                        className={`shrink-0 rounded-full px-1.5 py-0.5 text-[11px] font-medium text-white ${
                           e.sourceCount >= 3 ? 'bg-red-600' : 'bg-slate-400'
                         }`}
                       >
                         {e.sourceCount} 源
                       </span>
-                      <span className="truncate text-xs text-slate-700 dark:text-slate-200">{e.title}</span>
+                      <span
+                        className="shrink-0 rounded-full px-1.5 py-0.5 text-[11px] text-white"
+                        style={{ backgroundColor: CATEGORY_COLORS[e.category] ?? '#9ca3af' }}
+                      >
+                        {CATEGORY_LABELS[e.category] ?? e.category}
+                      </span>
+                      <span className="ml-auto shrink-0 text-[11px] text-slate-400 dark:text-slate-500">{e.date}</span>
                     </div>
-                    <p className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">
-                      {CATEGORY_LABELS[e.category] ?? e.category} · {e.sources.join('、')}
+                    <p className="mt-1.5 break-words text-xs leading-snug text-slate-700 dark:text-slate-200">{e.title}</p>
+                    <p className="mt-1 break-words text-[11px] text-slate-400 dark:text-slate-500">
+                      {e.sources.join('、') || '（来源未知）'}
                     </p>
                   </li>
                 ))}
@@ -210,17 +217,19 @@ export default function OverviewPage({ health, onNavigate }: Props) {
             {recentBursts.length === 0 ? (
               <p className="text-xs text-slate-500 dark:text-slate-400">近 3 天没有触发突发阈值，属正常。</p>
             ) : (
-              <ul className="flex flex-wrap gap-2">
+              <ul className="space-y-1.5">
                 {recentBursts.map((b) => {
                   const alpha = Math.min(0.3, 0.06 + Math.max(0, b.z - 2.5) * 0.02)
                   return (
                     <li
                       key={`${b.date}-${b.category}`}
-                      className="rounded-full px-2.5 py-1 text-[11px] text-slate-700 dark:text-slate-200"
+                      className="flex flex-wrap items-center gap-x-2 gap-y-0.5 rounded-lg px-2.5 py-1.5 text-[11px] leading-snug text-slate-700 dark:text-slate-200"
                       style={{ backgroundColor: `rgba(220, 38, 38, ${alpha})` }}
                     >
-                      {b.date} · {b.category === 'all' ? '全站' : (CATEGORY_LABELS[b.category] ?? b.category)} ·{' '}
-                      {b.count} 条 · z={b.z}
+                      <span className="font-medium">{b.date}</span>
+                      <span>{b.category === 'all' ? '全站' : (CATEGORY_LABELS[b.category] ?? b.category)}</span>
+                      <span>{b.count} 条</span>
+                      <span className="ml-auto opacity-70">z={b.z}</span>
                     </li>
                   )
                 })}
@@ -249,7 +258,7 @@ export default function OverviewPage({ health, onNavigate }: Props) {
               {entities.slice(0, 14).map((e) => (
                 <span
                   key={e.entity}
-                  className="cursor-default rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700 transition hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                  className="max-w-full break-words rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700 transition hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
                 >
                   {e.entity}
                   <span className="ml-1.5 font-medium text-slate-400 dark:text-slate-500">{e.count}</span>
