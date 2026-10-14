@@ -9,6 +9,8 @@
   --chart-axis: #9aa1ad;
   --chart-baseline: #cbd5e1;
   --chart-dot-stroke: #ffffff;
+  /* 堆叠柱内部的分隔线颜色 = 卡片底色 */
+  --chart-sep: #ffffff;
 }
 
 .dark {
@@ -16,6 +18,7 @@
   --chart-axis: #7c8698;
   --chart-baseline: #475062;
   --chart-dot-stroke: #0f1218;
+  --chart-sep: #0f1218;
 }
 
 html,
@@ -52,4 +55,7 @@ body {
 }
 .chart-dot {
   stroke: var(--chart-dot-stroke);
+}
+.chart-sep {
+  stroke: var(--chart-sep);
 }
