@@ -74,6 +74,15 @@ export default function App() {
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark')
     localStorage.setItem('theme', theme)
+
+    // 安卓壳：状态栏图标颜色跟随站内主题（浏览器里没有插件，静默跳过）。
+    // Capacitor 的命名习惯：style 'DARK' = 深色背景用浅色图标，'LIGHT' = 浅色背景用深色图标。
+    const statusBar = (
+      window as unknown as {
+        Capacitor?: { Plugins?: { StatusBar?: { setStyle?: (o: { style: string }) => Promise<void> } } }
+      }
+    ).Capacitor?.Plugins?.StatusBar
+    statusBar?.setStyle?.({ style: theme === 'dark' ? 'DARK' : 'LIGHT' }).catch(() => {})
   }, [theme])
 
   const loadMeta = useCallback(async () => {
@@ -206,7 +215,7 @@ export default function App() {
 
       {/* 突发实时推送提示（右下角浮层） */}
       {toasts.length > 0 && (
-        <div className="fixed bottom-4 right-4 z-50 flex w-80 flex-col gap-2">
+        <div className="fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] right-[calc(1rem+env(safe-area-inset-right))] z-50 flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-2">
           {toasts.map((t) => (
             <div
               key={t.id}

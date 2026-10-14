@@ -1,8 +1,20 @@
 <!doctype html>
 <html lang="zh-CN">
   <head>
+    <script>
+      // Android WebView 的 UA 标志；尽早执行（在样式加载前）避免闪变。
+      // 浏览器访问时不会命中，网页表现完全不受影响。
+      if (navigator.userAgent.includes('; wv')) {
+        document.documentElement.classList.add('app-shell')
+      }
+    </script>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!-- viewport-fit=cover 是 env(safe-area-inset-*) 生效的前提；
+         interactive-widget=resizes-content 配合壳端 adjustResize（键盘弹起时压缩页面而非遮挡） -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content"
+    />
     <!-- 合规：本项目不面向公众，禁止搜索引擎收录（见 docs/合规检查清单.md） -->
     <meta name="robots" content="noindex, nofollow" />
     <title>AI 资讯趋势雷达</title>
