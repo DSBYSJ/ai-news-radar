@@ -13,7 +13,16 @@ export function getDb(): DatabaseSync {
   db.exec('PRAGMA journal_mode = WAL;')
   db.exec('PRAGMA foreign_keys = ON;')
   db.exec(readFileSync(path.join(import.meta.dirname, 'schema.sql'), 'utf8'))
+  migrate(db)
   return db
+}
+
+/** 结构迁移（幂等）：老库补新列（CREATE TABLE IF NOT EXISTS 不会更新已有表） */
+function migrate(conn: DatabaseSync): void {
+  const columns = conn.prepare('PRAGMA table_info(articles)').all() as unknown as { name: string }[]
+  if (!columns.some((c) => c.name === 'sentiment')) {
+    conn.exec('ALTER TABLE articles ADD COLUMN sentiment TEXT')
+  }
 }
 
 export function closeDb(): void {

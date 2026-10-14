@@ -28,6 +28,8 @@ export interface RebuildBurstsResult {
   scannedDays: number
   flagged: number
   rows: BurstRow[]
+  /** 本次重建「新增」的突发（此前不在表中）—— 用于实时推送 */
+  newBursts: BurstRow[]
 }
 
 const DAY_MS = 86_400_000
@@ -106,6 +108,14 @@ export async function rebuildBursts(
   // 按 Z-score 降序（前端列表直接可用）
   flagged.sort((a, b) => b.z - a.z)
 
+  // 重建前记录已有 (date, category)，用于识别「本次新增」
+  const existingKeys = new Set(
+    (db.prepare('SELECT date, category FROM burst_detection').all() as unknown as { date: string; category: string }[]).map(
+      (r) => `${r.date}|${r.category}`,
+    ),
+  )
+  const newBursts = flagged.filter((r) => !existingKeys.has(`${r.date}|${r.category}`))
+
   // 重建语义：先清窗口内旧结果，再写入
   const now = new Date().toISOString()
   db.prepare('DELETE FROM burst_detection WHERE date >= ?').run(dates[0])
@@ -117,5 +127,5 @@ export async function rebuildBursts(
     insert.run(r.date, r.category, r.articleCount, r.baselineMean, r.baselineStd, r.z, now)
   }
 
-  return { scannedDays: dates.length, flagged: flagged.length, rows: flagged }
+  return { scannedDays: dates.length, flagged: flagged.length, rows: flagged, newBursts }
 }

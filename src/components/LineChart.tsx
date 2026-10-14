@@ -22,6 +22,14 @@ interface Props {
   reference?: { value: number; label: string }
   /** 数据点显示（白色描边圆点） */
   dots?: boolean
+  /** 区间带（如预测置信带），数组与 labels 对齐；null 表示该位置不画 */
+  bands?: { color: string; lo: (number | null)[]; hi: (number | null)[] }[]
+  /** 固定 Y 轴上界（占比图传 1）；不传则自动按数据取整刻度 */
+  yMax?: number
+  /** Y 轴刻度文案格式化（如 v => `${Math.round(v * 100)}%`） */
+  tickFormat?: (v: number) => string
+  /** 悬浮提示里数值的格式化 */
+  valueFormat?: (v: number) => string
 }
 
 const W = 760
@@ -36,6 +44,10 @@ export default function LineChart({
   areaColor,
   reference,
   dots = false,
+  bands,
+  yMax,
+  tickFormat,
+  valueFormat,
 }: Props) {
   const [hover, setHover] = useState<number | null>(null)
   const gradientId = useId()
@@ -43,9 +55,15 @@ export default function LineChart({
   const values = series
     .flatMap((s) => s.values)
     .filter((v): v is number => v !== null && Number.isFinite(v))
-  const rawMax = Math.max(values.length > 0 ? Math.max(...values) : 1, reference?.value ?? 0, 1)
-  const ticks = niceTicks(rawMax, 4)
-  const top = ticks[ticks.length - 1] || 1
+  const bandMax = bands
+    ? Math.max(
+        0,
+        ...bands.flatMap((b) => b.hi.filter((v): v is number => v !== null && Number.isFinite(v))),
+      )
+    : 0
+  const rawMax = Math.max(values.length > 0 ? Math.max(...values) : 1, reference?.value ?? 0, bandMax, 1)
+  const ticks = yMax !== undefined ? [0, 0.25, 0.5, 0.75, 1].map((r) => Number((r * yMax).toFixed(4))) : niceTicks(rawMax, 4)
+  const top = (yMax ?? ticks[ticks.length - 1]) || 1
 
   const y = linearScale([0, top], [height - PAD.bottom, PAD.top])
   const x = linearScale([0, Math.max(1, labels.length - 1)], [PAD.left, W - PAD.right])
@@ -77,7 +95,7 @@ export default function LineChart({
           <g key={t}>
             <line className="chart-grid" x1={PAD.left} x2={W - PAD.right} y1={y(t)} y2={y(t)} strokeWidth={1} />
             <text className="chart-axis-text" x={PAD.left - 8} y={y(t) + 4} textAnchor="end" fontSize={11}>
-              {t}
+              {tickFormat ? tickFormat(t) : t}
             </text>
           </g>
         ))}
@@ -98,6 +116,21 @@ export default function LineChart({
             </text>
           </>
         )}
+
+        {bands?.map((band, bi) => {
+          const pts = labels
+            .map((_, i) => {
+              const lo = band.lo[i]
+              const hi = band.hi[i]
+              if (lo === null || lo === undefined || hi === null || hi === undefined) return null
+              return { x: x(i), loY: y(lo), hiY: y(hi) }
+            })
+            .filter((p): p is { x: number; loY: number; hiY: number } => p !== null)
+          if (pts.length < 2) return null
+          const upper = pts.map((p) => `${p.x},${p.hiY}`).join(' L ')
+          const lower = [...pts].reverse().map((p) => `${p.x},${p.loY}`).join(' L ')
+          return <path key={bi} d={`M ${upper} L ${lower} Z`} fill={band.color} fillOpacity={0.16} stroke="none" />
+        })}
 
         {area && firstPts.length > 1 && <path d={areaPath(firstPts, y(0))} fill={`url(#${gradientId})`} stroke="none" />}
 
@@ -173,7 +206,13 @@ export default function LineChart({
             <div key={s.name} className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
               <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: s.color }} />
               {s.name}
-              <span className="ml-auto pl-3 font-medium text-slate-800 dark:text-slate-100">{s.values[hover] ?? '—'}</span>
+              <span className="ml-auto pl-3 font-medium text-slate-800 dark:text-slate-100">
+                {s.values[hover] === null || s.values[hover] === undefined
+                  ? '—'
+                  : valueFormat
+                    ? valueFormat(s.values[hover] as number)
+                    : s.values[hover]}
+              </span>
             </div>
           ))}
         </div>

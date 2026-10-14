@@ -12,6 +12,7 @@ console.log(
   `事件：${summary.events.events} 个（跨源 ${summary.events.crossSourceEvents} 个，多条目 ${summary.events.multiArticleEvents} 个）`,
 )
 console.log(`突发：命中 ${summary.bursts.flagged} 条（14 天滑动基线，z ≥ 2.5）`)
+console.log(`情感：扫描 ${summary.sentiment.scanned} 条 / 更新 ${summary.sentiment.updated} 条（模式 ${summary.sentiment.mode}）`)
 console.log(
   `简报：${summary.summary.date} ${
     !summary.summary.ok ? `跳过（${summary.summary.reason}）` : summary.summary.skipped ? '已存在' : `已生成（${summary.summary.model}）`

@@ -144,6 +144,69 @@ export interface SummaryDetail extends SummaryListItem {
   highlights: SummaryHighlight[]
 }
 
+export interface ForecastPoint {
+  date: string
+  value: number
+  lo: number
+  hi: number
+}
+
+export interface ForecastResponse {
+  days: number
+  horizon: number
+  history: { date: string; value: number }[]
+  forecast: ForecastPoint[]
+  summary: { changePct: number | null; direction: 'up' | 'down' | 'flat'; message: string }
+}
+
+export type SentimentKey = 'positive' | 'neutral' | 'negative'
+
+export interface SentimentDay {
+  date: string
+  total: number
+  classified: number
+  counts: Record<SentimentKey, number>
+  ratios: Record<SentimentKey, number>
+}
+
+export interface SentimentAlert {
+  date: string
+  entity: string
+  negativeCount: number
+  baseline: number
+  z: number
+}
+
+export interface EntitySentimentBrief {
+  entity: string
+  count: number
+  negative: number
+  negShare: number
+}
+
+export interface SentimentResponse {
+  days: number
+  byDay: SentimentDay[]
+  alerts: SentimentAlert[]
+  entities: EntitySentimentBrief[]
+}
+
+export interface EntitySentimentPoint {
+  date: string
+  count: number
+  negative: number
+  negRatio: number
+  ma7: number | null
+}
+
+export interface EntitySentimentResponse {
+  days: number
+  entity: string
+  points: EntitySentimentPoint[]
+  total: number
+  negative: number
+}
+
 export interface GenerateSummaryResponse {
   ok: boolean
   date: string
