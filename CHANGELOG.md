@@ -2,6 +2,15 @@
 
 版本号唯一来源：各 `package.json`。发布前照「升版本 → 写 changelog → 跑验证 → 推送部署」四步走。
 
+## 0.7.5（2026-10-14）
+
+**手机端适配补齐（对照 `bike/安卓壳手机适配总结.md` §1）**
+- **app-shell 触摸收敛**：`index.html` 头部内联检测 `navigator.userAgent.includes('; wv')`（Android WebView）→ 给 `<html>` 挂 `.app-shell`；CSS 关闭滚动回弹（`overscroll-behavior: none`）、长按文本选择菜单、可见滚动条（输入框与 `data-selectable` 保持可复制）；全局去掉移动端点击高亮。**浏览器表现零影响**
+- **viewport 补 `interactive-widget=resizes-content`**：配合壳端 `adjustResize`，键盘弹起时页面压缩而非遮挡输入框
+- **状态栏图标色跟随站内主题**：接入 `@capacitor/status-bar`（壳侧），切到深色主题时状态栏图标转浅色，避免"浅色主题 + 系统深色"下图标不可读
+- **安全区全覆盖**：除页面容器外，右下角 Toast 浮层与图表放大层（fixed）也补上 `env(safe-area-inset-*)`
+- **Nginx 缓存分层**：`/news/index.html` 保持 `no-cache`（HTML 必须），`/news/assets/*`（带 hash）改为 `max-age=31536000, immutable` 长缓存
+
 ## 0.7.4（2026-10-14）
 
 **安卓 App 打包（网页版保持在线）**

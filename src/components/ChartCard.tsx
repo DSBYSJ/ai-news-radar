@@ -76,7 +76,7 @@ export default function ChartCard({ level, title, hint, badge, children }: Props
 
       {zoomed && (
         <div
-          className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/70 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/70 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-[calc(1rem+env(safe-area-inset-top))] backdrop-blur-sm"
           onClick={() => setZoomed(false)}
         >
           <div

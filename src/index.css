@@ -59,3 +59,32 @@ body {
 .chart-sep {
   stroke: var(--chart-sep);
 }
+
+/* ============ App 外壳（安卓 WebView）触摸行为 ============
+   仅当 index.html 检测到 WebView 环境（UA 含 "; wv"）时给 <html> 挂 .app-shell，
+   浏览器访问完全不受影响。目标：把"网页行为"收敛成"App 行为"——
+   无长按文本选择菜单、无滚动回弹、无可见滚动条。
+   ⚠️ 双指缩放由壳端（MainActivity 的 setSupportZoom(false)）禁用，CSS 兜不住。 */
+html.app-shell {
+  overscroll-behavior: none;
+  touch-action: manipulation;
+}
+html.app-shell body {
+  user-select: none;
+  -webkit-user-select: none;
+}
+/* 输入框与声明了 data-selectable 的区域保持可选（可复制） */
+html.app-shell input,
+html.app-shell textarea,
+html.app-shell [data-selectable] {
+  user-select: text;
+  -webkit-user-select: text;
+}
+html.app-shell ::-webkit-scrollbar {
+  display: none;
+}
+
+/* 移动端点击高亮：全局去掉（各按钮/卡片已有自己的 active 反馈） */
+html {
+  -webkit-tap-highlight-color: transparent;
+}
