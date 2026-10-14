@@ -3,7 +3,7 @@ import { api } from '../api.ts'
 import ChartCard from '../components/ChartCard.tsx'
 import CrossSourceChart from '../components/CrossSourceChart.tsx'
 import LineChart from '../components/LineChart.tsx'
-import StackedAreaChart from '../components/StackedAreaChart.tsx'
+import StackedBarChart from '../components/StackedBarChart.tsx'
 import type { CrossSourceResponse, DailyPoint, CategoryRatioPoint, EntityItem, VelocityResponse } from '../types.ts'
 import { CATEGORY_COLORS, CATEGORY_LABELS, CATEGORY_ORDER, formatPct } from '../utils/format.ts'
 
@@ -87,9 +87,9 @@ export default function TrendPage() {
       <ChartCard
         level="第 2 层"
         title="分类占比趋势"
-        hint="100% 堆积占比（低饱和配色）——Y 轴是占比而非条数，看到的是真实的结构迁移；点击图例可隐藏某类，悬浮可看当日占比。"
+        hint="每根柱子 = 当天收录内容的构成占比（数据稀疏的日子不再塌陷成三角）；悬浮看当日具体占比，点击图例可隐藏某类。"
       >
-        <StackedAreaChart points={ratios} categories={CATEGORY_ORDER} />
+        <StackedBarChart points={ratios} categories={CATEGORY_ORDER} />
       </ChartCard>
 
       <ChartCard
