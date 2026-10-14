@@ -1,5 +1,23 @@
 @import 'tailwindcss';
 
+/* 深色模式：以 html.dark 为准（顶栏开关切换，localStorage 记忆，跟随系统默认） */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* 图表配色变量：SVG 通过 class 引用，随主题自动切换 */
+:root {
+  --chart-grid: #e8eaee;
+  --chart-axis: #9aa1ad;
+  --chart-baseline: #cbd5e1;
+  --chart-dot-stroke: #ffffff;
+}
+
+.dark {
+  --chart-grid: #262d3b;
+  --chart-axis: #7c8698;
+  --chart-baseline: #475062;
+  --chart-dot-stroke: #0f1218;
+}
+
 html,
 body,
 #root {
@@ -11,6 +29,27 @@ body {
   background: #f6f7f9;
   color: #1f2937;
   font-family:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', Roboto, Helvetica, Arial,
-    sans-serif;
+    'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', Roboto, Helvetica,
+    Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.dark body {
+  background: #0f1218;
+  color: #e5e7eb;
+}
+
+/* 图表公共样式（SVG 元素用 class 引用 CSS 变量） */
+.chart-grid {
+  stroke: var(--chart-grid);
+}
+.chart-axis-text {
+  fill: var(--chart-axis);
+}
+.chart-baseline {
+  stroke: var(--chart-baseline);
+}
+.chart-dot {
+  stroke: var(--chart-dot-stroke);
 }

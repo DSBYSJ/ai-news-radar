@@ -37,7 +37,7 @@ export default function ListPage({ sources }: { sources: SourceItem[] }) {
     <div className="space-y-3">
       <Filters value={filters} onChange={setFilters} sources={sources} />
 
-      <div className="flex items-center justify-between text-xs text-slate-500">
+      <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
         <span>
           {loading ? '加载中…' : `共 ${data?.total ?? 0} 条，已显示 ${data?.items.length ?? 0} 条`}
         </span>
@@ -45,17 +45,19 @@ export default function ListPage({ sources }: { sources: SourceItem[] }) {
           <button
             type="button"
             onClick={() => setLimit((v) => v + 50)}
-            className="rounded border border-slate-300 px-2 py-1 hover:bg-slate-50"
+            className="rounded-full border border-slate-300 px-3 py-1.5 text-slate-700 transition hover:-translate-y-0.5 hover:shadow-sm dark:border-slate-700 dark:text-slate-200 dark:hover:border-slate-500"
           >
             加载更多
           </button>
         )}
       </div>
 
-      {error && <p className="rounded bg-red-50 p-3 text-sm text-red-600">{error}</p>}
+      {error && (
+        <p className="rounded-lg bg-red-50 p-3 text-sm text-red-600 dark:bg-red-950/40 dark:text-red-400">{error}</p>
+      )}
 
       {data && data.items.length === 0 && !loading && (
-        <p className="rounded border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-500">
+        <p className="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
           没有符合条件的条目 —— 可以先在右上角跑一轮「采集 + 加工」
         </p>
       )}
