@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS articles (
   entities     TEXT,                 -- JSON 数组：["OpenAI","GPT-5"]
   score        INTEGER,              -- 重要性 0~100
   score_parts  TEXT,                 -- JSON 明细（可解释性，便于调参）
+  sentiment    TEXT,                 -- positive / neutral / negative（情感判定，可空）
   event_key    TEXT,                 -- 事件聚类键（第 4 层用）
   published_at TEXT NOT NULL,
   created_at   TEXT NOT NULL

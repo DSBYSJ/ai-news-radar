@@ -4,8 +4,21 @@ import ChartCard from '../components/ChartCard.tsx'
 import CrossSourceChart from '../components/CrossSourceChart.tsx'
 import LineChart from '../components/LineChart.tsx'
 import StackedBarChart from '../components/StackedBarChart.tsx'
-import type { CrossSourceResponse, DailyPoint, CategoryRatioPoint, EntityItem, VelocityResponse } from '../types.ts'
+import type {
+  CategoryRatioPoint,
+  CrossSourceResponse,
+  DailyPoint,
+  EntityItem,
+  EntitySentimentResponse,
+  ForecastResponse,
+  SentimentResponse,
+  VelocityResponse,
+} from '../types.ts'
 import { CATEGORY_COLORS, CATEGORY_LABELS, CATEGORY_ORDER, formatPct } from '../utils/format.ts'
+
+const SENTIMENTS = ['positive', 'neutral', 'negative']
+const SENTIMENT_COLORS: Record<string, string> = { positive: '#57a97c', neutral: '#9aa3ad', negative: '#cf5a5a' }
+const SENTIMENT_LABELS: Record<string, string> = { positive: '正面', neutral: '中性', negative: '负面' }
 
 export default function TrendPage() {
   const [days, setDays] = useState(30)
@@ -14,18 +27,24 @@ export default function TrendPage() {
   const [velocity, setVelocity] = useState<VelocityResponse | null>(null)
   const [cross, setCross] = useState<CrossSourceResponse | null>(null)
   const [entities, setEntities] = useState<EntityItem[]>([])
+  const [forecast, setForecast] = useState<ForecastResponse | null>(null)
+  const [sentiment, setSentiment] = useState<SentimentResponse | null>(null)
+  const [selectedEntity, setSelectedEntity] = useState('')
+  const [entityDetail, setEntityDetail] = useState<EntitySentimentResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let alive = true
     const load = async () => {
       try {
-        const [v, c, vel, cr, en] = await Promise.all([
+        const [v, c, vel, cr, en, fc, se] = await Promise.all([
           api.volume(days),
           api.category(days),
           api.velocity(days),
           api.cross(days),
           api.entities(days),
+          api.forecast(days, 7),
+          api.sentiment(days),
         ])
         if (!alive) return
         setVolume(v.points)
@@ -33,6 +52,9 @@ export default function TrendPage() {
         setVelocity(vel)
         setCross(cr)
         setEntities(en.items)
+        setForecast(fc)
+        setSentiment(se)
+        setSelectedEntity((cur) => cur || se.entities[0]?.entity || '')
         setError(null)
       } catch (e) {
         if (alive) setError(e instanceof Error ? e.message : String(e))
@@ -44,9 +66,35 @@ export default function TrendPage() {
     }
   }, [days])
 
+  useEffect(() => {
+    if (!selectedEntity) {
+      setEntityDetail(null)
+      return
+    }
+    let alive = true
+    api
+      .entitySentiment(selectedEntity, days)
+      .then((d) => {
+        if (alive) setEntityDetail(d)
+      })
+      .catch(() => {
+        if (alive) setEntityDetail(null)
+      })
+    return () => {
+      alive = false
+    }
+  }, [selectedEntity, days])
+
   const change = velocity?.changePct
   const volumeValues = volume.map((p) => p.value)
   const volumeMean = volumeValues.length > 0 ? volumeValues.reduce((a, b) => a + b, 0) / volumeValues.length : 0
+
+  // 第 3 层：历史（每日 + 7 日均线）与未来 7 天预测拼接（虚线从最后一条均线接续）
+  const histLen = velocity?.points.length ?? 0
+  const forecastLabels = forecast?.forecast.map((f) => f.date) ?? []
+  const pad = Array(forecastLabels.length).fill(null) as null[]
+  const lastMa7 = histLen > 0 ? (velocity?.points[histLen - 1]?.ma7 ?? null) : null
+  const forecastBridge = Array(Math.max(0, histLen - 1)).fill(null) as null[]
 
   return (
     <div className="space-y-4">
@@ -66,7 +114,9 @@ export default function TrendPage() {
         <p className="text-xs text-slate-500 dark:text-slate-400">日期按 UTC 分桶（与库内存储一致）</p>
       </div>
 
-      {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-600 dark:bg-red-950/40 dark:text-red-400">{error}</p>}
+      {error && (
+        <p className="rounded-lg bg-red-50 p-3 text-sm text-red-600 dark:bg-red-950/40 dark:text-red-400">{error}</p>
+      )}
 
       <ChartCard
         level="第 1 层"
@@ -94,8 +144,8 @@ export default function TrendPage() {
 
       <ChartCard
         level="第 3 层"
-        title="7 日均线与周环比"
-        hint="平滑之后看的是方向：在涨还是在跌，而不是当前有多热。"
+        title="7 日均线 · 周环比 · 7 天预测"
+        hint="平滑看方向，预测看势头：紫色虚线为未来 7 天外推（Holt 阻尼趋势），浅色带是残差区间——越远越不确定，仅作参考。"
         badge={
           change === null || change === undefined ? null : (
             <span className="flex items-baseline gap-1.5">
@@ -112,14 +162,48 @@ export default function TrendPage() {
         }
       >
         <LineChart
-          labels={velocity?.points.map((p) => p.date) ?? []}
+          labels={[...(velocity?.points.map((p) => p.date) ?? []), ...forecastLabels]}
           series={[
-            { name: '每日条数', color: '#94a3b8', values: velocity?.points.map((p) => p.count) ?? [], width: 1.5 },
-            { name: '7 日均线', color: '#dc2626', values: velocity?.points.map((p) => p.ma7) ?? [], width: 2.5 },
+            {
+              name: '每日条数',
+              color: '#94a3b8',
+              values: [...(velocity?.points.map((p) => p.count) ?? []), ...pad],
+              width: 1.5,
+            },
+            {
+              name: '7 日均线',
+              color: '#dc2626',
+              values: [...(velocity?.points.map((p) => p.ma7) ?? []), ...pad],
+              width: 2.5,
+            },
+            {
+              name: '7 天预测',
+              color: '#7c3aed',
+              dashed: true,
+              values: [...forecastBridge, lastMa7, ...(forecast?.forecast.map((f) => f.value) ?? [])],
+              width: 2,
+            },
           ]}
+          bands={
+            forecast
+              ? [
+                  {
+                    color: '#7c3aed',
+                    lo: [...forecastBridge, lastMa7, ...forecast.forecast.map((f) => f.lo)],
+                    hi: [...forecastBridge, lastMa7, ...forecast.forecast.map((f) => f.hi)],
+                  },
+                ]
+              : undefined
+          }
           dots
-          height={220}
+          height={230}
         />
+        {forecast && (
+          <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+            <span className="mr-1 font-medium text-violet-700 dark:text-violet-300">预测</span>
+            {forecast.summary.message}
+          </p>
+        )}
       </ChartCard>
 
       <ChartCard
@@ -171,7 +255,6 @@ export default function TrendPage() {
             </h4>
             <ul className="flex flex-wrap gap-2">
               {cross.bursts.map((b) => {
-                // 背景深浅随 Z-score 增大而加深（0.06 → 0.30）
                 const alpha = Math.min(0.3, 0.06 + Math.max(0, b.z - 2.5) * 0.02)
                 return (
                   <li
@@ -196,6 +279,96 @@ export default function TrendPage() {
           </div>
         )}
       </ChartCard>
+
+      {sentiment && (
+        <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04)] dark:border-slate-800 dark:bg-slate-900">
+          <header className="mb-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full bg-violet-600 px-2.5 py-0.5 text-xs font-medium text-white">情感</span>
+              <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">情感趋势（AI 判定）</h3>
+            </div>
+            <p className="mt-1 w-full text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+              每天的正 / 负 / 中占比 + 实体负面飙升预警 + 单实体负面占比曲线（新条目随流水线自动补齐判定）。
+            </p>
+          </header>
+
+          <StackedBarChart
+            points={sentiment.byDay.map((d) => ({ date: d.date, total: d.classified, ratios: d.ratios }))}
+            categories={SENTIMENTS}
+            colors={SENTIMENT_COLORS}
+            labelMap={SENTIMENT_LABELS}
+            height={220}
+          />
+
+          {sentiment.alerts.length > 0 && (
+            <div className="mt-4">
+              <h4 className="mb-2 text-xs font-medium text-slate-700 dark:text-slate-300">
+                负面情感预警（实体负面数 ≥ 3 且 z ≥ 2）
+              </h4>
+              <ul className="flex flex-wrap gap-2">
+                {sentiment.alerts.map((a) => (
+                  <li
+                    key={`${a.date}-${a.entity}`}
+                    className="rounded-full px-3 py-1 text-xs text-slate-700 dark:text-slate-200"
+                    style={{ backgroundColor: `rgba(207, 90, 90, ${Math.min(0.3, 0.08 + Math.max(0, a.z - 2) * 0.03)})` }}
+                  >
+                    <span className="font-medium">{a.date}</span>
+                    <span className="mx-1.5 opacity-40">·</span>
+                    {a.entity}
+                    <span className="mx-1.5 opacity-40">·</span>
+                    负面 {a.negativeCount} 条
+                    <span className="ml-1 opacity-70">
+                      (基线 {a.baseline}, z={a.z})
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {sentiment.entities.length > 0 && (
+            <div className="mt-4">
+              <h4 className="mb-2 text-xs font-medium text-slate-700 dark:text-slate-300">
+                实体负面占比（点击切换实体）
+              </h4>
+              <div className="mb-3 flex flex-wrap gap-1.5">
+                {sentiment.entities.map((e) => (
+                  <button
+                    key={e.entity}
+                    type="button"
+                    onClick={() => setSelectedEntity(e.entity)}
+                    className={`rounded-full px-2.5 py-1 text-xs transition ${
+                      selectedEntity === e.entity
+                        ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
+                    }`}
+                  >
+                    {e.entity}
+                    <span className="ml-1.5 opacity-60">{Math.round(e.negShare * 100)}%</span>
+                  </button>
+                ))}
+              </div>
+              {entityDetail && (
+                <LineChart
+                  labels={entityDetail.points.map((p) => p.date)}
+                  series={[
+                    { name: '负面占比', color: '#cf5a5a', values: entityDetail.points.map((p) => p.negRatio), width: 1.5 },
+                    { name: '7 日均值', color: '#7c3aed', values: entityDetail.points.map((p) => p.ma7), width: 2.5 },
+                  ]}
+                  yMax={1}
+                  tickFormat={(v) => `${Math.round(v * 100)}%`}
+                  valueFormat={(v) => `${Math.round(v * 100)}%`}
+                  dots
+                  height={200}
+                />
+              )}
+              <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">
+                口径：该实体当日被提及的文章中，负面文章占比（仅统计已判定条目；7 日均值做平滑）
+              </p>
+            </div>
+          )}
+        </section>
+      )}
 
       {entities.length > 0 && (
         <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04)] dark:border-slate-800 dark:bg-slate-900">

@@ -4,6 +4,9 @@ import { categoryRatio, crossSource, dailyVolume, topEntities, velocity } from '
 import { CATEGORY_LABELS, type Category } from '../ai/categories.ts'
 import { runProcessing } from '../ai/pipeline.ts'
 import { generateDailySummary, getSummary, listSummaries, yesterdayUtc } from '../ai/summary.ts'
+import { forecastVolume } from '../analytics/forecast.ts'
+import { dailySentiment, entitySentiment, sentimentAlerts, topEntitiesWithSentiment } from '../analytics/sentiment.ts'
+import { broadcast, sinkCount } from '../push.ts'
 import { runCollect } from '../collector/index.ts'
 import { config } from '../config.ts'
 import { getDb } from '../db.ts'
@@ -212,6 +215,53 @@ export async function newsRoutes(app: FastifyInstance): Promise<void> {
       .prepare('SELECT id, name, url, kind, weight, enabled, last_fetch_at, last_status FROM sources ORDER BY id')
       .all(),
   }))
+
+  /** 短期热度预测（Holt 阻尼趋势，本地计算，无外部依赖） */
+  app.get('/api/news/forecast', async (req) => {
+    const q = req.query as Query
+    const days = num(q.days, 30)
+    const horizon = Math.min(Math.max(num(q.horizon, 7), 1), 14)
+    return { days, horizon, ...forecastVolume(getDb(), days, horizon) }
+  })
+
+  /** 情感趋势：每日正/负/中占比 + 实体负面预警 + 实体列表 */
+  app.get('/api/news/sentiment', async (req) => {
+    const q = req.query as Query
+    const days = num(q.days, 30)
+    const db = getDb()
+    return {
+      days,
+      byDay: dailySentiment(db, days),
+      alerts: sentimentAlerts(db, days),
+      entities: topEntitiesWithSentiment(db, days),
+    }
+  })
+
+  /** 情感趋势：某实体的负面占比曲线（7 日滑动平均） */
+  app.get('/api/news/sentiment/entity/:entity', async (req) => {
+    const { entity } = req.params as { entity: string }
+    const days = num((req.query as Query).days, 30)
+    return { days, ...entitySentiment(getDb(), entity, days) }
+  })
+
+  /** 实时推送自检（鉴权后可调用）：广播一条模拟突发，返回实际投递数 */
+  app.post('/api/news/push/test', async () => {
+    const delivered = broadcast({
+      type: 'burst',
+      at: new Date().toISOString(),
+      items: [
+        {
+          date: new Date().toISOString().slice(0, 10),
+          category: 'all',
+          articleCount: 42,
+          baseline: 1.5,
+          z: 9.99,
+          test: true,
+        },
+      ],
+    })
+    return { ok: true, delivered, clients: sinkCount() }
+  })
 
   /** 每日总结：历史列表 */
   app.get('/api/news/summaries', async (req) => {

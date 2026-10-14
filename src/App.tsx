@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { api } from './api.ts'
+import { useBurstFeed } from './hooks/useBurstFeed.ts'
 import ListPage from './pages/ListPage.tsx'
 import SummaryPage from './pages/SummaryPage.tsx'
 import TrendPage from './pages/TrendPage.tsx'
 import type { Health, SourceItem } from './types.ts'
+import { CATEGORY_LABELS } from './utils/format.ts'
 
 type Tab = 'list' | 'trend' | 'summary'
 type Theme = 'light' | 'dark'
@@ -46,6 +48,27 @@ export default function App() {
   const [health, setHealth] = useState<Health | null>(null)
   const [sources, setSources] = useState<SourceItem[]>([])
   const [running, setRunning] = useState<string>('')
+  const [toasts, setToasts] = useState<{ id: number; text: string }[]>([])
+
+  // 突发实时推送（WebSocket）：采集到 z ≥ 2.5 的新突发时立即弹提示
+  const { connected } = useBurstFeed((items) => {
+    setToasts((prev) =>
+      [
+        ...prev,
+        ...items.map((it, i) => ({
+          id: Date.now() + i,
+          text: `${it.date} · ${it.category === 'all' ? '全站' : (CATEGORY_LABELS[it.category] ?? it.category)} · ${it.articleCount} 条（基线 ${it.baseline}, z=${it.z}）${it.test ? '（测试）' : ''}`,
+        })),
+      ].slice(-3),
+    )
+  })
+
+  // 提示 12 秒后自动消失
+  useEffect(() => {
+    if (toasts.length === 0) return
+    const timer = setTimeout(() => setToasts((prev) => prev.slice(1)), 12_000)
+    return () => clearTimeout(timer)
+  }, [toasts])
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark')
@@ -131,6 +154,12 @@ export default function App() {
                 <span className={`inline-block h-1.5 w-1.5 rounded-full ${health.authEnabled ? 'bg-emerald-500' : 'bg-amber-500'}`} />
                 鉴权 {health.authEnabled ? '已开启' : '未开启（本地）'}
               </span>
+              <span className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
+                <span
+                  className={`inline-block h-1.5 w-1.5 rounded-full ${connected ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'}`}
+                />
+                实时推送 {connected ? '已连接' : '未连接'}
+              </span>
             </>
           ) : (
             <span className="text-slate-500 dark:text-slate-400">后端未连接（先启动 server：cd server && npm start）</span>
@@ -163,6 +192,31 @@ export default function App() {
       </header>
 
       {tab === 'list' ? <ListPage sources={sources} /> : tab === 'trend' ? <TrendPage /> : <SummaryPage />}
+
+      {/* 突发实时推送提示（右下角浮层） */}
+      {toasts.length > 0 && (
+        <div className="fixed bottom-4 right-4 z-50 flex w-80 flex-col gap-2">
+          {toasts.map((t) => (
+            <div
+              key={t.id}
+              className="rounded-xl border border-red-200 bg-white p-3 shadow-lg dark:border-red-900/60 dark:bg-slate-900"
+            >
+              <div className="flex items-center gap-1.5 text-xs font-medium text-red-600 dark:text-red-400">
+                <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-red-500" />
+                突发（实时推送）
+              </div>
+              <p className="mt-1 text-xs leading-relaxed text-slate-700 dark:text-slate-200">{t.text}</p>
+              <button
+                type="button"
+                onClick={() => setToasts((prev) => prev.filter((x) => x.id !== t.id))}
+                className="mt-1.5 text-[11px] text-slate-400 transition hover:text-slate-600 dark:hover:text-slate-300"
+              >
+                知道了
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

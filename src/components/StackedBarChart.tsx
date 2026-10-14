@@ -7,6 +7,10 @@ interface Props {
   points: CategoryRatioPoint[]
   categories: string[]
   height?: number
+  /** 覆盖配色（如情感图用 正绿/中灰/负红） */
+  colors?: Record<string, string>
+  /** 覆盖显示名（如 positive → 正面） */
+  labelMap?: Record<string, string>
 }
 
 const W = 760
@@ -19,9 +23,12 @@ const PAD = { top: 14, right: 16, bottom: 26, left: 42 }
  * - 柱内分段用卡片底色描边，段与段边界清晰；
  * - 悬浮查看当日各分类具体占比（如 32.5%）；点击图例可隐藏某类。
  */
-export default function StackedBarChart({ points, categories, height = 260 }: Props) {
+export default function StackedBarChart({ points, categories, height = 260, colors, labelMap }: Props) {
   const [hidden, setHidden] = useState<Set<string>>(new Set())
   const [hover, setHover] = useState<number | null>(null)
+
+  const colorOf = (c: string) => colors?.[c] ?? CATEGORY_COLORS[c] ?? '#9ca3af'
+  const labelOf = (c: string) => labelMap?.[c] ?? CATEGORY_LABELS[c] ?? c
 
   const visible = categories.filter((c) => !hidden.has(c))
   const slot = (W - PAD.left - PAD.right) / Math.max(1, points.length)
@@ -81,7 +88,7 @@ export default function StackedBarChart({ points, categories, height = 260 }: Pr
                     y={yTop}
                     width={barW}
                     height={h}
-                    fill={CATEGORY_COLORS[s.category] ?? '#9ca3af'}
+                    fill={colorOf(s.category)}
                     className="chart-sep"
                     strokeWidth={1}
                   />
@@ -151,11 +158,8 @@ export default function StackedBarChart({ points, categories, height = 260 }: Pr
                 .slice(0, 6)
                 .map(({ c, ratio }) => (
                   <li key={c} className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
-                    <span
-                      className="inline-block h-2 w-2 rounded-sm"
-                      style={{ backgroundColor: CATEGORY_COLORS[c] ?? '#9ca3af' }}
-                    />
-                    {CATEGORY_LABELS[c] ?? c}
+                    <span className="inline-block h-2 w-2 rounded-sm" style={{ backgroundColor: colorOf(c) }} />
+                    {labelOf(c)}
                     <span className="ml-auto pl-3 font-medium text-slate-800 dark:text-slate-100">{formatPct(ratio)}</span>
                   </li>
                 ))}
@@ -179,11 +183,8 @@ export default function StackedBarChart({ points, categories, height = 260 }: Pr
                   : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
               }`}
             >
-              <span
-                className="inline-block h-2.5 w-2.5 rounded-sm"
-                style={{ backgroundColor: CATEGORY_COLORS[c] ?? '#9ca3af' }}
-              />
-              {CATEGORY_LABELS[c] ?? c}
+              <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: colorOf(c) }} />
+              {labelOf(c)}
             </button>
           )
         })}

@@ -4,8 +4,11 @@ import type {
   CrossSourceResponse,
   DailyPoint,
   EntityItem,
+  EntitySentimentResponse,
+  ForecastResponse,
   GenerateSummaryResponse,
   Health,
+  SentimentResponse,
   SourceItem,
   SummaryDetail,
   SummaryListItem,
@@ -60,6 +63,10 @@ export const api = {
   entities: (days: number, limit = 15) => get<{ days: number; items: EntityItem[] }>('/entities', { days, limit }),
   runCollect: () => post<unknown>('/collect'),
   runProcess: () => post<unknown>('/process'),
+  forecast: (days = 30, horizon = 7) => get<ForecastResponse>('/forecast', { days, horizon }),
+  sentiment: (days = 30) => get<SentimentResponse>('/sentiment', { days }),
+  entitySentiment: (entity: string, days = 30) =>
+    get<EntitySentimentResponse>(`/sentiment/entity/${encodeURIComponent(entity)}`, { days }),
   summaries: (limit = 60) => get<{ items: SummaryListItem[] }>('/summaries', { limit }),
   summary: (date: string) => get<SummaryDetail>(`/summaries/${date}`),
   generateSummary: (date?: string, force = true) =>
