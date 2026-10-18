@@ -178,20 +178,23 @@ export default function SummaryPage() {
   return (
     <div className="space-y-4">
       <header>
-        <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">每日总结</h2>
-        <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+        <h2 className="flex items-center gap-2 text-[19px] font-semibold tracking-[-0.02em] text-slate-900 dark:text-slate-50">
+          <span className="inline-block h-4 w-[3px] rounded-full bg-gradient-to-b from-violet-500 to-indigo-500" />
+          每日简报
+        </h2>
+        <p className="mt-1 text-[12px] text-slate-500 dark:text-slate-400">
           AI 每天 <b className="text-slate-600 dark:text-slate-300">23:00（北京时间）自动生成当天简报</b>
           （综述 / 分类要点 / 关注方向）。
           <b className="text-slate-600 dark:text-slate-300">点日期卡片</b>即可查看当天简报，历史可回看；缺的日子可手动补生成。
         </p>
       </header>
 
-      <div className="flex flex-wrap items-end gap-3 card p-4">
-        <label className="flex flex-col gap-1 text-xs text-slate-500 dark:text-slate-400">
-          生成指定日期（UTC）
+      <div className="card flex flex-wrap items-end gap-x-3 gap-y-2 p-3.5">
+        <label className="flex flex-col gap-1 text-[10.5px] font-medium uppercase tracking-wider text-slate-400 dark:text-slate-500">
+          指定日期（UTC）
           <input
             type="date"
-            className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+            className="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-[12.5px] text-slate-700 outline-none transition hover:border-slate-300 focus:border-violet-400 focus:ring-2 focus:ring-violet-500/15 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-200"
             value={genDate}
             onChange={(e) => setGenDate(e.target.value)}
           />
@@ -200,19 +203,19 @@ export default function SummaryPage() {
           type="button"
           onClick={() => void generate()}
           disabled={generating}
-          className="rounded-full bg-violet-600 px-4 py-1.5 text-sm font-medium text-white transition hover:-translate-y-0.5 hover:bg-violet-500 hover:shadow-md disabled:opacity-50"
+          className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-gradient-to-b from-violet-500 to-violet-600 px-3.5 text-[13px] font-medium text-white shadow-[0_6px_16px_-8px_rgba(109,40,217,0.9),inset_0_1px_0_rgba(255,255,255,0.28)] transition hover:from-violet-500 hover:to-violet-500 active:translate-y-px disabled:opacity-50"
         >
           {generating ? '生成中…' : '生成 / 更新'}
         </button>
         <button
           type="button"
           onClick={() => void loadList()}
-          className="rounded-full border border-slate-300 px-4 py-1.5 text-sm text-slate-700 transition hover:-translate-y-0.5 hover:shadow-sm dark:border-slate-700 dark:text-slate-200 dark:hover:border-slate-500"
+          className="inline-flex h-8 items-center rounded-lg border border-slate-200 bg-white px-3.5 text-[13px] font-medium text-slate-700 transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-sm dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-200"
         >
           刷新
         </button>
-        <p className="text-xs text-slate-500 dark:text-slate-400">
-          不选日期默认生成<b>当天</b>（每天 23:00 自动生成，无需手动）
+        <p className="pb-1.5 text-[11px] text-slate-400 dark:text-slate-500">
+          不选日期默认生成<b className="text-slate-600 dark:text-slate-300">当天</b>（每天 23:00 自动生成）
         </p>
         {message && <p className="w-full text-xs text-slate-600 dark:text-slate-300">{message}</p>}
       </div>
@@ -234,7 +237,7 @@ export default function SummaryPage() {
             key={it.date}
             type="button"
             onClick={() => setOpen(it.date)}
-            className="card min-w-0 p-3 text-left transition hover:-translate-y-0.5 hover:border-violet-400 hover:shadow-md dark:hover:border-violet-500"
+            className="card card-hover min-w-0 p-3 text-left"
           >
             <span className="flex items-center gap-1.5">
               <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">{it.date}</span>

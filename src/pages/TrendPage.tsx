@@ -107,11 +107,23 @@ export default function TrendPage() {
   return (
     <div className="flex flex-col gap-4 lg:flex-row">
       <div className="min-w-0 flex-1 space-y-4">
-        <div className="flex flex-wrap items-end gap-3 card p-4">
-          <label className="flex flex-col gap-1 text-xs text-slate-500 dark:text-slate-400">
+        <header className="flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <h2 className="flex items-center gap-2 text-[19px] font-semibold tracking-[-0.02em] text-slate-900 dark:text-slate-50">
+              <span className="inline-block h-4 w-[3px] rounded-full bg-gradient-to-b from-violet-500 to-indigo-500" />
+              趋势分析
+            </h2>
+            <p className="mt-1 text-[12px] text-slate-500 dark:text-slate-400">
+              四层递进：条数 → 构成 → 斜率 → 跨源与突发。越往后越接近「真正发生了什么」。
+            </p>
+          </div>
+        </header>
+
+        <div className="card flex flex-wrap items-end gap-x-3 gap-y-2 p-3.5">
+          <label className="flex flex-col gap-1 text-[10.5px] font-medium uppercase tracking-wider text-slate-400 dark:text-slate-500">
             统计窗口
             <select
-              className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+              className="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-[12.5px] text-slate-700 outline-none transition hover:border-slate-300 focus:border-violet-400 focus:ring-2 focus:ring-violet-500/15 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-200"
               value={days}
               onChange={(e) => setDays(Number(e.target.value))}
             >
@@ -120,7 +132,7 @@ export default function TrendPage() {
               <option value={60}>近 60 天</option>
             </select>
           </label>
-          <p className="text-xs text-slate-500 dark:text-slate-400">日期按 UTC 分桶（与库内存储一致）</p>
+          <p className="pb-1.5 text-[11px] text-slate-400 dark:text-slate-500">日期按 UTC 分桶（与库内存储一致）</p>
           {(() => {
             // ⚠️ 不能用 volume 的最后一项：序列是按天补齐的，最后一天永远是"今天"（值为 0），
             // 直接显示会变成"数据截至 今天"这种假新鲜度。取最后一个真正有条目的日子。
@@ -128,12 +140,13 @@ export default function TrendPage() {
             if (!last) return null
             const isToday = last === new Date().toISOString().slice(0, 10)
             return (
-              <p
-                className={`ml-auto text-xs ${isToday ? 'text-slate-500 dark:text-slate-400' : 'text-amber-600 dark:text-amber-400'}`}
-                title="统计窗口的最后一天；采集每天 5 个时间点，非当天说明最近一轮还没跑"
+              <span
+                className={`chip num ml-auto !text-[11px] ${isToday ? '' : '!border-amber-300/60 !text-amber-700 dark:!border-amber-500/30 dark:!text-amber-400'}`}
+                title="窗口内最后一个真正有条目的日期；采集每天 5 个时间点，非当天说明最近一轮还没跑"
               >
+                <span className={`inline-block h-1.5 w-1.5 rounded-full ${isToday ? 'bg-emerald-500' : 'bg-amber-500'}`} />
                 数据截至 {last}
-              </p>
+              </span>
             )
           })()}
         </div>

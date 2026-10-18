@@ -12,42 +12,126 @@ interface Props {
   onNavigate: Nav
 }
 
+/**
+ * KPI 卡：一眼要读出「这是什么 · 多少 · 比之前怎么样」。
+ * - 顶部渐隐高光线 + 悬停光标柔光（.card-accent / .card-glow）
+ * - 数字用大号等宽字体，单位降级到小字
+ * - 变化用箭头胶囊表达方向，颜色语义：升温=红（资讯变多通常意味着有事发生），降温=绿
+ */
 function Kpi({
   label,
   value,
   unit,
   hint,
   tone = 'default',
+  delta,
+  icon,
+  delay = 0,
 }: {
   label: string
   value: string
   unit?: string
   hint?: string
   tone?: 'default' | 'up' | 'down'
+  /** 变化描述（如 "周环比 ↑ 12.4%"），有则渲染成方向胶囊 */
+  delta?: string
+  icon?: ReactNode
+  delay?: number
 }) {
-  const toneCls =
+  const valueTone =
     tone === 'up'
       ? 'text-red-600 dark:text-red-400'
       : tone === 'down'
         ? 'text-emerald-600 dark:text-emerald-400'
-        : 'text-slate-900 dark:text-slate-100'
+        : 'text-slate-900 dark:text-slate-50'
+
+  const deltaCls =
+    tone === 'up'
+      ? 'bg-red-50 text-red-600 ring-red-100 dark:bg-red-500/10 dark:text-red-400 dark:ring-red-500/20'
+      : tone === 'down'
+        ? 'bg-emerald-50 text-emerald-700 ring-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400 dark:ring-emerald-500/20'
+        : 'bg-slate-100 text-slate-500 ring-slate-200/70 dark:bg-white/[0.06] dark:text-slate-400 dark:ring-white/10'
+
   return (
-    <div className="card card-accent relative overflow-hidden p-4">
-      <p className="eyebrow text-slate-500 dark:text-slate-400">{label}</p>
-      <p className="mt-1.5 flex items-baseline gap-1">
-        <span className={`num text-[26px] font-semibold leading-none ${toneCls}`}>{value}</span>
-        {unit && <span className="text-[11px] text-slate-400 dark:text-slate-500">{unit}</span>}
+    <div
+      className="card card-accent card-glow card-hover reveal relative overflow-hidden p-4"
+      style={{ animationDelay: `${delay}ms` }}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <p className="eyebrow">{label}</p>
+        {icon && (
+          <span className="shrink-0 text-slate-300 transition group-hover:text-slate-400 dark:text-slate-600">
+            {icon}
+          </span>
+        )}
+      </div>
+
+      <p className="mt-2 flex items-baseline gap-1.5">
+        <span className={`kpi-value num text-[30px] ${valueTone}`}>{value}</span>
+        {unit && <span className="text-[11px] font-medium text-slate-400 dark:text-slate-500">{unit}</span>}
       </p>
-      {hint && <p className="mt-2 text-[11px] leading-snug text-slate-400 dark:text-slate-500">{hint}</p>}
+
+      {delta && (
+        <p className={`mt-2 inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ${deltaCls}`}>
+          {delta}
+        </p>
+      )}
+      {hint && (
+        <p className={`text-[11px] leading-snug text-slate-400 dark:text-slate-500 ${delta ? 'mt-1.5' : 'mt-2'}`}>
+          {hint}
+        </p>
+      )}
     </div>
   )
 }
 
+/** 线性小图标（16px）：只做视觉锚点，不抢数字的注意力 */
+const iconCls = 'h-4 w-4'
+
+function IconStack() {
+  return (
+    <svg viewBox="0 0 24 24" className={iconCls} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 7l9-4 9 4-9 4-9-4z" />
+      <path d="M3 12l9 4 9-4" />
+      <path d="M3 17l9 4 9-4" />
+    </svg>
+  )
+}
+
+function IconCross() {
+  return (
+    <svg viewBox="0 0 24 24" className={iconCls} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M3.5 12h17M12 3.5c2.4 2.3 3.6 5.2 3.6 8.5s-1.2 6.2-3.6 8.5c-2.4-2.3-3.6-5.2-3.6-8.5S9.6 5.8 12 3.5z" />
+    </svg>
+  )
+}
+
+function IconBolt() {
+  return (
+    <svg viewBox="0 0 24 24" className={iconCls} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M13 2L5 13h6l-1 9 8-11h-6l1-9z" />
+    </svg>
+  )
+}
+
+function IconPulse() {
+  return (
+    <svg viewBox="0 0 24 24" className={iconCls} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 12h4l2.5-6 4 12 2.5-6h5" />
+    </svg>
+  )
+}
+
+/** 区块卡：标题左侧一道渐隐强调条，与 KPI 卡形成层级差 */
 function Card({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
   return (
     <section className="card p-5">
-      <header className="mb-3 flex items-center justify-between gap-2">
-        <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">{title}</h3>
+      <header className="mb-3.5 flex items-center justify-between gap-2">
+        <h3 className="flex items-center gap-2 text-[15px] font-semibold tracking-[-0.01em] text-slate-900 dark:text-slate-100">
+          <span className="inline-block h-3.5 w-[3px] rounded-full bg-gradient-to-b from-violet-500 to-indigo-500" />
+          {title}
+        </h3>
         {action}
       </header>
       {children}
@@ -111,27 +195,43 @@ export default function OverviewPage({ health, onNavigate }: Props) {
         {/* 关键指标 */}
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <Kpi
-            label={`最新收录（${today ? today.slice(5) : '—'}）`}
+            label={`最新收录 · ${today ? today.slice(5) : '—'}`}
             value={String(todayCount)}
             unit="条"
-            hint={change === null || change === undefined ? '暂无环比' : `周环比 ${change >= 0 ? '↑' : '↓'} ${Math.abs(change)}%`}
+            icon={<IconStack />}
+            delay={0}
+            delta={
+              change === null || change === undefined
+                ? undefined
+                : `周环比 ${change >= 0 ? '↑' : '↓'} ${Math.abs(change)}%`
+            }
             tone={change === null || change === undefined ? 'default' : change >= 0 ? 'up' : 'down'}
+            hint={change === null || change === undefined ? '数据不足，暂无环比' : '对比上一周同期'}
           />
           <Kpi
-            label="最新跨源事件"
+            label="跨源事件"
             value={String(todayEvents.length)}
             unit="个"
+            icon={<IconCross />}
+            delay={60}
             hint={maxSources > 0 ? `最高被 ${maxSources} 家独立源报道` : '暂无多源印证事件'}
           />
           <Kpi
             label="近 3 天突发"
             value={String(recentBursts.length)}
             unit="条"
-            hint={topBurstZ > 0 ? `最高 z=${topBurstZ}` : '无异常（正常）'}
+            icon={<IconBolt />}
+            delay={120}
+            tone={recentBursts.length > 0 ? 'up' : 'default'}
+            delta={topBurstZ > 0 ? `最高 z = ${topBurstZ}` : undefined}
+            hint={recentBursts.length === 0 ? '无异常，属正常' : '偏离 14 天基线 z ≥ 2.5'}
           />
           <Kpi
-            label="最新负面情感占比"
+            label="负面情感"
             value={negShare === null ? '—' : `${Math.round(negShare * 100)}%`}
+            icon={<IconPulse />}
+            delay={180}
+            tone={negShare !== null && negShare >= 0.35 ? 'up' : 'default'}
             hint={sentiToday ? `已判定 ${sentiToday.classified} 条` : '情感判定待补齐'}
           />
         </div>

@@ -3,45 +3,108 @@
 /* 深色模式：以 html.dark 为准（顶栏开关切换，localStorage 记忆，跟随系统默认） */
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* 图表配色变量：SVG 通过 class 引用，随主题自动切换 */
+/* ==========================================================================
+   设计令牌
+   目标：一眼「专业数据产品」的观感 —— 层级靠光而不靠线，强调色克制，
+   数字是第一视线。所有颜色/阴影/圆角只在这里定义，组件不写死色值。
+   ========================================================================== */
 :root {
-  --chart-grid: #e8eaee;
-  --chart-axis: #9aa1ad;
-  --chart-baseline: #cbd5e1;
+  /* 图表 */
+  --chart-grid: #e9ebf2;
+  --chart-axis: #98a1b2;
+  --chart-baseline: #c9d0dc;
   --chart-dot-stroke: #ffffff;
-  /* 堆叠柱内部的分隔线颜色 = 卡片底色 */
   --chart-sep: #ffffff;
 
-  /* ---- 版式与质感令牌 ---- */
-  --bg: #f4f5f9;
-  --bg-glow: rgba(124, 58, 237, 0.07);
-  --bg-glow-2: rgba(59, 130, 246, 0.05);
+  /* 画布：冷白底 + 两团极淡的彩色环境光，避免"纯白 Excel 感" */
+  --bg: #f5f6fa;
+  --bg-glow: rgba(109, 40, 217, 0.075);
+  --bg-glow-2: rgba(14, 165, 233, 0.055);
+  --bg-glow-3: rgba(236, 72, 153, 0.035);
+
+  /* 表面层级（elevation）：0 是画布，1/2/3 逐层抬升 */
   --surface: #ffffff;
-  --line: #e6e8f0;
-  --ink: #12161f;
-  --ink-muted: #5c6575;
-  --accent-line: rgba(124, 58, 237, 0.45);
-  --ring: rgba(124, 58, 237, 0.35);
-  --shadow-card: 0 1px 2px rgba(16, 24, 40, 0.04), 0 18px 40px -28px rgba(16, 24, 40, 0.35);
+  --surface-2: #fafbfe;
+  --surface-sunk: #f1f3f9;
+
+  /* 线条：常规描边 + 更淡的"发丝线" */
+  --line: #e4e7f0;
+  --line-soft: #eef0f6;
+  --line-strong: #d3d8e6;
+
+  /* 文字：正文 / 次要 / 弱化 / 极弱 */
+  --ink: #0e1220;
+  --ink-2: #3d4557;
+  --ink-muted: #6b7488;
+  --ink-faint: #9aa2b4;
+
+  /* 强调色 */
+  --accent: #6d28d9;
+  --accent-2: #4f46e5;
+  --accent-soft: rgba(109, 40, 217, 0.08);
+  --accent-line: rgba(109, 40, 217, 0.42);
+  --ring: rgba(109, 40, 217, 0.38);
+
+  /* 语义色 */
+  --up: #dc2626;
+  --down: #059669;
+  --warn: #b45309;
+
+  /* 阴影：三层，越往上越"飘" */
+  --shadow-1: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.03);
+  --shadow-2: 0 1px 2px rgba(16, 24, 40, 0.04), 0 10px 24px -14px rgba(16, 24, 40, 0.22);
+  --shadow-3: 0 2px 4px rgba(16, 24, 40, 0.05), 0 22px 48px -24px rgba(16, 24, 40, 0.3);
+  --shadow-card: var(--shadow-2);
+
+  /* 高光边（1px 内描边做"玻璃厚度"） */
+  --bevel: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+
+  --grain-opacity: 0.022;
+  --radius-card: 16px;
 }
 
 .dark {
-  --chart-grid: #232a38;
-  --chart-axis: #7c8698;
-  --chart-baseline: #475062;
-  --chart-dot-stroke: #0f1218;
-  --chart-sep: #12161f;
+  --chart-grid: #202634;
+  --chart-axis: #78839a;
+  --chart-baseline: #414a5c;
+  --chart-dot-stroke: #0b0e15;
+  --chart-sep: #0f1319;
 
-  --bg: #080a10;
-  --bg-glow: rgba(124, 58, 237, 0.18);
-  --bg-glow-2: rgba(56, 189, 248, 0.06);
-  --surface: #12161f;
-  --line: rgba(255, 255, 255, 0.075);
-  --ink: #eef1f7;
-  --ink-muted: #939db0;
+  --bg: #07080d;
+  --bg-glow: rgba(124, 58, 237, 0.20);
+  --bg-glow-2: rgba(14, 165, 233, 0.07);
+  --bg-glow-3: rgba(236, 72, 153, 0.05);
+
+  --surface: #101319;
+  --surface-2: #141822;
+  --surface-sunk: #0b0e14;
+
+  --line: rgba(255, 255, 255, 0.085);
+  --line-soft: rgba(255, 255, 255, 0.05);
+  --line-strong: rgba(255, 255, 255, 0.16);
+
+  --ink: #f2f5fb;
+  --ink-2: #c3cad8;
+  --ink-muted: #8b95a8;
+  --ink-faint: #6a7488;
+
+  --accent: #a78bfa;
+  --accent-2: #818cf8;
+  --accent-soft: rgba(167, 139, 250, 0.12);
   --accent-line: rgba(167, 139, 250, 0.55);
-  --ring: rgba(167, 139, 250, 0.45);
-  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 28px 56px -38px rgba(0, 0, 0, 0.95);
+  --ring: rgba(167, 139, 250, 0.5);
+
+  --up: #f87171;
+  --down: #34d399;
+  --warn: #fbbf24;
+
+  --shadow-1: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 1px 2px rgba(0, 0, 0, 0.6);
+  --shadow-2: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 16px 36px -22px rgba(0, 0, 0, 0.95);
+  --shadow-3: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 30px 60px -30px rgba(0, 0, 0, 1);
+  --shadow-card: var(--shadow-2);
+
+  --bevel: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --grain-opacity: 0.035;
 }
 
 html,
@@ -54,53 +117,207 @@ body {
   margin: 0;
   background-color: var(--bg);
   background-image:
-    radial-gradient(1100px 520px at 50% -14%, var(--bg-glow), transparent 72%),
-    radial-gradient(760px 420px at 100% -6%, var(--bg-glow-2), transparent 70%);
+    radial-gradient(1180px 560px at 50% -16%, var(--bg-glow), transparent 70%),
+    radial-gradient(820px 460px at 102% -8%, var(--bg-glow-2), transparent 68%),
+    radial-gradient(720px 420px at -8% 8%, var(--bg-glow-3), transparent 66%);
   background-attachment: fixed;
   color: var(--ink);
   font-family:
-    'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', Roboto, Helvetica,
-    Arial, sans-serif;
+    'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei',
+    Roboto, Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
-  /* 数字等宽（指标对齐）+ 现代字形 */
-  font-feature-settings: 'tnum' 1, 'cv02' 1, 'cv03' 1, 'cv04' 1;
+  font-feature-settings: 'tnum' 1, 'cv02' 1, 'cv03' 1, 'cv04' 1, 'ss01' 1;
 }
 
-/* ============ 设计基元（放在 components 层，方便工具类覆盖） ============ */
+/* 全局噪点：极淡的一层颗粒，消除大面积纯色渐变的"塑料感"（这是高端质感的常用手法） */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: var(--grain-opacity);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ============ 设计基元 ============ */
 @layer components {
-  /* 统一卡片：细描边 + 柔和投影；深色下加一道顶部高光，做出"层"的质感 */
+  /* 卡片：玻璃底 + 发丝描边 + 顶部高光；悬停时轻微上浮（只动 transform，不引起重排） */
   .card {
-    border-radius: 16px;
+    position: relative;
+    border-radius: var(--radius-card);
     border: 1px solid var(--line);
     background: var(--surface);
-    box-shadow: var(--shadow-card);
+    box-shadow: var(--shadow-card), var(--bevel);
+    transition:
+      transform 0.28s cubic-bezier(0.2, 0.7, 0.3, 1),
+      border-color 0.28s ease,
+      box-shadow 0.28s ease;
   }
   .dark .card {
-    background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0) 42%);
+    background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.038), rgba(255, 255, 255, 0) 46%);
   }
 
-  /* 卡片顶部的一道渐隐高光线（用于 KPI 卡） */
+  /* 可交互卡片：悬停上浮 + 描边提亮 + 阴影加深 */
+  .card-hover:hover {
+    transform: translateY(-2px);
+    border-color: var(--line-strong);
+    box-shadow: var(--shadow-3), var(--bevel);
+  }
+
+  /* 顶部一道渐隐高光线（KPI 卡） */
   .card-accent::before {
     content: '';
     position: absolute;
     inset-inline: 0;
     top: 0;
     height: 1px;
+    border-radius: inherit;
     background: linear-gradient(90deg, transparent, var(--accent-line), transparent);
+    pointer-events: none;
   }
 
-  /* 小标签：分类说明、字段名 */
+  /* 悬停时从光标处晕开的一层柔光 */
+  .card-glow::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.35s ease;
+    background: radial-gradient(320px circle at var(--mx, 50%) var(--my, 0%), var(--accent-soft), transparent 62%);
+  }
+  .card-glow:hover::after {
+    opacity: 1;
+  }
+
+  /* 小标签 */
   .eyebrow {
     font-size: 11px;
-    letter-spacing: 0.08em;
+    font-weight: 500;
+    letter-spacing: 0.085em;
+    text-transform: uppercase;
     color: var(--ink-muted);
   }
 
-  /* 数字：等宽 + 轻微收紧，读数更"仪表盘" */
+  /* 数字：等宽 + 收紧 + 光学字号（仪表盘读数） */
   .num {
     font-variant-numeric: tabular-nums;
-    letter-spacing: -0.02em;
+    letter-spacing: -0.03em;
+  }
+
+  /* 大号 KPI 数字 */
+  .kpi-value {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.045em;
+    font-weight: 650;
+    line-height: 0.95;
+  }
+
+  /* 胶囊 chip */
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: var(--surface-2);
+    padding: 0.15rem 0.5rem;
+    font-size: 11px;
+    line-height: 1.5;
+    color: var(--ink-muted);
+    white-space: nowrap;
+  }
+  .chip-solid {
+    border-color: transparent;
+    color: #fff;
+  }
+
+  /* 分段控件（页签） */
+  .seg {
+    display: inline-flex;
+    padding: 4px;
+    gap: 2px;
+    border-radius: 13px;
+    border: 1px solid var(--line);
+    background: var(--surface-sunk);
+    box-shadow: var(--bevel);
+  }
+  .seg-item {
+    position: relative;
+    border-radius: 9px;
+    padding: 0.36rem 0.85rem;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--ink-muted);
+    transition: color 0.2s ease, background-color 0.24s ease, box-shadow 0.24s ease;
+  }
+  .seg-item:hover {
+    color: var(--ink);
+  }
+  .seg-item[data-active='true'] {
+    color: var(--ink);
+    background: var(--surface);
+    box-shadow: var(--shadow-1), 0 0 0 1px var(--line-soft);
+  }
+
+  /* 细分割线 */
+  .rule {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--line), transparent);
+  }
+}
+
+/* ============ 动效 ============ */
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -180% 0;
+  }
+  100% {
+    background-position: 180% 0;
+  }
+}
+
+/* 入场：轻微上浮 + 淡入（stagger 由行内 animation-delay 控制） */
+.reveal {
+  animation: fade-up 0.5s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+
+/* 骨架屏流光 */
+.skeleton {
+  background-image: linear-gradient(
+    90deg,
+    var(--surface-sunk) 0%,
+    color-mix(in srgb, var(--surface-sunk) 55%, var(--surface)) 50%,
+    var(--surface-sunk) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal,
+  .skeleton {
+    animation: none;
+  }
+  .card,
+  .card-hover:hover {
+    transition: none;
+    transform: none;
   }
 }
 
@@ -111,10 +328,35 @@ body {
 }
 
 ::selection {
-  background: rgba(124, 58, 237, 0.22);
+  background: color-mix(in srgb, var(--accent) 26%, transparent);
 }
 
-/* 图表公共样式（SVG 元素用 class 引用 CSS 变量） */
+/* 桌面端细滚动条（移动端由 app-shell 隐藏） */
+@media (pointer: fine) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-strong) transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--line-strong);
+    border-radius: 99px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--ink-faint);
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+/* 图表公共样式（SVG 用 class 引用 CSS 变量，随主题切换） */
 .chart-grid {
   stroke: var(--chart-grid);
 }
@@ -144,7 +386,6 @@ html.app-shell body {
   user-select: none;
   -webkit-user-select: none;
 }
-/* 输入框与声明了 data-selectable 的区域保持可选（可复制） */
 html.app-shell input,
 html.app-shell textarea,
 html.app-shell [data-selectable] {
@@ -155,7 +396,6 @@ html.app-shell ::-webkit-scrollbar {
   display: none;
 }
 
-/* 移动端点击高亮：全局去掉（各按钮/卡片已有自己的 active 反馈） */
 html {
   -webkit-tap-highlight-color: transparent;
 }

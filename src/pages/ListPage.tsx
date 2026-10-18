@@ -66,16 +66,21 @@ export default function ListPage({ sources }: { sources: SourceItem[] }) {
 
   return (
     <div className="space-y-3">
-      <header>
-        <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">资讯列表</h2>
-        <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-          按时间倒序的成品条目。默认只给「标题 + 一句话」，一屏能扫更多条；需要细节再点开摘要与实体。
-        </p>
+      <header className="flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <h2 className="flex items-center gap-2 text-[19px] font-semibold tracking-[-0.02em] text-slate-900 dark:text-slate-50">
+            <span className="inline-block h-4 w-[3px] rounded-full bg-gradient-to-b from-violet-500 to-indigo-500" />
+            资讯列表
+          </h2>
+          <p className="mt-1 text-[12px] text-slate-500 dark:text-slate-400">
+            按时间倒序的成品条目 —— 默认只给「标题 + 一句话」，需要细节再展开摘要与实体
+          </p>
+        </div>
       </header>
 
       <Filters value={filters} onChange={applyFilters} sources={sources} />
 
-      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
+      <div className="flex flex-wrap items-center justify-between gap-2 text-[11.5px] text-slate-500 dark:text-slate-400">
         <span className="flex items-center gap-2">
           {loading ? (
             <>
@@ -83,13 +88,19 @@ export default function ListPage({ sources }: { sources: SourceItem[] }) {
               加载中…
             </>
           ) : (
-            `共 ${data?.total ?? 0} 条，已显示 ${data?.items.length ?? 0} 条`
+            <>
+              <span className="num font-semibold text-slate-800 dark:text-slate-100">{data?.total ?? 0}</span>
+              条结果
+              {data && data.items.length < (data.total ?? 0) && (
+                <span className="text-slate-400 dark:text-slate-500">· 已显示 {data.items.length}</span>
+              )}
+            </>
           )}
           {dirty && !loading && (
             <button
               type="button"
               onClick={reset}
-              className="rounded-full border border-slate-300 px-2.5 py-1 text-[11px] text-slate-600 transition hover:border-violet-400 hover:text-violet-700 dark:border-slate-700 dark:text-slate-300 dark:hover:border-violet-500 dark:hover:text-violet-300"
+              className="rounded-full border border-slate-200 px-2.5 py-0.5 text-[11px] text-slate-500 transition hover:border-violet-300 hover:text-violet-700 dark:border-white/10 dark:text-slate-400 dark:hover:border-violet-500/40 dark:hover:text-violet-300"
             >
               清空筛选
             </button>
@@ -99,7 +110,7 @@ export default function ListPage({ sources }: { sources: SourceItem[] }) {
           <button
             type="button"
             onClick={() => setLimit((v) => v + 50)}
-            className="rounded-full border border-slate-300 px-3 py-1.5 text-slate-700 transition hover:-translate-y-0.5 hover:shadow-sm dark:border-slate-700 dark:text-slate-200 dark:hover:border-slate-500"
+            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[12px] font-medium text-slate-700 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-200 dark:hover:border-white/20"
           >
             加载更多
           </button>
@@ -113,23 +124,30 @@ export default function ListPage({ sources }: { sources: SourceItem[] }) {
       {loading && !data && (
         <div className="space-y-3" aria-hidden="true">
           {[0, 1, 2].map((i) => (
-            <div key={i} className="card animate-pulse p-4">
+            <div key={i} className="card p-4">
               <div className="flex gap-2">
-                <span className="h-4 w-12 rounded-full bg-slate-200 dark:bg-slate-700" />
-                <span className="h-4 w-16 rounded-full bg-slate-200 dark:bg-slate-700" />
-                <span className="h-4 w-24 rounded-full bg-slate-100 dark:bg-slate-800" />
+                <span className="skeleton h-4 w-12 rounded-full" />
+                <span className="skeleton h-4 w-16 rounded-full" />
+                <span className="skeleton h-4 w-24 rounded-full" />
               </div>
-              <div className="mt-3 h-4 w-4/5 rounded bg-slate-200 dark:bg-slate-700" />
-              <div className="mt-2 h-3 w-3/5 rounded bg-slate-100 dark:bg-slate-800" />
+              <div className="skeleton mt-3 h-4 w-4/5 rounded" />
+              <div className="skeleton mt-2 h-3 w-3/5 rounded" />
             </div>
           ))}
         </div>
       )}
 
       {data && data.items.length === 0 && !loading && (
-        <p className="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
-          没有符合条件的条目 —— 可以先在右上角跑一轮「采集 + 加工」
-        </p>
+        <div className="card flex flex-col items-center gap-2 px-6 py-12 text-center">
+          <svg viewBox="0 0 24 24" className="h-8 w-8 text-slate-300 dark:text-slate-600" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="11" cy="11" r="7" />
+            <path d="M20 20l-3.5-3.5" />
+          </svg>
+          <p className="text-[13px] font-medium text-slate-600 dark:text-slate-300">没有符合条件的条目</p>
+          <p className="text-[12px] text-slate-400 dark:text-slate-500">
+            试试放宽时间范围或清空筛选，也可以先跑一轮「采集 + 加工」
+          </p>
+        </div>
       )}
 
       <div className="space-y-3">
