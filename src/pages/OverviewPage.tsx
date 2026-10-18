@@ -32,20 +32,20 @@ function Kpi({
         ? 'text-emerald-600 dark:text-emerald-400'
         : 'text-slate-900 dark:text-slate-100'
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] dark:border-slate-800 dark:bg-slate-900">
-      <p className="text-xs text-slate-500 dark:text-slate-400">{label}</p>
-      <p className="mt-1 flex items-baseline gap-1">
-        <span className={`text-2xl font-semibold leading-none ${toneCls}`}>{value}</span>
-        {unit && <span className="text-xs text-slate-400 dark:text-slate-500">{unit}</span>}
+    <div className="card card-accent relative overflow-hidden p-4">
+      <p className="eyebrow text-slate-500 dark:text-slate-400">{label}</p>
+      <p className="mt-1.5 flex items-baseline gap-1">
+        <span className={`num text-[26px] font-semibold leading-none ${toneCls}`}>{value}</span>
+        {unit && <span className="text-[11px] text-slate-400 dark:text-slate-500">{unit}</span>}
       </p>
-      {hint && <p className="mt-1.5 text-[11px] text-slate-400 dark:text-slate-500">{hint}</p>}
+      {hint && <p className="mt-2 text-[11px] leading-snug text-slate-400 dark:text-slate-500">{hint}</p>}
     </div>
   )
 }
 
 function Card({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04)] dark:border-slate-800 dark:bg-slate-900">
+    <section className="card p-5">
       <header className="mb-3 flex items-center justify-between gap-2">
         <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">{title}</h3>
         {action}
@@ -158,7 +158,7 @@ export default function OverviewPage({ health, onNavigate }: Props) {
                 )}
               </div>
               <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                AI 每天自动生成昨日简报（历史可回看），内容包含综述、分类要点与关注方向。
+                AI 每天 23:00（北京时间）自动生成当天简报，含综述、分类要点与关注方向；历史可回看。
               </p>
             </div>
           ) : (

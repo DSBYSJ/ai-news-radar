@@ -25,7 +25,7 @@ export default function Filters({ value, onChange, sources }: Props) {
   const set = <K extends keyof FilterState>(key: K, v: FilterState[K]) => onChange({ ...value, [key]: v })
 
   return (
-    <div className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] dark:border-slate-800 dark:bg-slate-900">
+    <div className="flex flex-wrap items-end gap-3 card p-4">
       <label className={labelCls}>
         时间范围
         <select className={inputCls} value={value.days} onChange={(e) => set('days', Number(e.target.value))}>

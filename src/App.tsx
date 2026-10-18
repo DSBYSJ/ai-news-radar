@@ -18,14 +18,6 @@ function initialTheme(): Theme {
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
 }
 
-function Pill({ children }: { children: ReactNode }) {
-  return (
-    <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-      {children}
-    </span>
-  )
-}
-
 function SunIcon() {
   return (
     <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -114,22 +106,49 @@ export default function App() {
   }
 
   const actionBtn =
-    'rounded-full border border-slate-300 bg-white px-3.5 py-1.5 text-xs text-slate-700 transition duration-150 ' +
-    'hover:-translate-y-0.5 hover:border-slate-400 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50 ' +
-    'dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-slate-500'
+    'rounded-lg border border-slate-200/80 bg-white/70 px-3 py-1.5 text-xs text-slate-600 backdrop-blur transition ' +
+    'hover:border-slate-300 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 ' +
+    'dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:border-white/25 dark:hover:text-white'
+
+  const statusDot = (ok: boolean) => `inline-block h-1.5 w-1.5 rounded-full ${ok ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'}`
 
   // 安全区适配（安卓 App edge-to-edge 下避让状态栏与手势区；桌面端 env() 为 0，不受影响）
   return (
-    <div className="mx-auto max-w-5xl overflow-x-hidden px-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] pt-[calc(env(safe-area-inset-top)+1rem)] md:px-6 md:pb-[calc(env(safe-area-inset-bottom)+1.5rem)] md:pt-[calc(env(safe-area-inset-top)+1.5rem)]">
+    <div className="mx-auto max-w-5xl overflow-x-hidden px-4 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] pt-[calc(env(safe-area-inset-top)+1.25rem)] md:px-6 md:pb-[calc(env(safe-area-inset-bottom)+2rem)] md:pt-[calc(env(safe-area-inset-top)+1.75rem)]">
       <header className="mb-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-50">
-              AI 资讯趋势雷达
-            </h1>
-            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-              不是资讯阅读器 —— 看的是「变化」：哪个方向在升温，哪些事件被多家独立源印证
-            </p>
+          <div className="flex min-w-0 items-center gap-3">
+            {/* 品牌标：渐变瓷片 + 走势线 */}
+            <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-[13px] bg-gradient-to-br from-violet-500 via-violet-600 to-indigo-600 shadow-[0_10px_24px_-12px_rgba(109,40,217,0.9)] ring-1 ring-white/25">
+              <span className="absolute inset-0 bg-[radial-gradient(circle_at_28%_18%,rgba(255,255,255,0.45),transparent_58%)]" />
+              <svg
+                viewBox="0 0 24 24"
+                className="absolute inset-0 m-auto h-5 w-5 text-white"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M3.5 16.5l4.5-4.5 3.5 3 8-8.5" />
+                <circle cx="19.5" cy="6.5" r="1.9" fill="currentColor" stroke="none" />
+              </svg>
+            </div>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-[22px] font-semibold leading-tight tracking-[-0.02em] text-slate-900 dark:text-white">
+                  AI 资讯趋势雷达
+                </h1>
+                {health && (
+                  <span className="rounded-full border border-slate-200 px-1.5 py-0.5 text-[10px] font-medium text-slate-500 dark:border-white/10 dark:text-slate-400">
+                    v{health.version}
+                  </span>
+                )}
+              </div>
+              <p className="mt-1 truncate text-[11px] text-slate-500 dark:text-slate-400">
+                看的是「变化」：哪个方向在升温，哪些事件被多家独立源印证
+              </p>
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <button type="button" onClick={() => void run('collect')} disabled={running !== ''} className={actionBtn}>
@@ -149,36 +168,39 @@ export default function App() {
           </div>
         </div>
 
-        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+        {/* 运行状态：一行细字，用竖线分隔，不抢视线 */}
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px] text-slate-500 dark:text-slate-400">
           {health ? (
             <>
-              <Pill>v{health.version}</Pill>
-              <Pill>源 {health.sources}</Pill>
-              <Pill>原始 {health.rawItems}</Pill>
-              <Pill>成品 {health.articles}</Pill>
-              <Pill>事件 {health.events}</Pill>
-              <span className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
-                <span className={`inline-block h-1.5 w-1.5 rounded-full ${health.aiEnabled ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-                AI {health.aiEnabled ? '已启用' : '未配置（启发式兜底）'}
+              <span className="num">源 {health.sources}</span>
+              <span className="h-3 w-px bg-slate-200 dark:bg-white/10" />
+              <span className="num">原始 {health.rawItems}</span>
+              <span className="h-3 w-px bg-slate-200 dark:bg-white/10" />
+              <span className="num">成品 {health.articles}</span>
+              <span className="h-3 w-px bg-slate-200 dark:bg-white/10" />
+              <span className="num">事件 {health.events}</span>
+              <span className="h-3 w-px bg-slate-200 dark:bg-white/10" />
+              <span className="flex items-center gap-1.5">
+                <span className={statusDot(health.aiEnabled)} />
+                AI {health.aiEnabled ? '已启用' : '未配置'}
               </span>
-              <span className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
-                <span className={`inline-block h-1.5 w-1.5 rounded-full ${health.authEnabled ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-                鉴权 {health.authEnabled ? '已开启' : '未开启（本地）'}
+              <span className="flex items-center gap-1.5">
+                <span className={statusDot(health.authEnabled)} />
+                鉴权 {health.authEnabled ? '已开启' : '未开启'}
               </span>
-              <span className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
-                <span
-                  className={`inline-block h-1.5 w-1.5 rounded-full ${connected ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'}`}
-                />
-                实时推送 {connected ? '已连接' : '未连接'}
+              <span className="flex items-center gap-1.5">
+                <span className={statusDot(connected)} />
+                推送 {connected ? '已连接' : '未连接'}
               </span>
             </>
           ) : (
-            <span className="text-slate-500 dark:text-slate-400">后端未连接（先启动 server：cd server && npm start）</span>
+            <span>后端未连接（先启动 server：cd server && npm start）</span>
           )}
-          {running && <span className="text-slate-600 dark:text-slate-300">{running}</span>}
+          {running && <span className="text-slate-700 dark:text-slate-200">{running}</span>}
         </div>
 
-        <nav className="mt-4 flex gap-1 border-b border-slate-200 dark:border-slate-800">
+        {/* 页签：分段控件（选中项自带一层高光，深色下也不糊） */}
+        <nav className="mt-4 inline-flex rounded-xl border border-slate-200/80 bg-slate-100/70 p-1 backdrop-blur dark:border-white/10 dark:bg-white/[0.04]">
           {(
             [
               ['overview', '概览'],
@@ -191,10 +213,10 @@ export default function App() {
               key={key}
               type="button"
               onClick={() => setTab(key)}
-              className={`-mb-px rounded-t-lg border-b-2 px-3.5 py-2 text-sm transition ${
+              className={`rounded-lg px-3.5 py-1.5 text-sm transition ${
                 tab === key
-                  ? 'border-violet-600 font-medium text-slate-900 dark:text-slate-100'
-                  : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+                  ? 'bg-white font-medium text-slate-900 shadow-sm ring-1 ring-black/5 dark:bg-white/10 dark:text-white dark:ring-white/10'
+                  : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100'
               }`}
             >
               {label}

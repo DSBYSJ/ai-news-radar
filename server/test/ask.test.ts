@@ -152,7 +152,9 @@ test('askQuestion：AI 未配置时不编造，安全降级', async () => {
   assert.equal(stats.mode, 'fallback')
   assert.match(stats.answer, /AI 未配置/)
 
-  const attribution = await askQuestion('为什么 10-13 号 AI 芯片热度飙升？', { db, useAi: false })
+  // 注意：问题里不要带具体日期 —— 带日期会按该日期 ±3 天收窄候选，
+  // 而夹具数据是"今天"，跑到别的日期就会 0 命中（曾因此误判为功能坏了）
+  const attribution = await askQuestion('为什么 AI 芯片热度飙升？', { db, useAi: false })
   assert.equal(attribution.kind, 'attribution')
   assert.equal(attribution.sources.length, 3)
   assert.ok(attribution.sources[0].title.includes('芯片'))

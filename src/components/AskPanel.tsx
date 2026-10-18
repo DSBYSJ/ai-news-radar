@@ -88,7 +88,7 @@ export default function AskPanel() {
   }
 
   return (
-    <section className="rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)] dark:border-slate-800 dark:bg-slate-900">
+    <section className="card">
       <header className="flex items-start gap-2 border-b border-slate-100 p-4 dark:border-slate-800">
         <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">

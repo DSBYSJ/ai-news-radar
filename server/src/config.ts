@@ -34,6 +34,8 @@ export const config = {
   // 定时调度（分钟；0 = 关闭，本地开发默认关闭）
   scheduleIntervalMin: Number(process.env.SCHEDULE_INTERVAL_MIN ?? 0),
   scheduleRunOnStart: process.env.SCHEDULE_RUN_ON_START === 'true',
+  /** 每日简报生成时刻（北京时间 HH:MM）；off 关闭。默认 23:00 生成当天 */
+  summaryAt: process.env.SUMMARY_AT ?? '23:00',
 
   // 鉴权：与骑行看板共享 cd_session Cookie（未配置 JWT_SECRET 时不拦截，方便本地开发）
   jwtSecret: process.env.JWT_SECRET ?? '',

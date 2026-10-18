@@ -180,12 +180,13 @@ export default function SummaryPage() {
       <header>
         <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">每日总结</h2>
         <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-          AI 每天自动生成昨日简报（综述 / 分类要点 / 关注方向）。<b className="text-slate-600 dark:text-slate-300">点日期卡片</b>
-          即可查看当天简报，历史可回看；缺的日子可手动补生成。
+          AI 每天 <b className="text-slate-600 dark:text-slate-300">23:00（北京时间）自动生成当天简报</b>
+          （综述 / 分类要点 / 关注方向）。
+          <b className="text-slate-600 dark:text-slate-300">点日期卡片</b>即可查看当天简报，历史可回看；缺的日子可手动补生成。
         </p>
       </header>
 
-      <div className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] dark:border-slate-800 dark:bg-slate-900">
+      <div className="flex flex-wrap items-end gap-3 card p-4">
         <label className="flex flex-col gap-1 text-xs text-slate-500 dark:text-slate-400">
           生成指定日期（UTC）
           <input
@@ -211,7 +212,7 @@ export default function SummaryPage() {
           刷新
         </button>
         <p className="text-xs text-slate-500 dark:text-slate-400">
-          不选日期默认生成<b>昨天</b>（每天自动生成，无需手动）
+          不选日期默认生成<b>当天</b>（每天 23:00 自动生成，无需手动）
         </p>
         {message && <p className="w-full text-xs text-slate-600 dark:text-slate-300">{message}</p>}
       </div>
@@ -233,7 +234,7 @@ export default function SummaryPage() {
             key={it.date}
             type="button"
             onClick={() => setOpen(it.date)}
-            className="min-w-0 rounded-xl border border-slate-200 bg-white p-3 text-left shadow-[0_1px_2px_rgba(16,24,40,0.04)] transition hover:-translate-y-0.5 hover:border-violet-400 hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:hover:border-violet-500"
+            className="card min-w-0 p-3 text-left transition hover:-translate-y-0.5 hover:border-violet-400 hover:shadow-md dark:hover:border-violet-500"
           >
             <span className="flex items-center gap-1.5">
               <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">{it.date}</span>

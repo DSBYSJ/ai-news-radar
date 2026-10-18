@@ -41,7 +41,7 @@ export default function Modal({ open, onClose, title, subtitle, children, maxWid
       onClick={onClose}
     >
       <div
-        className={`mx-auto w-full ${maxWidthClass} rounded-xl border border-slate-200 bg-white p-4 shadow-2xl sm:p-5 dark:border-slate-800 dark:bg-slate-900`}
+        className={`mx-auto w-full ${maxWidthClass} card p-4 shadow-2xl sm:p-5`}
         onClick={(e) => e.stopPropagation()}
       >
         <header className="mb-3 flex items-start gap-2">

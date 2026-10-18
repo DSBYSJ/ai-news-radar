@@ -11,7 +11,7 @@ export default function ArticleCard({ article }: { article: Article }) {
   const [open, setOpen] = useState(false)
 
   return (
-    <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] transition hover:border-slate-300 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-slate-700">
+    <article className="card p-4 transition hover:border-slate-300 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-slate-700">
       <div className="mb-1.5 flex flex-wrap items-center gap-2 text-xs">
         <span
           className="rounded-full px-2 py-0.5 font-medium text-white"

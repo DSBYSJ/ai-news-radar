@@ -5,7 +5,7 @@ import { widgetSnapshot } from '../analytics/widget.ts'
 import { CATEGORY_LABELS, type Category } from '../ai/categories.ts'
 import { runProcessing } from '../ai/pipeline.ts'
 import { askQuestion } from '../ai/ask.ts'
-import { generateDailySummary, getSummary, listSummaries, yesterdayUtc } from '../ai/summary.ts'
+import { generateDailySummary, getSummary, listSummaries } from '../ai/summary.ts'
 import { forecastVolume } from '../analytics/forecast.ts'
 import { dailySentiment, entitySentiment, sentimentAlerts, topEntitiesWithSentiment } from '../analytics/sentiment.ts'
 import { broadcast, sinkCount } from '../push.ts'
@@ -294,7 +294,9 @@ export async function newsRoutes(app: FastifyInstance): Promise<void> {
   /** 每日总结：生成 / 更新（默认昨天；force=true 强制重生成） */
   app.post('/api/news/summaries/generate', async (req) => {
     const body = (req.body ?? {}) as { date?: string; force?: boolean }
-    const date = typeof body.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.date) ? body.date : yesterdayUtc()
+    // 默认生成「当天」—— 与每日 23:00 的自动任务一致（库里按 UTC 分桶）
+    const today = new Date().toISOString().slice(0, 10)
+    const date = typeof body.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.date) ? body.date : today
     const result = await generateDailySummary({ date, force: body.force === true })
     return { ...result, summary: getSummary(getDb(), date) }
   })
