@@ -1,9 +1,39 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { localDate, msUntilNextLocal } from '../src/scheduler.ts'
+import { localDate, msUntilNextLocal, msUntilNextSlot, parseClockTimes } from '../src/scheduler.ts'
 
 const HOUR = 3_600_000
 const BEIJING = 8 * HOUR
+/** 生产默认的五个采集时间点 */
+const SLOTS = parseClockTimes('07:00,10:00,13:00,17:00,21:00')
+
+test('parseClockTimes：去重、升序、忽略非法项，容忍前导零', () => {
+  assert.deepEqual(parseClockTimes('21:00, 07:00,10:00 ,13:00,17:00'), [7 * 60, 10 * 60, 13 * 60, 17 * 60, 21 * 60])
+  assert.deepEqual(parseClockTimes('7:00'), [7 * 60])
+  assert.deepEqual(parseClockTimes('24:00,12:60,abc,12:30'), [12 * 60 + 30], '越界与非法项被丢弃')
+  assert.deepEqual(parseClockTimes(''), [])
+  assert.deepEqual(parseClockTimes('off'), [])
+})
+
+test('msUntilNextSlot：07:00 之前 → 1 小时后到 07:00（北京 06:00 时）', () => {
+  const now = Date.parse('2026-10-18T22:00:00Z') // 北京 10-19 06:00
+  assert.equal(msUntilNextSlot(now, SLOTS), HOUR)
+})
+
+test('msUntilNextSlot：正好在时间点上 → 顺延到下一个点', () => {
+  const now = Date.parse('2026-10-18T02:00:00Z') // 北京 10:00 整
+  assert.equal(msUntilNextSlot(now, SLOTS), 3 * HOUR, '10:00 → 13:00')
+})
+
+test('msUntilNextSlot：21:00 之后 → 次日 07:00', () => {
+  const now = Date.parse('2026-10-18T14:00:00Z') // 北京 22:00
+  assert.equal(msUntilNextSlot(now, SLOTS), 9 * HOUR, '22:00 → 次日 07:00')
+})
+
+test('msUntilNextSlot：中午 12:00 → 13:00（跨过 10:00）', () => {
+  const now = Date.parse('2026-10-18T04:00:00Z') // 北京 12:00
+  assert.equal(msUntilNextSlot(now, SLOTS), HOUR)
+})
 
 test('msUntilNextLocal：北京时间 23:00 之前 → 当天 23:00', () => {
   // 北京时间 2026-10-18 19:00 = UTC 11:00

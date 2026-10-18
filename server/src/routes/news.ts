@@ -56,6 +56,9 @@ export async function newsRoutes(app: FastifyInstance): Promise<void> {
       events: countOf('SELECT COUNT(*) AS n FROM events'),
       aiEnabled: config.aiEnabled,
       authEnabled: Boolean(config.jwtSecret),
+      /** 定时策略（北京时间）：采集时间点 / 简报时刻 */
+      collectAt: config.collectAt,
+      summaryAt: config.summaryAt,
       time: new Date().toISOString(),
     }
   })

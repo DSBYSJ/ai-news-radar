@@ -9,48 +9,99 @@ const BEIJING_OFFSET_MS = 8 * 3_600_000
 
 /**
  * 定时调度：
- * 1. 采集轮：SCHEDULE_INTERVAL_MIN > 0 时每 N 分钟跑一轮「采集 → 加工 → 事件聚类」（带防重入）
+ * 1. 采集轮：COLLECT_AT（默认北京时间 07:00 / 10:00 / 13:00 / 17:00 / 21:00）到点跑一轮
+ *    「采集 → 加工 → 事件聚类」；COLLECT_AT 为空时退回 SCHEDULE_INTERVAL_MIN 的固定间隔模式
  * 2. 每日简报：每天 SUMMARY_AT（默认 23:00 北京时间）生成**当天**的简报
  */
 export function startScheduler(app: FastifyInstance): void {
-  const intervalMin = config.scheduleIntervalMin
-  if (intervalMin <= 0) {
-    app.log.info(`定时调度未开启（SCHEDULE_INTERVAL_MIN=${intervalMin}），可用 HTTP 手动触发`)
-  } else {
-    let running = false
+  let running = false
 
-    const tick = async (): Promise<void> => {
-      if (running) {
-        app.log.warn('上一轮尚未结束，跳过本次调度')
-        return
-      }
-      running = true
-      try {
-        app.log.info('定时调度开始')
-        const summary = await runFullPipeline()
-        app.log.info(
-          {
-            fetched: summary.collect.totalFetched,
-            inserted: summary.collect.totalInserted,
-            classified: summary.process.classified,
-            events: summary.events.events,
-          },
-          '定时调度完成',
-        )
-      } catch (err) {
-        app.log.error({ err }, '定时调度失败')
-      } finally {
-        running = false
-      }
+  const tick = async (): Promise<void> => {
+    if (running) {
+      app.log.warn('上一轮尚未结束，跳过本次调度')
+      return
     }
+    running = true
+    try {
+      app.log.info('定时调度开始')
+      const summary = await runFullPipeline()
+      app.log.info(
+        {
+          fetched: summary.collect.totalFetched,
+          inserted: summary.collect.totalInserted,
+          classified: summary.process.classified,
+          events: summary.events.events,
+        },
+        '定时调度完成',
+      )
+    } catch (err) {
+      app.log.error({ err }, '定时调度失败')
+    } finally {
+      running = false
+    }
+  }
 
-    setInterval(() => void tick(), intervalMin * 60_000)
+  const slots = parseClockTimes(config.collectAt)
+  if (slots.length > 0) {
+    const scheduleNext = (): void => {
+      const delay = msUntilNextSlot(Date.now(), slots)
+      app.log.info(
+        `采集定时：下次 ${new Date(Date.now() + delay).toISOString()}（约 ${(delay / 3_600_000).toFixed(1)} 小时后），每日 ${formatSlots(slots)}（北京时间）`,
+      )
+      setTimeout(() => {
+        void (async () => {
+          await tick()
+          scheduleNext()
+        })()
+      }, delay)
+    }
+    scheduleNext()
     if (config.scheduleRunOnStart) void tick()
-
-    app.log.info(`定时调度已启动：每 ${intervalMin} 分钟一轮`)
+  } else {
+    const intervalMin = config.scheduleIntervalMin
+    if (intervalMin <= 0) {
+      app.log.info(
+        `定时采集未开启（COLLECT_AT=${config.collectAt || '空'}，SCHEDULE_INTERVAL_MIN=${intervalMin}），可用 HTTP 手动触发`,
+      )
+    } else {
+      setInterval(() => void tick(), intervalMin * 60_000)
+      app.log.info(`定时采集已启动：每 ${intervalMin} 分钟一轮`)
+    }
+    if (config.scheduleRunOnStart) void tick()
   }
 
   startDailySummary(app)
+}
+
+/** 解析 "07:00,10:00" → 当天分钟数数组（去重、升序、忽略非法项）；空串表示不启用 */
+export function parseClockTimes(spec: string): number[] {
+  const out = new Set<number>()
+  for (const raw of spec.split(',')) {
+    const m = raw.trim().match(/^(\d{1,2}):(\d{2})$/)
+    if (!m) continue
+    const hour = Number(m[1])
+    const minute = Number(m[2])
+    if (hour > 23 || minute > 59) continue
+    out.add(hour * 60 + minute)
+  }
+  return [...out].sort((a, b) => a - b)
+}
+
+/** 距离「下一个时间点」的毫秒数（slots 为当天分钟数，纯函数便于测试） */
+export function msUntilNextSlot(nowMs: number, slots: number[], offsetMs = BEIJING_OFFSET_MS): number {
+  const localNow = nowMs + offsetMs
+  const dayStart = Math.floor(localNow / DAY_MS) * DAY_MS
+  const elapsed = localNow - dayStart
+  for (const slot of slots) {
+    const target = slot * 60_000
+    if (target > elapsed) return target - elapsed
+  }
+  // 当天的点都过了 → 明天第一个点
+  return DAY_MS - elapsed + slots[0] * 60_000
+}
+
+function formatSlots(slots: number[]): string {
+  return slots.map((s) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`).join(' / ')
 }
 
 /** 距离「下一个本地 hh:mm」的毫秒数（纯函数，便于测试） */

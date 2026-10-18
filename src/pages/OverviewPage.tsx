@@ -269,6 +269,12 @@ export default function OverviewPage({ health, onNavigate }: Props) {
           {health && (
             <p className="mt-3 text-[11px] text-slate-400 dark:text-slate-500">
               数据规模：{health.sources} 个源 / {health.rawItems} 条原始 / {health.articles} 条成品 / {health.events} 个事件
+              {health.collectAt && (
+                <>
+                  <br />
+                  定时：采集 {health.collectAt.split(',').join(' · ')} · 简报 {health.summaryAt || '23:00'}（北京时间）
+                </>
+              )}
             </p>
           )}
         </Card>

@@ -92,6 +92,9 @@ export interface Health {
   events: number
   aiEnabled: boolean
   authEnabled: boolean
+  /** 定时策略（北京时间）：采集时间点 "07:00,10:00,..."、简报时刻 "23:00"（旧后端可能没有） */
+  collectAt?: string
+  summaryAt?: string
   time: string
 }
 

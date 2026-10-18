@@ -34,6 +34,8 @@ export const config = {
   // 定时调度（分钟；0 = 关闭，本地开发默认关闭）
   scheduleIntervalMin: Number(process.env.SCHEDULE_INTERVAL_MIN ?? 0),
   scheduleRunOnStart: process.env.SCHEDULE_RUN_ON_START === 'true',
+  /** 每天固定采集时间点（北京时间，逗号分隔）；留空则退回 SCHEDULE_INTERVAL_MIN 的间隔模式 */
+  collectAt: process.env.COLLECT_AT ?? '07:00,10:00,13:00,17:00,21:00',
   /** 每日简报生成时刻（北京时间 HH:MM）；off 关闭。默认 23:00 生成当天 */
   summaryAt: process.env.SUMMARY_AT ?? '23:00',
 
