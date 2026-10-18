@@ -89,14 +89,19 @@ export default function OverviewPage({ health, onNavigate }: Props) {
     }
   }, [])
 
-  const today = cross?.points[cross.points.length - 1]?.date ?? ''
-  const todayCount = velocity?.points[velocity.points.length - 1]?.count ?? 0
+  // 「今天」= 库内最新有数据的一天，而不是服务器当天：
+  // 采集每天只有五个时间点（07/10/13/17/21），服务器当天常常还没入库，
+  // 按当天算会让「今日收录 / 跨源事件 / 突发 / 负面占比」四张 KPI 全为 0。
+  const today = health?.latestDate || cross?.points[cross.points.length - 1]?.date || ''
+  const todayCount = velocity?.points.find((p) => p.date === today)?.count ?? 0
   const change = velocity?.changePct
   const todayEvents = (cross?.dayEvents?.[today] ?? []).filter((e) => e.sourceCount >= 2)
   const maxSources = todayEvents.reduce((m, e) => Math.max(m, e.sourceCount), 0)
   const recentBursts = (cross?.bursts ?? []).filter((b) => b.date >= shiftDate(today, -2))
   const topBurstZ = recentBursts.reduce((m, b) => Math.max(m, b.z), 0)
-  const sentiToday = sentiment?.byDay[sentiment.byDay.length - 1]
+  // 与「最新收录」同口径：取数据所在那天的情感占比，而不是数组最后一项（服务器当天）
+  const sentiToday =
+    sentiment?.byDay.find((d) => d.date === today) ?? sentiment?.byDay[sentiment.byDay.length - 1]
   const negShare = sentiToday && sentiToday.classified > 0 ? sentiToday.ratios.negative : null
   const latestSummary = summaries[0]
 
@@ -106,14 +111,14 @@ export default function OverviewPage({ health, onNavigate }: Props) {
         {/* 关键指标 */}
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <Kpi
-            label={`今日收录（${today ? today.slice(5) : '—'}）`}
+            label={`最新收录（${today ? today.slice(5) : '—'}）`}
             value={String(todayCount)}
             unit="条"
             hint={change === null || change === undefined ? '暂无环比' : `周环比 ${change >= 0 ? '↑' : '↓'} ${Math.abs(change)}%`}
             tone={change === null || change === undefined ? 'default' : change >= 0 ? 'up' : 'down'}
           />
           <Kpi
-            label="今日跨源事件"
+            label="最新跨源事件"
             value={String(todayEvents.length)}
             unit="个"
             hint={maxSources > 0 ? `最高被 ${maxSources} 家独立源报道` : '暂无多源印证事件'}
@@ -125,7 +130,7 @@ export default function OverviewPage({ health, onNavigate }: Props) {
             hint={topBurstZ > 0 ? `最高 z=${topBurstZ}` : '无异常（正常）'}
           />
           <Kpi
-            label="今日负面情感占比"
+            label="最新负面情感占比"
             value={negShare === null ? '—' : `${Math.round(negShare * 100)}%`}
             hint={sentiToday ? `已判定 ${sentiToday.classified} 条` : '情感判定待补齐'}
           />
@@ -169,7 +174,7 @@ export default function OverviewPage({ health, onNavigate }: Props) {
         <div className="grid gap-4 lg:grid-cols-2">
           {/* 今日跨源事件 */}
           <Card
-            title="今日跨源事件"
+            title="最新跨源事件"
             action={
               <button
                 type="button"
@@ -181,7 +186,7 @@ export default function OverviewPage({ health, onNavigate }: Props) {
             }
           >
             {todayEvents.length === 0 ? (
-              <p className="text-xs text-slate-500 dark:text-slate-400">今天还没有被 2 家以上独立源同时报道的事件。</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">这天还没有被 2 家以上独立源同时报道的事件。</p>
             ) : (
               <ul className="space-y-2">
                 {todayEvents.slice(0, 5).map((e) => (

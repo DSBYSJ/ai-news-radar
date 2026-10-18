@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { AskResult, AskSource } from '../types.ts'
 import { api } from '../api.ts'
 
@@ -52,7 +52,11 @@ interface Msg {
   error?: string
 }
 
-const EXAMPLES = ['本周开源项目类文章有几篇？', '为什么 10-13 号 AI 芯片热度飙升？']
+/** 示例问题：带日期的那个必须按"当前最新数据日"生成 —— 写死日期会随日历漂移（曾经写死过 10-13） */
+function examplesFor(latestDate?: string | null): string[] {
+  const md = latestDate ? latestDate.slice(5) : null
+  return ['本周开源项目类文章有几篇？', md ? `为什么 ${md} 号 AI 芯片热度飙升？` : '为什么最近 AI 芯片热度飙升？']
+}
 
 /**
  * AI 助手面板（自用）：
@@ -61,11 +65,27 @@ const EXAMPLES = ['本周开源项目类文章有几篇？', '为什么 10-13 �
  * 前端只负责展示，不做任何数字加工（反编造在服务端完成）。
  */
 export default function AskPanel() {
+  const [latestDate, setLatestDate] = useState<string | null>(null)
   const [msgs, setMsgs] = useState<Msg[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   // 手机端默认折叠（不占首屏）；桌面端始终展开
   const [collapsed, setCollapsed] = useState(false)
+
+  useEffect(() => {
+    let alive = true
+    api
+      .health()
+      .then((h) => {
+        if (alive) setLatestDate(h.latestDate ?? null)
+      })
+      .catch(() => {
+        // 后端不可用时保留无日期的示例问题
+      })
+    return () => {
+      alive = false
+    }
+  }, [])
 
   const send = async (question: string) => {
     const q = question.trim()
@@ -114,7 +134,7 @@ export default function AskPanel() {
         {msgs.length === 0 && (
           <div className="space-y-2">
             <p className="text-xs text-slate-500 dark:text-slate-400">试试这两个问题：</p>
-            {EXAMPLES.map((q) => (
+            {examplesFor(latestDate).map((q) => (
               <button
                 key={q}
                 type="button"

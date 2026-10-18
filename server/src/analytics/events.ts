@@ -106,7 +106,7 @@ export async function rebuildEvents(opts: { db?: DatabaseSync; days?: number } =
 
     if (!target) {
       target = {
-        key: `evt_${sha1([...tokens].sort().join(' ') || row.title).slice(0, 16)}`,
+        key: `evt_${sha1(`${date}|${[...tokens].sort().join(' ') || row.title}`).slice(0, 16)}`,
         date,
         tokens,
         hash,

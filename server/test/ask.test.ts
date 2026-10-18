@@ -70,6 +70,20 @@ test('extractSql：剥离围栏与结尾分号', () => {
   assert.equal(extractSql('-- 注释\nSELECT 3'), 'SELECT 3')
 })
 
+test('extractSql：保留多行 SQL（只取首行会截断成语法错误）', () => {
+  const raw = '```sql\n-- 统计\nSELECT category, COUNT(*) AS 篇数\nFROM articles\nGROUP BY category\n```'
+  const sql = extractSql(raw)
+  assert.match(sql, /FROM articles/, 'FROM 子句不能被丢掉')
+  assert.match(sql, /GROUP BY category/, 'GROUP BY 不能被丢掉')
+  assert.equal(sql.startsWith('SELECT'), true)
+  assert.equal(validateSql(sql).ok, true)
+})
+
+test('SQL 校验：REPLACE() 是只读函数，不能被当成写操作拦掉', () => {
+  assert.equal(validateSql("SELECT REPLACE(title, 'a', 'b') AS t FROM articles").ok, true)
+  assert.equal(validateSql('REPLACE INTO articles (id) VALUES (1)').ok, false)
+})
+
 test('数字闸门：解读里出现结果中没有的数字 → 整段丢弃', () => {
   const rows = [{ 篇数: 12 }]
   assert.equal(numbersIn('大约 12 篇，确实不少').includes('12'), true)

@@ -39,9 +39,16 @@ burst_detection(date, category, article_count, baseline_mean, baseline_std, z_sc
 daily_summaries(date, title, content, highlights, stats, model, created_at, updated_at)`
 
 const FORBIDDEN = [
-  'insert', 'update', 'delete', 'drop', 'alter', 'create', 'replace', 'truncate',
+  'insert', 'update', 'delete', 'drop', 'alter', 'create', 'truncate',
   'attach', 'detach', 'pragma', 'vacuum', 'grant', 'revoke', 'reindex', 'begin', 'commit', 'rollback',
 ]
+
+/**
+ * REPLACE 不能直进 FORBIDDEN —— 它既是写语句（REPLACE INTO），也是常用字符串函数
+ * REPLACE(x, a, b)。整词禁止会把合法的 SELECT 一起打死，所以单独判定：
+ * 只拦「语句级」的 REPLACE，函数形态放行。
+ */
+const WRITE_REPLACE = /(^|\s)replace\s+(into|\w+\s*\()\s*/i
 
 export function buildStatsPrompt(question: string): string {
   return `你是 SQLite 查询生成器。把用户问题翻译成**一条**只读 SELECT 查询。
@@ -68,11 +75,12 @@ export function extractSql(raw: string): string {
   const text = raw.trim()
   const fence = text.match(/```(?:sql)?\s*([\s\S]*?)```/i)
   const body = fence ? fence[1] : text
-  const firstLine = body
-    .split('\n')
-    .map((l) => l.trim())
-    .find((l) => l.length > 0 && !l.startsWith('--')) ?? ''
-  return firstLine.replace(/;\s*$/, '').trim()
+  const lines = body.split('\n')
+  // 去掉整行注释（只去行首注释：SQL 里 '--' 也可能出现在字符串字面量中）
+  const kept = lines.filter((l) => !/^\s*--/.test(l))
+  // ⚠️ 不能只取第一行 —— 模型几乎总是输出多行 SQL，取首行会把查询截断成
+  // "SELECT category, COUNT(*) AS 篇数"，后面的 FROM/WHERE 全丢，直接语法错误。
+  return kept.join('\n').trim().replace(/;\s*$/, '').trim()
 }
 
 export interface SqlValidation {
@@ -96,6 +104,10 @@ export function validateSql(input: string): SqlValidation {
   // 2) 禁止写操作关键字（按整词匹配，避免误伤 description 等字段名）
   for (const kw of FORBIDDEN) {
     if (new RegExp(`\\b${kw}\\b`, 'i').test(lower)) return { ok: false, sql: '', reason: `包含被禁止的关键字：${kw}` }
+  }
+  // REPLACE INTO table ... 是写语句；REPLACE(col, a, b) 是只读函数，必须放行
+  if (WRITE_REPLACE.test(lower) && !/\breplace\s*\(/i.test(lower)) {
+    return { ok: false, sql: '', reason: '包含被禁止的关键字：replace' }
   }
 
   // 3) 单语句（去掉字符串字面量后不应再出现分号）

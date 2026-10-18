@@ -63,6 +63,10 @@ docs/                  内部设计文档（不进版本控制）
 | 根 | `npm run dev` / `npm run build` | 前端开发 / 构建 |
 | 根 | `npm test` | 前端测试（vitest，串行） |
 
+> 页面上「数据截至 MM-DD」显示的是**库内最新一条成品的日期**。采集每天只有 5 个时间点
+> （07/10/13/17/21 北京时间），当天还没跑过时为琥珀色「（非当天）」——这是提示而不是故障；
+> 想看当天数据就点右上角「采集」「加工」，或等定时任务。
+
 ## 常见问题
 
 - **Windows 上 `npm run build` / `npm test` 报 `Cannot find module @rollup/rollup-win32-x64-msvc`**

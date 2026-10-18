@@ -84,14 +84,19 @@ export function velocity(db: DatabaseSync, days = 30): VelocityResult {
     return { date: p.date, count: p.value, ma7: Number((sum / 7).toFixed(2)) }
   })
 
+  // ⚠️ 周环比要两周的数据。早先直接拿返回窗口算，窗口只有 7 天时
+  // 「上一周」永远是空数组 → lastWeekAvg 恒为 0 → changePct 恒为 null，
+  // 概览 KPI 与桌面小组件的环比一直是空的。这里多取 7 天专用于算基线，
+  // 返回的点仍按调用方要的窗口（ma7 的 null 语义保持不变）。
+  const extended = days >= 14 ? series : dailyVolume(db, 14)
   const avg = (from: number, to: number) => {
-    const slice = series.slice(from, to).map((p) => p.value)
+    const slice = extended.slice(from, to).map((p) => p.value)
     if (slice.length === 0) return 0
     return slice.reduce((a, b) => a + b, 0) / slice.length
   }
 
-  const thisWeekAvg = Number(avg(Math.max(0, series.length - 7), series.length).toFixed(2))
-  const lastWeekAvg = Number(avg(Math.max(0, series.length - 14), Math.max(0, series.length - 7)).toFixed(2))
+  const thisWeekAvg = Number(avg(Math.max(0, extended.length - 7), extended.length).toFixed(2))
+  const lastWeekAvg = Number(avg(Math.max(0, extended.length - 14), Math.max(0, extended.length - 7)).toFixed(2))
   const changePct = lastWeekAvg > 0 ? Number((((thisWeekAvg - lastWeekAvg) / lastWeekAvg) * 100).toFixed(1)) : null
 
   return { points, thisWeekAvg, lastWeekAvg, changePct }

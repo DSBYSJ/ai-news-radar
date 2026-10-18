@@ -121,6 +121,21 @@ export default function TrendPage() {
             </select>
           </label>
           <p className="text-xs text-slate-500 dark:text-slate-400">日期按 UTC 分桶（与库内存储一致）</p>
+          {(() => {
+            // ⚠️ 不能用 volume 的最后一项：序列是按天补齐的，最后一天永远是"今天"（值为 0），
+            // 直接显示会变成"数据截至 今天"这种假新鲜度。取最后一个真正有条目的日子。
+            const last = [...volume].reverse().find((p) => p.value > 0)?.date
+            if (!last) return null
+            const isToday = last === new Date().toISOString().slice(0, 10)
+            return (
+              <p
+                className={`ml-auto text-xs ${isToday ? 'text-slate-500 dark:text-slate-400' : 'text-amber-600 dark:text-amber-400'}`}
+                title="统计窗口的最后一天；采集每天 5 个时间点，非当天说明最近一轮还没跑"
+              >
+                数据截至 {last}
+              </p>
+            )
+          })()}
         </div>
 
         {error && (

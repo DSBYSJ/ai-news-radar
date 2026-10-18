@@ -80,6 +80,24 @@ test('第 2 层 categoryRatio：占比合计为 1，且不受总条数影响', (
   db.close()
 })
 
+test('第 3 层 velocity：窗口只有 7 天时也能算出周环比', () => {
+  const db = setup()
+  // 上周每天 2 条、本周每天 4 条 → 环比 +100%
+  for (let d = 7; d <= 13; d++) {
+    for (let i = 0; i < 2; i++) addArticle(db, addRaw(db, 's1', `w0-${d}-${i}`, iso(d)), `上周${d}-${i}`, 'policy', 50, iso(d))
+  }
+  for (let d = 0; d <= 6; d++) {
+    for (let i = 0; i < 4; i++) addArticle(db, addRaw(db, 's1', `w1-${d}-${i}`, iso(d)), `本周${d}-${i}`, 'policy', 50, iso(d))
+  }
+  const result = velocity(db, 7)
+  assert.equal(result.points.length, 7, '返回的点仍按调用窗口')
+  assert.equal(result.points[0].ma7, null, 'ma7 的 null 语义不变')
+  assert.equal(result.thisWeekAvg, 4)
+  assert.equal(result.lastWeekAvg, 2)
+  assert.equal(result.changePct, 100)
+  db.close()
+})
+
 test('第 3 层 velocity：ma7 前 6 天为 null，之后有值；环比可算', () => {
   const db = setup()
   for (let i = 0; i < 10; i++) {
@@ -143,6 +161,19 @@ test('事件聚类：同标题但不同日 → 不合并（同日口径）', asy
   const summary = await rebuildEvents({ db })
   assert.equal(summary.events, 2)
   assert.equal(summary.crossSourceEvents, 0)
+
+  // 事件键必须带日期：否则两天的键相同，INSERT..ON CONFLICT 会把前一天那行覆盖掉，
+  // 结果 event_clusters 只剩一条、两天的文章挂到同一个事件上（publish_date 错位）。
+  const clusters = db
+    .prepare('SELECT publish_date FROM event_clusters ORDER BY publish_date')
+    .all() as unknown as { publish_date: string }[]
+  assert.equal(clusters.length, 2, '两天各应保留一条事件')
+  assert.deepEqual(clusters.map((c) => c.publish_date), [iso(1).slice(0, 10), iso(0).slice(0, 10)])
+
+  const mismatched = db
+    .prepare('SELECT COUNT(*) AS n FROM articles a JOIN event_clusters c ON c.event_id = a.event_key WHERE date(a.published_at) <> c.publish_date')
+    .get() as { n: number }
+  assert.equal(mismatched.n, 0, '文章的日期必须与所挂事件的日期一致')
   db.close()
 })
 

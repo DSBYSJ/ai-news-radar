@@ -42,8 +42,8 @@ export default function CrossSourceChart({ points, dayEvents = {}, threshold = 3
       <svg viewBox={`0 0 ${W} ${height}`} className="w-full" role="img">
         {ticks.map((t) => (
           <g key={t}>
-            <line x1={PAD.left} x2={W - PAD.right} y1={y(t)} y2={y(t)} stroke="#e5e7eb" strokeWidth={1} />
-            <text x={PAD.left - 8} y={y(t) + 4} textAnchor="end" fontSize={11} fill="#9ca3af">
+            <line className="chart-grid" x1={PAD.left} x2={W - PAD.right} y1={y(t)} y2={y(t)} strokeWidth={1} />
+            <text className="chart-axis-text" x={PAD.left - 8} y={y(t) + 4} textAnchor="end" fontSize={11}>
               {t}
             </text>
           </g>
@@ -96,7 +96,7 @@ export default function CrossSourceChart({ points, dayEvents = {}, threshold = 3
 
         {points.map((p, i) =>
           i % labelStep === 0 ? (
-            <text key={p.date} x={PAD.left + slot * i + slot / 2} y={height - 8} textAnchor="middle" fontSize={11} fill="#9ca3af">
+            <text key={p.date} className="chart-axis-text" x={PAD.left + slot * i + slot / 2} y={height - 8} textAnchor="middle" fontSize={11}>
               {shortDate(p.date)}
             </text>
           ) : null,

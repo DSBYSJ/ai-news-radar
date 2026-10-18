@@ -95,6 +95,8 @@ export interface Health {
   /** 定时策略（北京时间）：采集时间点 "07:00,10:00,..."、简报时刻 "23:00"（旧后端可能没有） */
   collectAt?: string
   summaryAt?: string
+  /** 库里最新一条成品的日期（UTC YYYY-MM-DD）；没有数据为 null。旧后端可能没有 */
+  latestDate?: string | null
   time: string
 }
 

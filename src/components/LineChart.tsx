@@ -68,7 +68,8 @@ export default function LineChart({
   const y = linearScale([0, top], [height - PAD.bottom, PAD.top])
   const x = linearScale([0, Math.max(1, labels.length - 1)], [PAD.left, W - PAD.right])
   const labelStep = Math.max(1, Math.ceil(labels.length / 8))
-  const slot = (W - PAD.left - PAD.right) / Math.max(1, labels.length)
+  // 命中区宽度按点数均分；居中在 x(i) 上（下面用 x(i) - slot/2 定位）
+  const slot = (W - PAD.left - PAD.right) / Math.max(1, labels.length - 1)
 
   const first = series[0]
   const firstPts = first
@@ -77,7 +78,7 @@ export default function LineChart({
         .filter((p): p is { x: number; y: number } => p !== null)
     : []
 
-  const hoverPct = hover !== null ? ((PAD.left + slot * hover + slot / 2) / W) * 100 : 50
+  const hoverPct = hover !== null ? (x(hover) / W) * 100 : 50
 
   return (
     <div className="relative">
@@ -174,18 +175,23 @@ export default function LineChart({
             strokeDasharray="3 3"
           />
         )}
-        {labels.map((lb, i) => (
-          <rect
-            key={`hit-${lb}`}
-            x={PAD.left + slot * i}
-            y={PAD.top}
-            width={slot}
-            height={height - PAD.bottom - PAD.top}
-            fill="transparent"
-            onMouseEnter={() => setHover(i)}
-            onMouseLeave={() => setHover(null)}
-          />
-        ))}
+        {labels.map((lb, i) => {
+          // 居中在数据点上：左右各留 slot/2，首尾两列贴住绘图区边界
+          const left = Math.max(PAD.left, x(i) - slot / 2)
+          const right = Math.min(W - PAD.right, x(i) + slot / 2)
+          return (
+            <rect
+              key={`hit-${lb}`}
+              x={left}
+              y={PAD.top}
+              width={Math.max(1, right - left)}
+              height={height - PAD.bottom - PAD.top}
+              fill="transparent"
+              onMouseEnter={() => setHover(i)}
+              onMouseLeave={() => setHover(null)}
+            />
+          )
+        })}
 
         {labels.map((lb, i) =>
           i % labelStep === 0 ? (

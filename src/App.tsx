@@ -196,6 +196,17 @@ export default function App() {
           ) : (
             <span>后端未连接（先启动 server：cd server && npm start）</span>
           )}
+          {health?.latestDate && (
+            <span
+              className={
+                health.latestDate === new Date().toISOString().slice(0, 10) ? '' : 'text-amber-600 dark:text-amber-400'
+              }
+              title="库内最新一条成品的日期（UTC）；采集每天 5 个时间点，非当天说明最近一轮还没跑或失败了"
+            >
+              数据截至 {health.latestDate.slice(5)}
+              {health.latestDate === new Date().toISOString().slice(0, 10) ? '（当天）' : '（非当天）'}
+            </span>
+          )}
           {running && <span className="text-slate-700 dark:text-slate-200">{running}</span>}
         </div>
 

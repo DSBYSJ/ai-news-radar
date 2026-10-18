@@ -59,6 +59,9 @@ export async function newsRoutes(app: FastifyInstance): Promise<void> {
       /** 定时策略（北京时间）：采集时间点 / 简报时刻 */
       collectAt: config.collectAt,
       summaryAt: config.summaryAt,
+      // 库里最新一条成品的日期（UTC）：概览页要用它当「今天」而不是服务器当天 ——
+      // 采集是每天五个时间点，服务器当天常常还没有数据，按当天算会让 KPI 全为 0。
+      latestDate: (db.prepare('SELECT MAX(date(published_at)) AS d FROM articles').get() as { d: string | null }).d,
       time: new Date().toISOString(),
     }
   })
@@ -88,7 +91,7 @@ export async function newsRoutes(app: FastifyInstance): Promise<void> {
       params.push(minScore)
     }
     if (q.q) {
-      where.push('(a.title LIKE ? OR COALESCE(a.summary, "") LIKE ?)')
+      where.push("(a.title LIKE ? OR COALESCE(a.summary, '') LIKE ?)")
       params.push(`%${q.q}%`, `%${q.q}%`)
     }
     const whereSql = where.join(' AND ')
