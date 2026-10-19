@@ -256,7 +256,7 @@ export default function App() {
         </div>
 
         {/* ===== 状态条：等宽数字 + 细分隔。不是"彩色胶囊堆叠"，而是仪表盘读数 ===== */}
-        <div className="mt-4 flex flex-wrap items-center gap-x-3.5 gap-y-2 rounded-xl border border-slate-200/70 bg-white/60 px-3 py-2 text-[11px] text-slate-500 backdrop-blur-md dark:border-white/[0.07] dark:bg-white/[0.03] dark:text-slate-400">
+        <div className="status-bar mt-4 flex flex-wrap items-center gap-x-3.5 gap-y-2 rounded-xl border border-slate-200/70 bg-white/60 px-3 py-2 text-[11px] text-slate-500 backdrop-blur-md dark:text-slate-400">
           {health ? (
             <>
               <Stat label="源" value={health.sources} />
