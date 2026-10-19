@@ -404,137 +404,248 @@ html {
 
 
 /* ============================================================================
-   深色模式 · 毛玻璃实验层（light 模式完全不受影响，所有规则都锁在 .dark 下）
+   深色模式 · 液态玻璃（Liquid Glass）层
+   light 模式完全不受影响，所有规则都锁在 .dark 下。
    ----------------------------------------------------------------------------
-   毛玻璃能不能"糊出质感"，取决于三件事，缺一个就退化成"半透明卡片"：
-     1. 背后要有高频细节 —— 平滑渐变被 blur 之后看不出任何变化。
-        所以这里用「锐利边界的色块 + 细点阵 + 斜向光带」，blur 才有东西可糊。
-     2. 卡片必须真的半透明（alpha ≈ 0.45），否则背景透不上来。
-     3. 玻璃边缘要有一道镜面高光（顶部 1px 亮边 + 斜向反光），否则看不出"厚度"。
-   注意：本段放在所有 @layer 之外 —— 无层级样式优先级高于 Tailwind 的 utilities，
-   才能盖住组件里写死的 dark:bg-* 类，而不必用 !important。
+   与上一版「毛玻璃」的区别（这是本次重做的核心）：
+     · 毛玻璃 = 一块模糊的雾，越糊越"脏"，且五色光斑 + 点阵网格非常廉价。
+     · 液态玻璃 = 一块**有厚度、有折光**的介质：
+         1) 底色更薄（.38 而非 .46），主要靠边缘折光营造"玻璃"而非"雾"；
+         2) 沿边框走一圈**方向性高光**（conic-gradient + background-clip:border-box），
+            像光从左上方扫过玻璃切边 —— 这是液态玻璃最标志性的一笔；
+         3) 内侧四边分别打亮/压暗（inset box-shadow），做出切面的"棱"；
+         4) backdrop-filter 带少量 brightness 提亮折射内容，不是单纯变糊。
+   背景也一并重做：单一冷色系（靛蓝→青）+ 极低饱和 + 大尺度，
+   删掉点阵与斜向光带（廉价感主要来源），改为一层极缓慢的极光漂移。
    ============================================================================ */
 
-/* ---------- 1. 背景：给毛玻璃"打光" ---------- */
+/* ---------- 1. 背景：冷色系深空 + 缓慢极光 ---------- */
 .dark body {
-  background-color: #05070c;
-  /* 环境光：大范围、柔和、低饱和 —— 硬边实心圆会像贴纸，
-     多段渐变停止点让边缘自然衰减，玻璃透上来才是"光"而不是"色块"。 */
+  background-color: #06070b;
+  /* 只用同一色族的两三个色相，饱和度压到很低 —— 多彩渐变是"土"的头号原因 */
   background-image:
-    radial-gradient(58% 46% at 14% 16%, rgba(124, 58, 237, 0.5) 0%, rgba(124, 58, 237, 0.22) 42%, transparent 76%),
-    radial-gradient(46% 40% at 86% 12%, rgba(6, 182, 212, 0.42) 0%, rgba(6, 182, 212, 0.16) 45%, transparent 78%),
-    radial-gradient(52% 44% at 76% 74%, rgba(236, 72, 153, 0.34) 0%, rgba(236, 72, 153, 0.14) 46%, transparent 80%),
-    radial-gradient(48% 42% at 20% 80%, rgba(37, 99, 235, 0.4) 0%, rgba(37, 99, 235, 0.15) 45%, transparent 78%),
-    radial-gradient(34% 26% at 52% 42%, rgba(255, 196, 92, 0.14) 0%, transparent 72%),
-    /* 顶部定调 */
-    radial-gradient(1200px 620px at 50% -14%, rgba(124, 58, 237, 0.22), transparent 72%),
-    /* 暗角：四周压暗，视线收拢到中间内容（放最后一层，叠在光晕之上） */
-    radial-gradient(125% 95% at 50% 42%, transparent 40%, rgba(0, 0, 0, 0.6) 100%);
+    radial-gradient(70% 55% at 18% 10%, rgba(76, 78, 168, 0.30) 0%, rgba(76, 78, 168, 0.10) 45%, transparent 78%),
+    radial-gradient(60% 50% at 88% 6%, rgba(45, 96, 140, 0.24) 0%, rgba(45, 96, 140, 0.07) 48%, transparent 80%),
+    radial-gradient(65% 55% at 78% 86%, rgba(38, 74, 118, 0.20) 0%, rgba(38, 74, 118, 0.06) 50%, transparent 82%),
+    /* 极暗的暖色一点点，只为让冷色不发死 */
+    radial-gradient(50% 40% at 50% 100%, rgba(120, 88, 96, 0.10), transparent 78%),
+    /* 暗角：把四周压到近黑，视线收拢 */
+    radial-gradient(130% 100% at 50% 40%, transparent 34%, rgba(0, 0, 0, 0.72) 100%);
   background-attachment: fixed;
 }
 
-/* 细点阵 + 斜向光带：真正被卡片 blur 掉的"高频细节"就在这里 */
+/* 极缓慢的极光漂移：让深色背景"活着"，但慢到几乎察觉不到（60s 一个来回）。
+   只动 transform，不触发重排；will-change 提前提升到合成层。 */
 .dark body::before {
   content: '';
   position: fixed;
-  inset: 0;
+  inset: -12%;
   z-index: -1;
   pointer-events: none;
   background-image:
-    /* 斜向光带（边界锐利） */
-    linear-gradient(115deg, transparent 30%, rgba(255, 255, 255, 0.05) 30.4%, rgba(255, 255, 255, 0.05) 31%, transparent 31.4%),
-    linear-gradient(115deg, transparent 52%, rgba(190, 220, 255, 0.06) 52.4%, rgba(190, 220, 255, 0.06) 52.9%, transparent 53.3%),
-    /* 细点阵 */
-    radial-gradient(rgba(255, 255, 255, 0.16) 1px, transparent 1.2px);
-  background-size: 100% 100%, 100% 100%, 22px 22px;
+    radial-gradient(38% 30% at 26% 24%, rgba(102, 112, 190, 0.20), transparent 70%),
+    radial-gradient(34% 28% at 72% 66%, rgba(64, 118, 160, 0.16), transparent 72%);
+  will-change: transform;
+  animation: aurora-drift 60s ease-in-out infinite alternate;
 }
 
-/* ---------- 2. 所有"框"改成毛玻璃 ---------- */
+@keyframes aurora-drift {
+  from {
+    transform: translate3d(-1.2%, -0.8%, 0) scale(1.02);
+  }
+  to {
+    transform: translate3d(1.4%, 1.0%, 0) scale(1.06);
+  }
+}
+
+/* ---------- 2. 液态玻璃：所有"框" ---------- */
 .dark .card,
 .dark .glass {
-  background-color: rgba(13, 17, 26, 0.46);
-  /* 斜向反光 + 顶部增亮：玻璃的"镜面感"全靠这两层 */
+  /* 边框做成透明，真正的"边框"由上面那层 conic-gradient 画出来 */
+  border: 1px solid transparent;
+  background-origin: border-box;
+  /*
+    三层：
+      A. 底色（padding-box）—— 薄，让背景透上来
+      B. 斜向反光（padding-box）—— 左上方的一抹光
+      C. 边框折光环（border-box）—— 液态玻璃的灵魂
+  */
   background-image:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.11) 0%, rgba(255, 255, 255, 0.028) 26%, rgba(255, 255, 255, 0) 52%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0) 38%);
-  -webkit-backdrop-filter: blur(22px) saturate(165%);
-  backdrop-filter: blur(22px) saturate(165%);
-  border: 1px solid rgba(255, 255, 255, 0.13);
+    linear-gradient(rgba(11, 15, 24, 0.38), rgba(11, 15, 24, 0.52)),
+    linear-gradient(158deg, rgba(255, 255, 255, 0.10) 0%, rgba(255, 255, 255, 0.025) 30%, rgba(255, 255, 255, 0) 56%),
+    conic-gradient(
+      from 210deg at 50% 50%,
+      rgba(255, 255, 255, 0.62) 0deg,
+      rgba(255, 255, 255, 0.10) 34deg,
+      rgba(255, 255, 255, 0.02) 96deg,
+      rgba(255, 255, 255, 0.16) 168deg,
+      rgba(255, 255, 255, 0.05) 232deg,
+      rgba(255, 255, 255, 0.34) 300deg,
+      rgba(255, 255, 255, 0.62) 360deg
+    );
+  background-clip: padding-box, padding-box, border-box;
+  -webkit-backdrop-filter: blur(18px) saturate(175%) brightness(1.08);
+  backdrop-filter: blur(18px) saturate(175%) brightness(1.08);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.2),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.35),
-    0 1px 2px rgba(0, 0, 0, 0.5),
-    0 24px 48px -28px rgba(0, 0, 0, 0.9);
+    /* 内侧四边：左上打亮、右下压暗 → 切面棱感 */
+    inset 0 1px 0 rgba(255, 255, 255, 0.26),
+    inset 1px 0 0 rgba(255, 255, 255, 0.10),
+    inset -1px 0 0 rgba(255, 255, 255, 0.05),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.42),
+    /* 内侧一圈极淡的折射光 */
+    inset 0 0 24px -6px rgba(150, 180, 255, 0.10),
+    /* 投影：贴地的短影 + 拉开距离的长影 */
+    0 1px 3px rgba(0, 0, 0, 0.5),
+    0 26px 56px -30px rgba(0, 0, 0, 0.95);
+  transition:
+    transform 0.42s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.42s cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 0.3s ease;
 }
 
-/* 悬停时玻璃"擦亮"：边框与高光同时提亮 */
+/* 悬停：玻璃被"擦亮"—— 折光环变亮、折射略增强，整体微微上浮 */
 .dark .card-hover:hover {
-  border-color: rgba(255, 255, 255, 0.24);
+  background-image:
+    linear-gradient(rgba(13, 18, 29, 0.34), rgba(13, 18, 29, 0.46)),
+    linear-gradient(158deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.04) 32%, rgba(255, 255, 255, 0) 58%),
+    conic-gradient(
+      from 210deg at 50% 50%,
+      rgba(255, 255, 255, 0.88) 0deg,
+      rgba(255, 255, 255, 0.18) 34deg,
+      rgba(255, 255, 255, 0.05) 96deg,
+      rgba(255, 255, 255, 0.24) 168deg,
+      rgba(255, 255, 255, 0.09) 232deg,
+      rgba(255, 255, 255, 0.52) 300deg,
+      rgba(255, 255, 255, 0.88) 360deg
+    );
+  -webkit-backdrop-filter: blur(18px) saturate(190%) brightness(1.12);
+  backdrop-filter: blur(18px) saturate(190%) brightness(1.12);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.28),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.35),
-    0 2px 4px rgba(0, 0, 0, 0.5),
-    0 32px 60px -28px rgba(0, 0, 0, 0.95);
+    inset 0 1px 0 rgba(255, 255, 255, 0.34),
+    inset 1px 0 0 rgba(255, 255, 255, 0.14),
+    inset -1px 0 0 rgba(255, 255, 255, 0.07),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.42),
+    inset 0 0 30px -6px rgba(160, 190, 255, 0.16),
+    0 2px 6px rgba(0, 0, 0, 0.5),
+    0 34px 66px -30px rgba(0, 0, 0, 1);
 }
 
-/* 分段控件（页签条） */
+/* 分段控件（页签条）：同款液态玻璃，尺度更小 */
 .dark .seg {
-  background-color: rgba(255, 255, 255, 0.045);
-  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0) 60%);
-  -webkit-backdrop-filter: blur(16px) saturate(160%);
-  backdrop-filter: blur(16px) saturate(160%);
-  border-color: rgba(255, 255, 255, 0.11);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 8px 20px -14px rgba(0, 0, 0, 0.9);
+  border: 1px solid transparent;
+  background-origin: border-box;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.07)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0) 62%),
+    conic-gradient(
+      from 210deg at 50% 50%,
+      rgba(255, 255, 255, 0.42) 0deg,
+      rgba(255, 255, 255, 0.06) 40deg,
+      rgba(255, 255, 255, 0.10) 190deg,
+      rgba(255, 255, 255, 0.30) 300deg,
+      rgba(255, 255, 255, 0.42) 360deg
+    );
+  background-clip: padding-box, padding-box, border-box;
+  -webkit-backdrop-filter: blur(14px) saturate(165%);
+  backdrop-filter: blur(14px) saturate(165%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 8px 22px -16px rgba(0, 0, 0, 0.9);
 }
+
+/* 选中项：像一颗被光照到的小玻璃珠 */
 .dark .seg-item[data-active='true'] {
   background-color: rgba(255, 255, 255, 0.13);
-  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.05));
-  -webkit-backdrop-filter: blur(10px) saturate(170%);
-  backdrop-filter: blur(10px) saturate(170%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.32), 0 2px 8px rgba(0, 0, 0, 0.45);
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.06) 70%);
+  -webkit-backdrop-filter: blur(8px) saturate(180%) brightness(1.08);
+  backdrop-filter: blur(8px) saturate(180%) brightness(1.08);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.38),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.28),
+    0 2px 10px rgba(0, 0, 0, 0.5);
 }
 
-/* 输入类控件：同样是薄玻璃 */
+/* 输入类控件：薄玻璃 */
 .dark input:not([type='range']),
 .dark select,
 .dark textarea {
-  background-color: rgba(255, 255, 255, 0.055);
-  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0));
-  -webkit-backdrop-filter: blur(12px) saturate(150%);
-  backdrop-filter: blur(12px) saturate(150%);
-  border-color: rgba(255, 255, 255, 0.12);
+  background-color: rgba(255, 255, 255, 0.05);
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0) 70%);
+  -webkit-backdrop-filter: blur(10px) saturate(160%);
+  backdrop-filter: blur(10px) saturate(160%);
+  border-color: rgba(255, 255, 255, 0.11);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.10);
+  transition: border-color 0.25s ease, box-shadow 0.25s ease, background-color 0.25s ease;
 }
 .dark input:not([type='range']):hover,
 .dark select:hover {
-  border-color: rgba(255, 255, 255, 0.22);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+.dark input:not([type='range']):focus,
+.dark select:focus,
+.dark textarea:focus {
+  border-color: rgba(167, 139, 250, 0.55);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 0 0 3px rgba(139, 92, 246, 0.16);
 }
 
-/* 小胶囊（chip）也透一点光 */
+/* 小胶囊：极薄玻璃 */
 .dark .chip {
-  background-color: rgba(255, 255, 255, 0.06);
-  -webkit-backdrop-filter: blur(10px) saturate(140%);
-  backdrop-filter: blur(10px) saturate(140%);
-  border-color: rgba(255, 255, 255, 0.1);
+  background-color: rgba(255, 255, 255, 0.055);
+  -webkit-backdrop-filter: blur(8px) saturate(150%);
+  backdrop-filter: blur(8px) saturate(150%);
+  border-color: rgba(255, 255, 255, 0.09);
 }
 
-/* 顶部状态条（App.tsx 里那个圆角容器）也要跟上 */
+/* 顶部状态条 */
 .dark .status-bar {
-  background-color: rgba(255, 255, 255, 0.035);
-  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0));
-  -webkit-backdrop-filter: blur(18px) saturate(160%);
-  backdrop-filter: blur(18px) saturate(160%);
-  border-color: rgba(255, 255, 255, 0.1);
+  border: 1px solid transparent;
+  background-origin: border-box;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.055)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0) 100%),
+    conic-gradient(
+      from 210deg at 50% 50%,
+      rgba(255, 255, 255, 0.34) 0deg,
+      rgba(255, 255, 255, 0.05) 50deg,
+      rgba(255, 255, 255, 0.12) 200deg,
+      rgba(255, 255, 255, 0.26) 320deg,
+      rgba(255, 255, 255, 0.34) 360deg
+    );
+  background-clip: padding-box, padding-box, border-box;
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  backdrop-filter: blur(16px) saturate(160%);
 }
 
-/* 性能兜底：列表页一次渲染 50 张玻璃卡，blur 层过多会掉帧。
-   列表里的卡片降一档模糊半径，视觉差异很小但合成开销明显降低。 */
+/* 性能：列表页 50 张玻璃卡，文章卡降一档模糊半径（视觉差异小，合成开销明显降低） */
 .dark article.card {
-  -webkit-backdrop-filter: blur(14px) saturate(150%);
-  backdrop-filter: blur(14px) saturate(150%);
+  -webkit-backdrop-filter: blur(12px) saturate(155%) brightness(1.05);
+  backdrop-filter: blur(12px) saturate(155%) brightness(1.05);
 }
 
-/* 关闭动效偏好下不做 backdrop-filter（低端机与无障碍场景更稳） */
+/* ---------- 3. 动效 ---------- */
+/* 页签切换：内容轻推入（配合 App.tsx 的 key={tab} 重挂载） */
+@keyframes page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.995);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.page-enter {
+  animation: page-enter 0.44s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* ---------- 4. 无障碍与降级 ---------- */
 @media (prefers-reduced-motion: reduce) {
+  .dark body::before {
+    animation: none;
+  }
+  .page-enter {
+    animation: none;
+  }
   .dark .card,
   .dark .glass,
   .dark .seg,
@@ -545,6 +656,8 @@ html {
   .dark .chip {
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
-    background-color: rgba(13, 17, 26, 0.92);
+    background-image: linear-gradient(rgba(11, 15, 24, 0.94), rgba(11, 15, 24, 0.94));
+    border-color: rgba(255, 255, 255, 0.12);
   }
 }
+

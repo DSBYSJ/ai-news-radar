@@ -310,15 +310,18 @@ export default function App() {
         </nav>
       </header>
 
-      {tab === 'overview' ? (
-        <OverviewPage health={health} onNavigate={setTab} />
-      ) : tab === 'list' ? (
-        <ListPage sources={sources} />
-      ) : tab === 'trend' ? (
-        <TrendPage />
-      ) : (
-        <SummaryPage />
-      )}
+      {/* key={tab} 强制重挂载，切换页签时播放轻推入动画（.page-enter） */}
+      <div key={tab} className="page-enter">
+        {tab === 'overview' ? (
+          <OverviewPage health={health} onNavigate={setTab} />
+        ) : tab === 'list' ? (
+          <ListPage sources={sources} />
+        ) : tab === 'trend' ? (
+          <TrendPage />
+        ) : (
+          <SummaryPage />
+        )}
+      </div>
 
       {/* 突发实时推送提示（右下角浮层） */}
       {toasts.length > 0 && (
