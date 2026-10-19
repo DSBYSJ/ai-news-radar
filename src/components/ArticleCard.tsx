@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { Article } from '../types.ts'
-import { CATEGORY_COLORS, formatDateTime, scoreColor } from '../utils/format.ts'
+import { CATEGORY_COLORS, formatDateTime } from '../utils/format.ts'
 
 /**
  * 资讯卡：一屏能扫，但每一条都"有质感"。
@@ -28,23 +28,23 @@ export default function ArticleCard({ article }: { article: Article }) {
         style={{ backgroundColor: accent, opacity: 0.85 }}
       />
 
-      <div className="pl-5 pr-4 py-3.5">
+      <div className="py-3 pl-[18px] pr-4">
         {/* 元信息行 */}
-        <div className="mb-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
+        <div className="mb-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px]">
           <span
-            className="num inline-flex items-center rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-white shadow-sm"
-            style={{ backgroundColor: scoreColor(article.score) }}
-            title="重要度评分（0-100）"
+            className="num inline-flex h-[18px] min-w-[26px] items-center justify-center rounded text-[10.5px] font-bold tabular-nums"
+            style={
+              (article.score ?? 0) >= 60
+                ? { backgroundColor: '#fef2f2', color: '#b91c1c' }
+                : (article.score ?? 0) >= 40
+                  ? { backgroundColor: '#fffbeb', color: '#b45309' }
+                  : { backgroundColor: '#f1f5f9', color: '#64748b' }
+            }
+            title={`重要度 ${article.score ?? '–'} / 100`}
           >
             {article.score ?? '–'}
           </span>
-          <span
-            className="inline-flex items-center rounded-md px-1.5 py-0.5 text-[11px] font-medium"
-            style={{ color: accent, backgroundColor: `${accent}14` }}
-          >
-            {article.categoryLabel}
-          </span>
-          <span className="text-slate-400 dark:text-slate-500">·</span>
+          <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">{article.categoryLabel}</span>
           <span className="font-medium text-slate-500 dark:text-slate-400">{article.sourceName}</span>
           <span className="num text-slate-400 dark:text-slate-500">{formatDateTime(article.publishedAt)}</span>
 
@@ -57,41 +57,44 @@ export default function ArticleCard({ article }: { article: Article }) {
         </div>
 
         {/* 标题：全卡唯一的大字 */}
-        <h2 className="text-[15px] font-semibold leading-snug tracking-[-0.01em] text-slate-900 dark:text-slate-50">
-          <a
-            href={article.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="transition-colors hover:text-violet-700 dark:hover:text-violet-300"
+        <div className="flex items-start gap-1.5">
+          <h2 className="min-w-0 flex-1 text-[15px] font-semibold leading-[1.45] tracking-[-0.011em] text-slate-900 dark:text-slate-50">
+            <a
+              href={article.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="transition-colors hover:text-violet-700 dark:hover:text-violet-300"
+            >
+              {article.title}
+            </a>
+          </h2>
+          {/* 展开开关：收进标题行右侧，省掉原来单独一行的纵向空间 */}
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            aria-expanded={open}
+            aria-label={open ? '收起详情' : '展开摘要与实体'}
+            title={open ? '收起详情' : '展开摘要与实体'}
+            className="mt-[3px] shrink-0 rounded p-0.5 text-slate-300 transition-colors hover:bg-slate-100 hover:text-violet-600 dark:text-slate-600 dark:hover:bg-white/5 dark:hover:text-violet-300"
           >
-            {article.title}
-          </a>
-        </h2>
+            <svg
+              viewBox="0 0 24 24"
+              className={`h-3.5 w-3.5 transition-transform duration-300 ${open ? 'rotate-90' : ''}`}
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M9 6l6 6-6 6" />
+            </svg>
+          </button>
+        </div>
 
         {article.tldr && (
           <p className="mt-1 text-[13px] leading-relaxed text-slate-600 dark:text-slate-300">{article.tldr}</p>
         )}
 
-        {/* 展开控制 */}
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          aria-expanded={open}
-          className="mt-2 inline-flex items-center gap-1 text-[11.5px] font-medium text-slate-400 transition-colors hover:text-violet-700 dark:hover:text-violet-300"
-        >
-          <svg
-            viewBox="0 0 24 24"
-            className={`h-3 w-3 transition-transform duration-300 ${open ? 'rotate-90' : ''}`}
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M9 6l6 6-6 6" />
-          </svg>
-          {open ? '收起' : '摘要与实体'}
-        </button>
 
         {/* 详情：grid 0fr→1fr，展开动画不依赖固定高度 */}
         <div

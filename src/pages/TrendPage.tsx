@@ -156,7 +156,8 @@ export default function TrendPage() {
         )}
 
         {/* 2 × 3 网格：四层趋势 + 情感 + 实体 */}
-        <div className="grid gap-4 xl:grid-cols-2">
+        {/* items-start：图表卡各按内容高度排布，避免矮卡被高卡（图例多行）拉出一大片空白 */}
+        <div className="grid items-start gap-4 xl:grid-cols-2">
           <ChartCard level="第 1 层" title="每日收录条数" hint="假趋势，只作对照基线。">
             <LineChart
               labels={volume.map((p) => p.date)}
@@ -332,53 +333,6 @@ export default function TrendPage() {
             )}
           </ChartCard>
 
-          <ChartCard level="实体" title="实体热度与负面占比" hint="点击实体查看它的负面占比走势（7 日平滑）。">
-            {entityChips.length === 0 ? (
-              <p className="py-8 text-center text-xs text-slate-400">暂无实体数据</p>
-            ) : (
-              <>
-                <div className="flex flex-wrap gap-1.5">
-                  {entityChips.map((e) => (
-                    <button
-                      key={e.entity}
-                      type="button"
-                      onClick={() => setSelectedEntity(e.entity)}
-                      className={`rounded-full px-2.5 py-1 text-xs transition ${
-                        selectedEntity === e.entity
-                          ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
-                      }`}
-                    >
-                      {e.entity}
-                      <span className="ml-1.5 opacity-60">{e.count}</span>
-                      {e.negShare > 0 && (
-                        <span className="ml-1 text-[10px] opacity-70">{Math.round(e.negShare * 100)}%负</span>
-                      )}
-                    </button>
-                  ))}
-                </div>
-                {entityDetail && (
-                  <div className="mt-3">
-                    <LineChart
-                      labels={entityDetail.points.map((p) => p.date)}
-                      series={[
-                        { name: '负面占比', color: '#cf5a5a', values: entityDetail.points.map((p) => p.negRatio), width: 1.5 },
-                        { name: '7 日均值', color: '#7c3aed', values: entityDetail.points.map((p) => p.ma7), width: 2.5 },
-                      ]}
-                      yMax={1}
-                      tickFormat={(v) => `${Math.round(v * 100)}%`}
-                      valueFormat={(v) => `${Math.round(v * 100)}%`}
-                      dots
-                      height={190}
-                    />
-                  </div>
-                )}
-                <p className="mt-2 text-[11px] text-slate-400 dark:text-slate-500">
-                  口径：该实体当日被提及的文章中，负面文章占比（仅统计已判定条目）
-                </p>
-              </>
-            )}
-          </ChartCard>
         </div>
 
         {entities.length > 0 && (
@@ -390,8 +344,56 @@ export default function TrendPage() {
       </div>
 
       <aside className="w-full shrink-0 lg:w-[380px]">
-        <div className="lg:sticky lg:top-4">
+        <div className="space-y-4 lg:sticky lg:top-4">
           <AskPanel />
+          {/* 实体热度：原本在主栏，导致右栏助手下方空出一大截；移到此处让两栏高度接近 */}
+            <ChartCard level="实体" title="实体热度与负面占比" hint="点击实体查看它的负面占比走势（7 日平滑）。">
+              {entityChips.length === 0 ? (
+                <p className="py-8 text-center text-xs text-slate-400">暂无实体数据</p>
+              ) : (
+                <>
+                  <div className="flex flex-wrap gap-1.5">
+                    {entityChips.map((e) => (
+                      <button
+                        key={e.entity}
+                        type="button"
+                        onClick={() => setSelectedEntity(e.entity)}
+                        className={`rounded-full px-2.5 py-1 text-xs transition ${
+                          selectedEntity === e.entity
+                            ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
+                        }`}
+                      >
+                        {e.entity}
+                        <span className="ml-1.5 opacity-60">{e.count}</span>
+                        {e.negShare > 0 && (
+                          <span className="ml-1 text-[10px] opacity-70">{Math.round(e.negShare * 100)}%负</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                  {entityDetail && (
+                    <div className="mt-3">
+                      <LineChart
+                        labels={entityDetail.points.map((p) => p.date)}
+                        series={[
+                          { name: '负面占比', color: '#cf5a5a', values: entityDetail.points.map((p) => p.negRatio), width: 1.5 },
+                          { name: '7 日均值', color: '#7c3aed', values: entityDetail.points.map((p) => p.ma7), width: 2.5 },
+                        ]}
+                        yMax={1}
+                        tickFormat={(v) => `${Math.round(v * 100)}%`}
+                        valueFormat={(v) => `${Math.round(v * 100)}%`}
+                        dots
+                        height={190}
+                      />
+                    </div>
+                  )}
+                  <p className="mt-2 text-[11px] text-slate-400 dark:text-slate-500">
+                    口径：该实体当日被提及的文章中，负面文章占比（仅统计已判定条目）
+                  </p>
+                </>
+              )}
+            </ChartCard>
         </div>
       </aside>
     </div>

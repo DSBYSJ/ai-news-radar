@@ -16,8 +16,9 @@
   --chart-dot-stroke: #ffffff;
   --chart-sep: #ffffff;
 
-  /* 画布：冷白底 + 两团极淡的彩色环境光，避免"纯白 Excel 感" */
-  --bg: #f5f6fa;
+  /* 画布：比卡片明显深一档的中性灰 —— 卡片要"浮"起来，底就必须沉下去。
+     之前底和卡都是近白，阴影等于不存在，整页看着发虚、像后台模板。 */
+  --bg: #eaeef5;
   --bg-glow: rgba(109, 40, 217, 0.075);
   --bg-glow-2: rgba(14, 165, 233, 0.055);
   --bg-glow-3: rgba(236, 72, 153, 0.035);
@@ -28,9 +29,9 @@
   --surface-sunk: #f1f3f9;
 
   /* 线条：常规描边 + 更淡的"发丝线" */
-  --line: #e4e7f0;
-  --line-soft: #eef0f6;
-  --line-strong: #d3d8e6;
+  --line: #dde2ed;
+  --line-soft: #e9edf5;
+  --line-strong: #c8d0e0;
 
   /* 文字：正文 / 次要 / 弱化 / 极弱 */
   --ink: #0e1220;
@@ -51,9 +52,10 @@
   --warn: #b45309;
 
   /* 阴影：三层，越往上越"飘" */
-  --shadow-1: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.03);
-  --shadow-2: 0 1px 2px rgba(16, 24, 40, 0.04), 0 10px 24px -14px rgba(16, 24, 40, 0.22);
-  --shadow-3: 0 2px 4px rgba(16, 24, 40, 0.05), 0 22px 48px -24px rgba(16, 24, 40, 0.3);
+  /* 三层 elevation：比之前更"实"，因为画布变深了，阴影必须更锐利才立得住 */
+  --shadow-1: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 1px rgba(16, 24, 40, 0.04);
+  --shadow-2: 0 1px 2px rgba(16, 24, 40, 0.06), 0 8px 16px -8px rgba(16, 24, 40, 0.14), 0 20px 40px -24px rgba(16, 24, 40, 0.3);
+  --shadow-3: 0 2px 4px rgba(16, 24, 40, 0.07), 0 14px 28px -12px rgba(16, 24, 40, 0.18), 0 32px 60px -28px rgba(16, 24, 40, 0.36);
   --shadow-card: var(--shadow-2);
 
   /* 高光边（1px 内描边做"玻璃厚度"） */

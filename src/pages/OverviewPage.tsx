@@ -13,6 +13,37 @@ interface Props {
 }
 
 /**
+ * 迷你走势线（sparkline）：KPI 卡里的一小段历史曲线。
+ * 专业仪表盘的标志性细节 —— 让"72 条"这个孤零零的数字带上方向感。
+ * 纯 SVG，无依赖；面积用渐变，末尾一个实心点标出"现在"。
+ */
+function Sparkline({ values, color = '#7c3aed', width = 96, height = 30 }: { values: number[]; color?: string; width?: number; height?: number }) {
+  const pts = values.filter((v) => Number.isFinite(v))
+  if (pts.length < 2) return null
+  const max = Math.max(...pts)
+  const min = Math.min(...pts)
+  const span = max - min || 1
+  const stepX = width / (pts.length - 1)
+  const yOf = (v: number) => height - 2 - ((v - min) / span) * (height - 4)
+  const line = pts.map((v, i) => `${i === 0 ? 'M' : 'L'}${(i * stepX).toFixed(1)},${yOf(v).toFixed(1)}`).join(' ')
+  const area = `${line} L${width},${height} L0,${height} Z`
+  const gid = `sk${color.replace('#', '')}`
+  return (
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} className="overflow-visible" aria-hidden="true">
+      <defs>
+        <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.26" />
+          <stop offset="100%" stopColor={color} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path d={area} fill={`url(#${gid})`} stroke="none" />
+      <path d={line} fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx={width} cy={yOf(pts[pts.length - 1])} r="2.2" fill={color} />
+    </svg>
+  )
+}
+
+/**
  * KPI 卡：一眼要读出「这是什么 · 多少 · 比之前怎么样」。
  * - 顶部渐隐高光线 + 悬停光标柔光（.card-accent / .card-glow）
  * - 数字用大号等宽字体，单位降级到小字
@@ -26,6 +57,7 @@ function Kpi({
   tone = 'default',
   delta,
   icon,
+  trend,
   delay = 0,
 }: {
   label: string
@@ -36,14 +68,13 @@ function Kpi({
   /** 变化描述（如 "周环比 ↑ 12.4%"），有则渲染成方向胶囊 */
   delta?: string
   icon?: ReactNode
+  /** 迷你走势数据（右下方） */
+  trend?: number[]
   delay?: number
 }) {
-  const valueTone =
-    tone === 'up'
-      ? 'text-red-600 dark:text-red-400'
-      : tone === 'down'
-        ? 'text-emerald-600 dark:text-emerald-400'
-        : 'text-slate-900 dark:text-slate-50'
+  // 大数字一律中性墨色：颜色语义只放在下面的变化量胶囊里。
+  // 之前大数字随涨跌染色，一屏出现红/绿/黑三种，像告警面板而不是仪表盘。
+  const valueTone = 'text-slate-900 dark:text-slate-50'
 
   const deltaCls =
     tone === 'up'
@@ -59,17 +90,20 @@ function Kpi({
     >
       <div className="flex items-start justify-between gap-2">
         <p className="eyebrow">{label}</p>
-        {icon && (
-          <span className="shrink-0 text-slate-300 transition group-hover:text-slate-400 dark:text-slate-600">
-            {icon}
+        {icon && <span className="shrink-0 text-slate-200 dark:text-slate-700">{icon}</span>}
+      </div>
+
+      <div className="mt-2 flex items-end justify-between gap-2">
+        <p className="flex items-baseline gap-1.5">
+          <span className={`kpi-value num text-[30px] ${valueTone}`}>{value}</span>
+          {unit && <span className="text-[11px] font-medium text-slate-400 dark:text-slate-500">{unit}</span>}
+        </p>
+        {trend && trend.length > 1 && (
+          <span className="mb-0.5 shrink-0 opacity-80 transition-opacity group-hover:opacity-100">
+            <Sparkline values={trend} color={tone === 'up' ? '#dc2626' : tone === 'down' ? '#059669' : '#7c3aed'} />
           </span>
         )}
       </div>
-
-      <p className="mt-2 flex items-baseline gap-1.5">
-        <span className={`kpi-value num text-[30px] ${valueTone}`}>{value}</span>
-        {unit && <span className="text-[11px] font-medium text-slate-400 dark:text-slate-500">{unit}</span>}
-      </p>
 
       {delta && (
         <p className={`mt-2 inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ${deltaCls}`}>
@@ -199,6 +233,7 @@ export default function OverviewPage({ health, onNavigate }: Props) {
             value={String(todayCount)}
             unit="条"
             icon={<IconStack />}
+            trend={velocity?.points.map((p) => p.count)}
             delay={0}
             delta={
               change === null || change === undefined
@@ -221,6 +256,7 @@ export default function OverviewPage({ health, onNavigate }: Props) {
             value={String(recentBursts.length)}
             unit="条"
             icon={<IconBolt />}
+            trend={cross?.points.slice(-7).map((p) => p.eventCount)}
             delay={120}
             tone={recentBursts.length > 0 ? 'up' : 'default'}
             delta={topBurstZ > 0 ? `最高 z = ${topBurstZ}` : undefined}
@@ -271,7 +307,9 @@ export default function OverviewPage({ health, onNavigate }: Props) {
           )}
         </Card>
 
-        <div className="grid gap-4 lg:grid-cols-2">
+        {/* items-start：两张卡各按自身内容高度排布。否则左侧只有 3 条会被右侧十几行拉伸，
+            中间留出一大片空白 —— 那正是"廉价感"的直接来源。 */}
+        <div className="grid items-start gap-4 lg:grid-cols-2">
           {/* 今日跨源事件 */}
           <Card
             title="最新跨源事件"
@@ -322,19 +360,25 @@ export default function OverviewPage({ health, onNavigate }: Props) {
             {recentBursts.length === 0 ? (
               <p className="text-xs text-slate-500 dark:text-slate-400">近 3 天没有触发突发阈值，属正常。</p>
             ) : (
-              <ul className="space-y-1.5">
-                {recentBursts.map((b) => {
-                  const alpha = Math.min(0.3, 0.06 + Math.max(0, b.z - 2.5) * 0.02)
+              <ul className="divide-y divide-slate-100 dark:divide-white/[0.06]">
+                {recentBursts.slice(0, 8).map((b) => {
+                  // 红只表达"强度"，不再整行铺底色 —— 之前 11 行红块把页面拉低成告警面板
+                  const hot = Math.min(1, Math.max(0.25, (b.z - 2.5) / 6))
                   return (
                     <li
                       key={`${b.date}-${b.category}`}
-                      className="flex flex-wrap items-center gap-x-2 gap-y-0.5 rounded-lg px-2.5 py-1.5 text-[11px] leading-snug text-slate-700 dark:text-slate-200"
-                      style={{ backgroundColor: `rgba(220, 38, 38, ${alpha})` }}
+                      className="flex items-center gap-2.5 py-2 text-[11.5px] leading-snug text-slate-600 transition-colors hover:bg-slate-50/70 dark:text-slate-300 dark:hover:bg-white/[0.03]"
                     >
-                      <span className="font-medium">{b.date}</span>
-                      <span>{b.category === 'all' ? '全站' : (CATEGORY_LABELS[b.category] ?? b.category)}</span>
-                      <span>{b.count} 条</span>
-                      <span className="ml-auto opacity-70">z={b.z}</span>
+                      {/* 严重度色条 */}
+                      <span aria-hidden="true" className="h-6 w-[2.5px] shrink-0 rounded-full bg-red-500" style={{ opacity: hot }} />
+                      <span className="num shrink-0 text-slate-400 dark:text-slate-500">{b.date.slice(5)}</span>
+                      <span className="min-w-0 flex-1 truncate font-medium text-slate-800 dark:text-slate-100">
+                        {b.category === 'all' ? '全站' : (CATEGORY_LABELS[b.category] ?? b.category)}
+                      </span>
+                      <span className="num shrink-0 text-slate-400 dark:text-slate-500">{b.count} 条</span>
+                      <span className="num shrink-0 rounded bg-slate-100 px-1.5 py-0.5 font-semibold text-slate-600 tabular-nums dark:bg-white/[0.06] dark:text-slate-300">
+                        z {b.z}
+                      </span>
                     </li>
                   )
                 })}
@@ -344,50 +388,49 @@ export default function OverviewPage({ health, onNavigate }: Props) {
         </div>
 
         {/* 实体热度 */}
-        <Card
-          title="实体热度（近 7 天）"
-          action={
-            <button
-              type="button"
-              onClick={() => onNavigate('list')}
-              className="text-xs text-slate-400 transition hover:text-slate-700 dark:hover:text-slate-200"
-            >
-              去资讯列表 →
-            </button>
-          }
-        >
-          {entities.length === 0 ? (
-            <p className="text-xs text-slate-500 dark:text-slate-400">暂无实体数据。</p>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {entities.slice(0, 14).map((e) => (
-                <span
-                  key={e.entity}
-                  className="max-w-full break-words rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700 transition hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-                >
-                  {e.entity}
-                  <span className="ml-1.5 font-medium text-slate-400 dark:text-slate-500">{e.count}</span>
-                </span>
-              ))}
-            </div>
-          )}
-          {health && (
-            <p className="mt-3 text-[11px] text-slate-400 dark:text-slate-500">
-              数据规模：{health.sources} 个源 / {health.rawItems} 条原始 / {health.articles} 条成品 / {health.events} 个事件
-              {health.collectAt && (
-                <>
-                  <br />
-                  定时：采集 {health.collectAt.split(',').join(' · ')} · 简报 {health.summaryAt || '23:00'}（北京时间）
-                </>
-              )}
-            </p>
-          )}
-        </Card>
       </div>
 
-      <aside className="w-full shrink-0 lg:w-[380px]">
+      <aside className="w-full shrink-0 space-y-0 lg:w-[380px]">
         <div className="lg:sticky lg:top-4">
           <AskPanel />
+          <div className="mt-4">
+          <Card
+            title="实体热度（近 7 天）"
+            action={
+              <button
+                type="button"
+                onClick={() => onNavigate('list')}
+                className="text-[11px] text-slate-400 transition hover:text-violet-700 dark:hover:text-violet-300"
+              >
+                资讯列表 →
+              </button>
+            }
+          >
+            {entities.length === 0 ? (
+              <p className="text-xs text-slate-500 dark:text-slate-400">暂无实体数据。</p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {entities.slice(0, 12).map((e) => (
+                  <span key={e.entity} className="chip max-w-full break-words !py-0.5 !text-[10.5px]">
+                    {e.entity}
+                    <span className="num ml-0.5 font-semibold text-slate-500 dark:text-slate-400">{e.count}</span>
+                  </span>
+                ))}
+              </div>
+            )}
+            {health && (
+              <div className="mt-3 border-t border-slate-100 pt-2.5 text-[10.5px] leading-relaxed text-slate-400 dark:border-white/[0.06] dark:text-slate-500">
+                <p>
+                  数据规模 {health.sources} 源 · {health.rawItems.toLocaleString('en-US')} 原始 ·{' '}
+                  {health.articles.toLocaleString('en-US')} 成品 · {health.events.toLocaleString('en-US')} 事件
+                </p>
+                {health.collectAt && (
+                  <p className="mt-0.5">定时 采集 {health.collectAt.split(',').join(' / ')} · 简报 {health.summaryAt || '23:00'}</p>
+                )}
+              </div>
+            )}
+          </Card>
+        </div>
         </div>
       </aside>
     </div>
