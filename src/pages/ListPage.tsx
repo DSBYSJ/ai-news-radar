@@ -151,8 +151,11 @@ export default function ListPage({ sources }: { sources: SourceItem[] }) {
       )}
 
       <div className="space-y-3">
-        {data?.items.map((a) => (
-          <ArticleCard key={a.id} article={a} />
+        {data?.items.map((a, i) => (
+          // 入场错峰：只给前 12 条加延迟，避免长列表末尾要等很久才出现
+          <div key={a.id} className={i < 12 ? 'reveal' : undefined} style={i < 12 ? { animationDelay: `${i * 28}ms` } : undefined}>
+            <ArticleCard article={a} />
+          </div>
         ))}
       </div>
     </div>

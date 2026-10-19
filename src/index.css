@@ -419,18 +419,29 @@ html {
    删掉点阵与斜向光带（廉价感主要来源），改为一层极缓慢的极光漂移。
    ============================================================================ */
 
-/* ---------- 1. 背景：冷色系深空 + 缓慢极光 ---------- */
+/* ---------- 1. 背景：深空 + 有形状的光团 ----------
+   上一版为了"去土"把光压得太低，结果背景变成一潭死水 —— 玻璃没有东西可透/
+   可折射，卡片就只是"灰方块"。液态玻璃的前提是**背后有可观的光**。
+   这版：同一冷色族内做明暗层次，靠"光的形状"而非纯色相撑起高级感。 */
 .dark body {
-  background-color: #06070b;
-  /* 只用同一色族的两三个色相，饱和度压到很低 —— 多彩渐变是"土"的头号原因 */
+  background-color: #070810;
+  /* 液态玻璃的前提：背后必须真的有可观的光。
+     之前光团强度太低（alpha .2-.5 且范围小），背景实际亮度只有 rgb≈20，
+     blur+saturate 之后卡片几乎还是黑的 —— 玻璃读不出来。
+     这里把光团放大、提亮、提纯，让卡片后面真的"有东西可透"。 */
   background-image:
-    radial-gradient(70% 55% at 18% 10%, rgba(76, 78, 168, 0.30) 0%, rgba(76, 78, 168, 0.10) 45%, transparent 78%),
-    radial-gradient(60% 50% at 88% 6%, rgba(45, 96, 140, 0.24) 0%, rgba(45, 96, 140, 0.07) 48%, transparent 80%),
-    radial-gradient(65% 55% at 78% 86%, rgba(38, 74, 118, 0.20) 0%, rgba(38, 74, 118, 0.06) 50%, transparent 82%),
-    /* 极暗的暖色一点点，只为让冷色不发死 */
-    radial-gradient(50% 40% at 50% 100%, rgba(120, 88, 96, 0.10), transparent 78%),
-    /* 暗角：把四周压到近黑，视线收拢 */
-    radial-gradient(130% 100% at 50% 40%, transparent 34%, rgba(0, 0, 0, 0.72) 100%);
+    /* 主光：左中偏紫，压在 KPI / 简报区后方 */
+    radial-gradient(58% 48% at 22% 32%, rgba(126, 104, 255, 0.62) 0%, rgba(96, 78, 220, 0.3) 36%, transparent 70%),
+    /* 副光：右中偏青，压在问答助手 / 实体区后方 */
+    radial-gradient(50% 44% at 84% 52%, rgba(46, 156, 196, 0.46) 0%, rgba(34, 112, 152, 0.2) 40%, transparent 72%),
+    /* 左下冷光 */
+    radial-gradient(52% 38% at 24% 92%, rgba(64, 100, 214, 0.4) 0%, transparent 70%),
+    /* 右下暖色点缀（平衡全冷） */
+    radial-gradient(40% 32% at 78% 94%, rgba(168, 104, 82, 0.28) 0%, transparent 68%),
+    /* 顶部环境光 */
+    radial-gradient(86% 34% at 50% -8%, rgba(110, 96, 240, 0.4), transparent 70%),
+    /* 暗角：只压最外圈，别把中间的光也吃掉 */
+    radial-gradient(135% 110% at 50% 46%, transparent 46%, rgba(0, 0, 0, 0.7) 100%);
   background-attachment: fixed;
 }
 
@@ -476,29 +487,39 @@ html {
       C. 边框折光环（border-box）—— 液态玻璃的灵魂
   */
   background-image:
-    linear-gradient(rgba(11, 15, 24, 0.5), rgba(11, 15, 24, 0.62)),
-    linear-gradient(158deg, rgba(255, 255, 255, 0.10) 0%, rgba(255, 255, 255, 0.025) 30%, rgba(255, 255, 255, 0) 56%),
+    /* ⚠️ 方向修正：深色底上，玻璃应该是"更亮的那层霜面"，
+       而不是比背景更黑 —— 做成更黑就只是一块黑板，读不出玻璃。
+       这里用低透明度冷白，既让面板浮起来，又不会压掉背后的彩色光。 */
+    /* 高不透明度深色底（0.8）：既保住白字对比度，又让背后的彩色光"染"到玻璃上
+       —— 左边偏紫、右边偏青，不同区域颜色不同，这正是液态玻璃的高级感所在。
+       靠"透"来营造玻璃感是走不通的：透明一高文字就糊。 */
+    linear-gradient(rgba(12, 16, 27, 0.8), rgba(10, 14, 24, 0.86)),
+    /* 左上斜向反光 */
+    linear-gradient(158deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.008) 32%, rgba(255, 255, 255, 0) 58%),
+    /* 折光环按"光自左上"分配：顶部最亮，往右下迅速衰减到几乎不可见。
+       之前 0.62/0.10/0.02/0.16/0.05/0.34 的分布太均匀，四边亮度接近，
+       读起来像描边而不像切面。 */
     conic-gradient(
-      from 210deg at 50% 50%,
-      rgba(255, 255, 255, 0.62) 0deg,
-      rgba(255, 255, 255, 0.10) 34deg,
-      rgba(255, 255, 255, 0.02) 96deg,
-      rgba(255, 255, 255, 0.16) 168deg,
-      rgba(255, 255, 255, 0.05) 232deg,
-      rgba(255, 255, 255, 0.34) 300deg,
-      rgba(255, 255, 255, 0.62) 360deg
+      from 200deg at 50% 50%,
+      rgba(255, 255, 255, 0.85) 0deg,
+      rgba(255, 255, 255, 0.1) 40deg,
+      rgba(255, 255, 255, 0.03) 110deg,
+      rgba(255, 255, 255, 0.05) 180deg,
+      rgba(255, 255, 255, 0.14) 245deg,
+      rgba(255, 255, 255, 0.52) 305deg,
+      rgba(255, 255, 255, 0.85) 360deg
     );
   background-clip: padding-box, padding-box, border-box;
   /* 磨砂（blur）→ 增饱和/提亮（模拟玻璃透光增强）→ 折射置换（url 滤镜）
      顺序很重要：先糊再折射，边缘才不会出现锯齿状的硬位移 */
-  -webkit-backdrop-filter: blur(8px) saturate(175%) brightness(1.08);
-  backdrop-filter: blur(8px) saturate(175%) brightness(1.08);
+  -webkit-backdrop-filter: blur(20px) saturate(210%);
+  backdrop-filter: blur(20px) saturate(210%);
   box-shadow:
     /* 内侧四边：左上打亮、右下压暗 → 切面棱感 */
-    inset 0 1px 0 rgba(255, 255, 255, 0.26),
-    inset 1px 0 0 rgba(255, 255, 255, 0.10),
+    inset 0 1px 0 rgba(255, 255, 255, 0.34),
+    inset 1px 0 0 rgba(255, 255, 255, 0.13),
     inset -1px 0 0 rgba(255, 255, 255, 0.05),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.42),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.5),
     /* 内侧一圈极淡的折射光 */
     inset 0 0 24px -6px rgba(150, 180, 255, 0.10),
     /* 投影：贴地的短影 + 拉开距离的长影 */
@@ -566,8 +587,8 @@ html {
 /* 悬停：玻璃被"擦亮"—— 折光环变亮、折射略增强，整体微微上浮 */
 .dark .card-hover:hover {
   background-image:
-    linear-gradient(rgba(13, 18, 29, 0.44), rgba(13, 18, 29, 0.56)),
-    linear-gradient(158deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.04) 32%, rgba(255, 255, 255, 0) 58%),
+    linear-gradient(rgba(14, 19, 32, 0.74), rgba(12, 16, 27, 0.8)),
+    linear-gradient(158deg, rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0.018) 32%, rgba(255, 255, 255, 0) 58%),
     conic-gradient(
       from 210deg at 50% 50%,
       rgba(255, 255, 255, 0.88) 0deg,
@@ -578,8 +599,8 @@ html {
       rgba(255, 255, 255, 0.52) 300deg,
       rgba(255, 255, 255, 0.88) 360deg
     );
-  -webkit-backdrop-filter: blur(8px) saturate(190%) brightness(1.12);
-  backdrop-filter: blur(8px) saturate(190%) brightness(1.12);
+  -webkit-backdrop-filter: blur(22px) saturate(225%);
+  backdrop-filter: blur(22px) saturate(225%);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.34),
     inset 1px 0 0 rgba(255, 255, 255, 0.14),
@@ -662,24 +683,13 @@ html {
 
 /* 顶部状态条 */
 .dark .status-bar {
-  /* 清掉亮色模式下 bg-white/60 带过来的 60% 白底，否则深色下会发灰 */
-  background-color: transparent;
-  border: 1px solid transparent;
-  background-origin: border-box;
-  background-image:
-    linear-gradient(rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.055)),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0) 100%),
-    conic-gradient(
-      from 210deg at 50% 50%,
-      rgba(255, 255, 255, 0.34) 0deg,
-      rgba(255, 255, 255, 0.05) 50deg,
-      rgba(255, 255, 255, 0.12) 200deg,
-      rgba(255, 255, 255, 0.26) 320deg,
-      rgba(255, 255, 255, 0.34) 360deg
-    );
-  background-clip: padding-box, padding-box, border-box;
-  -webkit-backdrop-filter: blur(16px) saturate(160%);
-  backdrop-filter: blur(16px) saturate(160%);
+  /* 之前是一条 conic 高光边 + 半透明白底的"灰横杠"，很脏。
+     改为几乎看不见的一层薄雾：只留极淡底色 + 极弱模糊。 */
+  background-color: rgba(255, 255, 255, 0.022);
+  background-image: none;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  -webkit-backdrop-filter: blur(10px) saturate(140%);
+  backdrop-filter: blur(10px) saturate(140%);
 }
 
 /* 性能：列表页 50 张玻璃卡，文章卡降一档模糊半径（视觉差异小，合成开销明显降低） */
