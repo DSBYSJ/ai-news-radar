@@ -461,6 +461,11 @@ html {
 /* ---------- 2. 液态玻璃：所有"框" ---------- */
 .dark .card,
 .dark .glass {
+  /* ⚠️ 关键：底色必须透明。
+     基础 .card 的 background-color 是 var(--surface)（不透明深色），
+     若不清掉，半透明渐变只是叠在它上面，backdrop-filter 糊的是看不见的东西，
+     玻璃就成了"假透"——看不出背后环境光。 */
+  background-color: transparent;
   /* 边框做成透明，真正的"边框"由上面那层 conic-gradient 画出来 */
   border: 1px solid transparent;
   background-origin: border-box;
@@ -471,7 +476,7 @@ html {
       C. 边框折光环（border-box）—— 液态玻璃的灵魂
   */
   background-image:
-    linear-gradient(rgba(11, 15, 24, 0.38), rgba(11, 15, 24, 0.52)),
+    linear-gradient(rgba(11, 15, 24, 0.5), rgba(11, 15, 24, 0.62)),
     linear-gradient(158deg, rgba(255, 255, 255, 0.10) 0%, rgba(255, 255, 255, 0.025) 30%, rgba(255, 255, 255, 0) 56%),
     conic-gradient(
       from 210deg at 50% 50%,
@@ -484,8 +489,10 @@ html {
       rgba(255, 255, 255, 0.62) 360deg
     );
   background-clip: padding-box, padding-box, border-box;
-  -webkit-backdrop-filter: blur(18px) saturate(175%) brightness(1.08);
-  backdrop-filter: blur(18px) saturate(175%) brightness(1.08);
+  /* 磨砂（blur）→ 增饱和/提亮（模拟玻璃透光增强）→ 折射置换（url 滤镜）
+     顺序很重要：先糊再折射，边缘才不会出现锯齿状的硬位移 */
+  -webkit-backdrop-filter: blur(8px) saturate(175%) brightness(1.08);
+  backdrop-filter: blur(8px) saturate(175%) brightness(1.08);
   box-shadow:
     /* 内侧四边：左上打亮、右下压暗 → 切面棱感 */
     inset 0 1px 0 rgba(255, 255, 255, 0.26),
@@ -503,10 +510,63 @@ html {
     background-color 0.3s ease;
 }
 
+/* ---------- 2b. 边缘折射：液态玻璃最核心的一笔 ----------
+   调研 + 实测结论：SVG 的 feDisplacementMap 经 backdrop-filter:url() 在当前 Chrome
+   里「语法接受但不生效」——开关滤镜的像素差异 0.0%，帧率却从 62 掉到 19。
+   所以不能照搬文献里的 SVG 方案，改用可真实渲染的等效做法：
+
+   给卡片加一层「边缘环」伪元素：
+     · mask 用 content-box + exclude 裁出一圈 16px 环带，只覆盖边框区域
+       → 中间是透明的，中间内容完全不变形（这正是文献强调的核心特征）；
+     · 环带上做轻量 backdrop-filter 并 scale(1.02)：
+       缩放会让它采样到"偏移了一点"的背景，环带里就出现被拉动的像，
+       视觉上等价于边缘折射（已单独实测：缩放确实会位移背景内容）。
+
+   列表页 50 张卡不开这层（每张多一个 backdrop 层会拖垮合成器）。 */
+/* 只在悬停时挂载这层（content:none 表示不生成盒子，静态下零开销）。
+   液态玻璃本来就是"被触碰会流动"的材质，折射出现在交互瞬间反而更贴切。 */
+.dark .card-hover::before,
+.dark .glass.card-hover::before {
+  content: none;
+}
+
+.dark .card-hover:hover::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  padding: 16px;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  transform: scale(1.02);
+  -webkit-backdrop-filter: brightness(1.28) saturate(1.4);
+  backdrop-filter: brightness(1.28) saturate(1.4);
+}
+
+/* KPI 卡原本用 ::before 画顶部紫线，会被上面的折射环占用（同一伪元素）。
+   深色下改由 conic 边框的顶部高光承担，视觉不损失。 */
+.dark .card-accent::before {
+  background-image: none;
+  height: auto;
+}
+
+/* 列表卡：不开启边缘折射环（性能优先） */
+.dark article.card::before {
+  display: none;
+}
+
+/* 悬停时轻微"膨胀"（动态变形）——液态玻璃被触碰会流动 */
+.dark .card-hover:hover {
+  transform: translateY(-2px) scale(1.004);
+}
+
 /* 悬停：玻璃被"擦亮"—— 折光环变亮、折射略增强，整体微微上浮 */
 .dark .card-hover:hover {
   background-image:
-    linear-gradient(rgba(13, 18, 29, 0.34), rgba(13, 18, 29, 0.46)),
+    linear-gradient(rgba(13, 18, 29, 0.44), rgba(13, 18, 29, 0.56)),
     linear-gradient(158deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.04) 32%, rgba(255, 255, 255, 0) 58%),
     conic-gradient(
       from 210deg at 50% 50%,
@@ -518,8 +578,8 @@ html {
       rgba(255, 255, 255, 0.52) 300deg,
       rgba(255, 255, 255, 0.88) 360deg
     );
-  -webkit-backdrop-filter: blur(18px) saturate(190%) brightness(1.12);
-  backdrop-filter: blur(18px) saturate(190%) brightness(1.12);
+  -webkit-backdrop-filter: blur(8px) saturate(190%) brightness(1.12);
+  backdrop-filter: blur(8px) saturate(190%) brightness(1.12);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.34),
     inset 1px 0 0 rgba(255, 255, 255, 0.14),
@@ -532,6 +592,7 @@ html {
 
 /* 分段控件（页签条）：同款液态玻璃，尺度更小 */
 .dark .seg {
+  background-color: transparent;
   border: 1px solid transparent;
   background-origin: border-box;
   background-image:
@@ -546,20 +607,23 @@ html {
       rgba(255, 255, 255, 0.42) 360deg
     );
   background-clip: padding-box, padding-box, border-box;
-  -webkit-backdrop-filter: blur(14px) saturate(165%);
-  backdrop-filter: blur(14px) saturate(165%);
+  -webkit-backdrop-filter: blur(12px) saturate(165%);
+  backdrop-filter: blur(12px) saturate(165%);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 8px 22px -16px rgba(0, 0, 0, 0.9);
 }
 
-/* 选中项：像一颗被光照到的小玻璃珠 */
+/* 选中项 = 高透玻璃（无高斯模糊）
+   文献要点：「处于切换状态时的按钮则没有模糊效果，此时是一块高透玻璃，
+   而非磨砂玻璃」。所以这里刻意不加 blur，只做提亮与强边缘高光。 */
 .dark .seg-item[data-active='true'] {
-  background-color: rgba(255, 255, 255, 0.13);
-  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.06) 70%);
-  -webkit-backdrop-filter: blur(8px) saturate(180%) brightness(1.08);
-  backdrop-filter: blur(8px) saturate(180%) brightness(1.08);
+  background-color: rgba(255, 255, 255, 0.16);
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0.08) 72%);
+  -webkit-backdrop-filter: saturate(200%) brightness(1.14);
+  backdrop-filter: saturate(200%) brightness(1.14);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.38),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.48),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.3),
+    inset 0 0 12px -4px rgba(190, 210, 255, 0.35),
     0 2px 10px rgba(0, 0, 0, 0.5);
 }
 
@@ -569,8 +633,8 @@ html {
 .dark textarea {
   background-color: rgba(255, 255, 255, 0.05);
   background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0) 70%);
-  -webkit-backdrop-filter: blur(10px) saturate(160%);
-  backdrop-filter: blur(10px) saturate(160%);
+  -webkit-backdrop-filter: blur(8px) saturate(160%);
+  backdrop-filter: blur(8px) saturate(160%);
   border-color: rgba(255, 255, 255, 0.11);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.10);
   transition: border-color 0.25s ease, box-shadow 0.25s ease, background-color 0.25s ease;
@@ -598,6 +662,8 @@ html {
 
 /* 顶部状态条 */
 .dark .status-bar {
+  /* 清掉亮色模式下 bg-white/60 带过来的 60% 白底，否则深色下会发灰 */
+  background-color: transparent;
   border: 1px solid transparent;
   background-origin: border-box;
   background-image:
@@ -617,9 +683,13 @@ html {
 }
 
 /* 性能：列表页 50 张玻璃卡，文章卡降一档模糊半径（视觉差异小，合成开销明显降低） */
+/* 列表页一次渲染 50 张卡 —— 每张一个 backdrop 层，实测会把帧率压到 23fps，
+   而模糊半径无关（8px 与 10px 同效），瓶颈是「图层数量」。
+   列表卡改为"只透不糊"：仍保留半透明底色（背后光晕透得上来），
+   去掉逐层模糊。列表背景本身接近均匀，糊与不糊肉眼差别很小。 */
 .dark article.card {
-  -webkit-backdrop-filter: blur(12px) saturate(155%) brightness(1.05);
-  backdrop-filter: blur(12px) saturate(155%) brightness(1.05);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 
 /* ---------- 3. 动效 ---------- */
@@ -657,6 +727,7 @@ html {
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
     background-image: linear-gradient(rgba(11, 15, 24, 0.94), rgba(11, 15, 24, 0.94));
+    transform: none;
     border-color: rgba(255, 255, 255, 0.12);
   }
 }

@@ -1,7 +1,7 @@
 {
   "name": "ai-news-web",
   "private": true,
-  "version": "0.10.0",
+  "version": "0.10.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,7 +9,8 @@
     "build:web": "vite build --base=/news/",
     "preview": "vite preview",
     "test": "vitest run --no-file-parallelism",
-    "bump:patch": "npm version patch --no-git-tag-version"
+    "bump:patch": "npm version patch --no-git-tag-version",
+    "see": "node scripts/see.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",
