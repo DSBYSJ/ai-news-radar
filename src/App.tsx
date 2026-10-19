@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { api } from './api.ts'
+import { applyRefraction, resetRefraction } from './utils/liquidGlass.ts'
 import { useBurstFeed } from './hooks/useBurstFeed.ts'
 import ListPage from './pages/ListPage.tsx'
 import OverviewPage from './pages/OverviewPage.tsx'
@@ -95,6 +96,30 @@ export default function App() {
   const [sources, setSources] = useState<SourceItem[]>([])
   const [running, setRunning] = useState<string>('')
   const [toasts, setToasts] = useState<{ id: number; text: string }[]>([])
+
+  // 液态玻璃折射：按元素尺寸生成 SVG 位移贴图并挂到 backdrop-filter 上。
+  // 只在深色模式生效（亮色模式保持原样）；内容变化 / 窗口尺寸变化后重扫。
+  useEffect(() => {
+    if (theme !== 'dark') {
+      // 切回亮色：把内联折射清掉，亮色模式保持原样
+      resetRefraction()
+      return
+    }
+    let raf = 0
+    const run = () => {
+      cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(() => applyRefraction())
+    }
+    run()
+    const mo = new MutationObserver(run)
+    mo.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style'] })
+    window.addEventListener('resize', run)
+    return () => {
+      cancelAnimationFrame(raf)
+      mo.disconnect()
+      window.removeEventListener('resize', run)
+    }
+  }, [theme, tab])
 
   // 突发实时推送（WebSocket）：采集到 z ≥ 2.5 的新突发时立即弹提示
   const { connected } = useBurstFeed((items) => {

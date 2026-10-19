@@ -445,8 +445,11 @@ html {
   background-attachment: fixed;
 }
 
-/* 极缓慢的极光漂移：让深色背景"活着"，但慢到几乎察觉不到（60s 一个来回）。
-   只动 transform，不触发重排；will-change 提前提升到合成层。 */
+/* 背景细节层（唯一的一条 body::before，勿重复定义）
+   ── 为什么需要它：液态玻璃的折射是"把背后的像拉弯"。
+      背后若只有平滑渐变，弯折前后几乎一样，效果等于看不见。
+      这层极淡的网格提供**可被弯折的结构**，卡片边缘的畸变才显形；
+      再叠两团柔光，配合 60s 极缓慢漂移，让玻璃里的像一直在微微流动。 */
 .dark body::before {
   content: '';
   position: fixed;
@@ -454,7 +457,9 @@ html {
   z-index: -1;
   pointer-events: none;
   background-image:
-    radial-gradient(38% 30% at 26% 24%, rgba(102, 112, 190, 0.20), transparent 70%),
+    repeating-linear-gradient(0deg, rgba(190, 210, 255, 0.075) 0 1px, transparent 1px 26px),
+    repeating-linear-gradient(90deg, rgba(190, 210, 255, 0.075) 0 1px, transparent 1px 26px),
+    radial-gradient(38% 30% at 26% 24%, rgba(102, 112, 190, 0.2), transparent 70%),
     radial-gradient(34% 28% at 72% 66%, rgba(64, 118, 160, 0.16), transparent 72%);
   will-change: transform;
   animation: aurora-drift 60s ease-in-out infinite alternate;
@@ -469,168 +474,52 @@ html {
   }
 }
 
-/* ---------- 2. 液态玻璃：所有"框" ---------- */
+/* ---------- 2. 液态玻璃：所有"框" ----------
+   折射（backdrop-filter: url(#lg-*)）由 src/utils/liquidGlass.ts 按元素尺寸
+   动态生成并挂上 —— 真折射必须依赖按尺寸计算的 SVG 位移贴图，纯 CSS 做不了。
+   这里只负责"玻璃的底色与切面"：
+     · 底色要够透，折射出来的像才看得见；
+     · 又要够暗，白字才读得清 —— 取 0.42~0.52 的深色薄雾；
+     · 顶部一道亮边 = 光打在玻璃切面上的高光。 */
 .dark .card,
 .dark .glass {
-  /* ⚠️ 关键：底色必须透明。
-     基础 .card 的 background-color 是 var(--surface)（不透明深色），
-     若不清掉，半透明渐变只是叠在它上面，backdrop-filter 糊的是看不见的东西，
-     玻璃就成了"假透"——看不出背后环境光。 */
+  /* 基础 .card 的 background-color 是不透明深色，必须清掉，否则折射被挡住 */
   background-color: transparent;
-  /* 边框做成透明，真正的"边框"由上面那层 conic-gradient 画出来 */
-  border: 1px solid transparent;
-  background-origin: border-box;
-  /*
-    三层：
-      A. 底色（padding-box）—— 薄，让背景透上来
-      B. 斜向反光（padding-box）—— 左上方的一抹光
-      C. 边框折光环（border-box）—— 液态玻璃的灵魂
-  */
-  background-image:
-    /* ⚠️ 方向修正：深色底上，玻璃应该是"更亮的那层霜面"，
-       而不是比背景更黑 —— 做成更黑就只是一块黑板，读不出玻璃。
-       这里用低透明度冷白，既让面板浮起来，又不会压掉背后的彩色光。 */
-    /* 高不透明度深色底（0.8）：既保住白字对比度，又让背后的彩色光"染"到玻璃上
-       —— 左边偏紫、右边偏青，不同区域颜色不同，这正是液态玻璃的高级感所在。
-       靠"透"来营造玻璃感是走不通的：透明一高文字就糊。 */
-    linear-gradient(rgba(12, 16, 27, 0.8), rgba(10, 14, 24, 0.86)),
-    /* 左上斜向反光 */
-    linear-gradient(158deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.008) 32%, rgba(255, 255, 255, 0) 58%),
-    /* 折光环按"光自左上"分配：顶部最亮，往右下迅速衰减到几乎不可见。
-       之前 0.62/0.10/0.02/0.16/0.05/0.34 的分布太均匀，四边亮度接近，
-       读起来像描边而不像切面。 */
-    conic-gradient(
-      from 200deg at 50% 50%,
-      rgba(255, 255, 255, 0.85) 0deg,
-      rgba(255, 255, 255, 0.1) 40deg,
-      rgba(255, 255, 255, 0.03) 110deg,
-      rgba(255, 255, 255, 0.05) 180deg,
-      rgba(255, 255, 255, 0.14) 245deg,
-      rgba(255, 255, 255, 0.52) 305deg,
-      rgba(255, 255, 255, 0.85) 360deg
-    );
-  background-clip: padding-box, padding-box, border-box;
-  /* 磨砂（blur）→ 增饱和/提亮（模拟玻璃透光增强）→ 折射置换（url 滤镜）
-     顺序很重要：先糊再折射，边缘才不会出现锯齿状的硬位移 */
-  -webkit-backdrop-filter: blur(20px) saturate(210%);
-  backdrop-filter: blur(20px) saturate(210%);
+  background-image: linear-gradient(rgba(8, 11, 18, 0.4), rgba(8, 11, 18, 0.5));
+  border: 1px solid rgba(255, 255, 255, 0.14);
   box-shadow:
-    /* 内侧四边：左上打亮、右下压暗 → 切面棱感 */
-    inset 0 1px 0 rgba(255, 255, 255, 0.34),
-    inset 1px 0 0 rgba(255, 255, 255, 0.13),
-    inset -1px 0 0 rgba(255, 255, 255, 0.05),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.5),
-    /* 内侧一圈极淡的折射光 */
-    inset 0 0 24px -6px rgba(150, 180, 255, 0.10),
-    /* 投影：贴地的短影 + 拉开距离的长影 */
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.45),
     0 1px 3px rgba(0, 0, 0, 0.5),
     0 26px 56px -30px rgba(0, 0, 0, 0.95);
   transition:
     transform 0.42s cubic-bezier(0.22, 1, 0.36, 1),
     box-shadow 0.42s cubic-bezier(0.22, 1, 0.36, 1),
-    background-color 0.3s ease;
+    border-color 0.3s ease;
 }
 
-/* ---------- 2b. 边缘折射：液态玻璃最核心的一笔 ----------
-   调研 + 实测结论：SVG 的 feDisplacementMap 经 backdrop-filter:url() 在当前 Chrome
-   里「语法接受但不生效」——开关滤镜的像素差异 0.0%，帧率却从 62 掉到 19。
-   所以不能照搬文献里的 SVG 方案，改用可真实渲染的等效做法：
-
-   给卡片加一层「边缘环」伪元素：
-     · mask 用 content-box + exclude 裁出一圈 16px 环带，只覆盖边框区域
-       → 中间是透明的，中间内容完全不变形（这正是文献强调的核心特征）；
-     · 环带上做轻量 backdrop-filter 并 scale(1.02)：
-       缩放会让它采样到"偏移了一点"的背景，环带里就出现被拉动的像，
-       视觉上等价于边缘折射（已单独实测：缩放确实会位移背景内容）。
-
-   列表页 50 张卡不开这层（每张多一个 backdrop 层会拖垮合成器）。 */
-/* 只在悬停时挂载这层（content:none 表示不生成盒子，静态下零开销）。
-   液态玻璃本来就是"被触碰会流动"的材质，折射出现在交互瞬间反而更贴切。 */
-.dark .card-hover::before,
-.dark .glass.card-hover::before {
-  content: none;
-}
-
-.dark .card-hover:hover::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-  padding: 16px;
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  mask-composite: exclude;
-  transform: scale(1.02);
-  -webkit-backdrop-filter: brightness(1.28) saturate(1.4);
-  backdrop-filter: brightness(1.28) saturate(1.4);
-}
-
-/* KPI 卡原本用 ::before 画顶部紫线，会被上面的折射环占用（同一伪元素）。
-   深色下改由 conic 边框的顶部高光承担，视觉不损失。 */
-.dark .card-accent::before {
-  background-image: none;
-  height: auto;
-}
-
-/* 列表卡：不开启边缘折射环（性能优先） */
-.dark article.card::before {
-  display: none;
-}
-
-/* 悬停时轻微"膨胀"（动态变形）——液态玻璃被触碰会流动 */
+/* 悬停时轻微"膨胀"——液态玻璃被触碰会流动 */
 .dark .card-hover:hover {
   transform: translateY(-2px) scale(1.004);
+  border-color: rgba(255, 255, 255, 0.24);
 }
 
-/* 悬停：玻璃被"擦亮"—— 折光环变亮、折射略增强，整体微微上浮 */
+/* 悬停：折光环变亮、投影加深（折射强度由 JS 侧统一，不在这里改） */
 .dark .card-hover:hover {
-  background-image:
-    linear-gradient(rgba(14, 19, 32, 0.74), rgba(12, 16, 27, 0.8)),
-    linear-gradient(158deg, rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0.018) 32%, rgba(255, 255, 255, 0) 58%),
-    conic-gradient(
-      from 210deg at 50% 50%,
-      rgba(255, 255, 255, 0.88) 0deg,
-      rgba(255, 255, 255, 0.18) 34deg,
-      rgba(255, 255, 255, 0.05) 96deg,
-      rgba(255, 255, 255, 0.24) 168deg,
-      rgba(255, 255, 255, 0.09) 232deg,
-      rgba(255, 255, 255, 0.52) 300deg,
-      rgba(255, 255, 255, 0.88) 360deg
-    );
-  -webkit-backdrop-filter: blur(22px) saturate(225%);
-  backdrop-filter: blur(22px) saturate(225%);
+  background-image: linear-gradient(rgba(10, 13, 22, 0.24), rgba(10, 13, 22, 0.34));
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.34),
-    inset 1px 0 0 rgba(255, 255, 255, 0.14),
-    inset -1px 0 0 rgba(255, 255, 255, 0.07),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.42),
-    inset 0 0 30px -6px rgba(160, 190, 255, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.45),
     0 2px 6px rgba(0, 0, 0, 0.5),
     0 34px 66px -30px rgba(0, 0, 0, 1);
 }
 
 /* 分段控件（页签条）：同款液态玻璃，尺度更小 */
 .dark .seg {
-  background-color: transparent;
-  border: 1px solid transparent;
-  background-origin: border-box;
-  background-image:
-    linear-gradient(rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.07)),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0) 62%),
-    conic-gradient(
-      from 210deg at 50% 50%,
-      rgba(255, 255, 255, 0.42) 0deg,
-      rgba(255, 255, 255, 0.06) 40deg,
-      rgba(255, 255, 255, 0.10) 190deg,
-      rgba(255, 255, 255, 0.30) 300deg,
-      rgba(255, 255, 255, 0.42) 360deg
-    );
-  background-clip: padding-box, padding-box, border-box;
-  -webkit-backdrop-filter: blur(12px) saturate(165%);
-  backdrop-filter: blur(12px) saturate(165%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 8px 22px -16px rgba(0, 0, 0, 0.9);
+  /* 页签条：薄玻璃，折射由 JS 挂上 */
+  background-color: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 8px 22px -16px rgba(0, 0, 0, 0.9);
 }
 
 /* 选中项 = 高透玻璃（无高斯模糊）
