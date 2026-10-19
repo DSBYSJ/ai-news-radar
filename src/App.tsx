@@ -100,11 +100,9 @@ export default function App() {
   // 液态玻璃折射：按元素尺寸生成 SVG 位移贴图并挂到 backdrop-filter 上。
   // 只在深色模式生效（亮色模式保持原样）；内容变化 / 窗口尺寸变化后重扫。
   useEffect(() => {
-    if (theme !== 'dark') {
-      // 切回亮色：把内联折射清掉，亮色模式保持原样
-      resetRefraction()
-      return
-    }
+    // 深色与亮色都做液态玻璃（两端玻璃的底色与参数不同，见 index.css / liquidGlass.ts）。
+    // 切换主题时先清掉上一轮内联样式，避免上一模式的滤镜/参数残留。
+    resetRefraction()
     let raf = 0
     const run = () => {
       cancelAnimationFrame(raf)

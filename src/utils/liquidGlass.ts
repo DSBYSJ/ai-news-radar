@@ -183,9 +183,14 @@ export function applyRefraction(root: ParentNode = document.body): number {
     const radius = Number.parseFloat(getComputedStyle(el).borderTopLeftRadius) || 16
     const id = getRefractionFilter(rect.width, rect.height, radius)
     if (!id) return
-    if (el.dataset.lgFilter === id) return
+    // 亮色模式下背景是浅色彩场，饱和度再拉高会发艳，用更克制的参数
+    const isDark = document.documentElement.classList.contains('dark')
+    const value = isDark
+      ? `url(#${id}) blur(0.4px) saturate(1.35)`
+      : `url(#${id}) blur(0.5px) saturate(1.12)`
+    if (el.dataset.lgFilter === id && el.dataset.lgMode === (isDark ? 'd' : 'l')) return
     el.dataset.lgFilter = id
-    const value = `url(#${id}) blur(0.4px) saturate(1.35)`
+    el.dataset.lgMode = isDark ? 'd' : 'l'
     el.style.setProperty('backdrop-filter', value)
     el.style.setProperty('-webkit-backdrop-filter', value)
     applied += 1

@@ -424,43 +424,41 @@ html {
    可折射，卡片就只是"灰方块"。液态玻璃的前提是**背后有可观的光**。
    这版：同一冷色族内做明暗层次，靠"光的形状"而非纯色相撑起高级感。 */
 .dark body {
-  background-color: #070810;
-  /* 液态玻璃的前提：背后必须真的有可观的光。
-     之前光团强度太低（alpha .2-.5 且范围小），背景实际亮度只有 rgb≈20，
-     blur+saturate 之后卡片几乎还是黑的 —— 玻璃读不出来。
-     这里把光团放大、提亮、提纯，让卡片后面真的"有东西可透"。 */
+  background-color: #06070e;
+  /* 背景分两类元素：
+       A. 大色场 —— 决定整体色调与"高级感"，全部低饱和、超大面积、柔和衰减；
+       B. 局部亮斑 —— 尺寸小、亮度略高，是有明显亮度梯度的"结构"。
+     折射需要背后有梯度可弯折：A 提供氛围，B 才是折射显形的载体。
+     上一版用网格提供结构，虽然有效但太"工程感"，这里换成亮斑。 */
   background-image:
-    /* 主光：左中偏紫，压在 KPI / 简报区后方 */
-    radial-gradient(58% 48% at 22% 32%, rgba(126, 104, 255, 0.62) 0%, rgba(96, 78, 220, 0.3) 36%, transparent 70%),
-    /* 副光：右中偏青，压在问答助手 / 实体区后方 */
-    radial-gradient(50% 44% at 84% 52%, rgba(46, 156, 196, 0.46) 0%, rgba(34, 112, 152, 0.2) 40%, transparent 72%),
-    /* 左下冷光 */
-    radial-gradient(52% 38% at 24% 92%, rgba(64, 100, 214, 0.4) 0%, transparent 70%),
-    /* 右下暖色点缀（平衡全冷） */
-    radial-gradient(40% 32% at 78% 94%, rgba(168, 104, 82, 0.28) 0%, transparent 68%),
+    /* A. 大色场 */
+    radial-gradient(64% 52% at 18% 26%, rgba(122, 92, 255, 0.5) 0%, rgba(86, 66, 190, 0.22) 40%, transparent 72%),
+    radial-gradient(52% 44% at 84% 20%, rgba(0, 170, 210, 0.34) 0%, rgba(0, 120, 150, 0.13) 44%, transparent 74%),
+    radial-gradient(58% 48% at 78% 84%, rgba(228, 90, 160, 0.26) 0%, rgba(160, 60, 110, 0.1) 46%, transparent 76%),
+    radial-gradient(50% 42% at 20% 90%, rgba(60, 120, 255, 0.3) 0%, transparent 70%),
     /* 顶部环境光 */
-    radial-gradient(86% 34% at 50% -8%, rgba(110, 96, 240, 0.4), transparent 70%),
-    /* 暗角：只压最外圈，别把中间的光也吃掉 */
-    radial-gradient(135% 110% at 50% 46%, transparent 46%, rgba(0, 0, 0, 0.7) 100%);
+    radial-gradient(90% 36% at 50% -8%, rgba(110, 96, 240, 0.34), transparent 72%),
+    /* 暗角 */
+    radial-gradient(132% 104% at 50% 44%, transparent 44%, rgba(0, 0, 0, 0.66) 100%);
   background-attachment: fixed;
 }
 
-/* 背景细节层（唯一的一条 body::before，勿重复定义）
-   ── 为什么需要它：液态玻璃的折射是"把背后的像拉弯"。
-      背后若只有平滑渐变，弯折前后几乎一样，效果等于看不见。
-      这层极淡的网格提供**可被弯折的结构**，卡片边缘的畸变才显形；
-      再叠两团柔光，配合 60s 极缓慢漂移，让玻璃里的像一直在微微流动。 */
+/* 局部亮斑层（唯一的一条 body::before，勿重复定义）
+   ── 液态玻璃的折射是"把背后的像拉弯"。背后若只有平滑大色场，弯折前后几乎一样，
+      效果等于看不见。这里放几团**尺寸小、亮度略高**的亮斑：
+      它们有明显亮度梯度，被折射弯折时会产生可见的鼓包/偏移，
+      同时不像网格那样带"工程感"。再配 60s 极缓慢漂移，玻璃里的像会一直微动。 */
 .dark body::before {
   content: '';
   position: fixed;
-  inset: -12%;
+  inset: -10%;
   z-index: -1;
   pointer-events: none;
   background-image:
-    repeating-linear-gradient(0deg, rgba(190, 210, 255, 0.075) 0 1px, transparent 1px 26px),
-    repeating-linear-gradient(90deg, rgba(190, 210, 255, 0.075) 0 1px, transparent 1px 26px),
-    radial-gradient(38% 30% at 26% 24%, rgba(102, 112, 190, 0.2), transparent 70%),
-    radial-gradient(34% 28% at 72% 66%, rgba(64, 118, 160, 0.16), transparent 72%);
+    radial-gradient(11% 9% at 28% 34%, rgba(186, 200, 255, 0.22) 0%, transparent 66%),
+    radial-gradient(9% 7% at 70% 56%, rgba(255, 196, 235, 0.18) 0%, transparent 66%),
+    radial-gradient(13% 10% at 46% 76%, rgba(150, 220, 255, 0.2) 0%, transparent 68%),
+    radial-gradient(8% 6% at 84% 38%, rgba(200, 210, 255, 0.16) 0%, transparent 66%);
   will-change: transform;
   animation: aurora-drift 60s ease-in-out infinite alternate;
 }
@@ -472,6 +470,72 @@ html {
   to {
     transform: translate3d(1.4%, 1.0%, 0) scale(1.06);
   }
+}
+
+/* ============================================================================
+   亮色模式 · 液态玻璃（本轮新增，之前亮色是完全没动的）
+   ----------------------------------------------------------------------------
+   亮色下的玻璃与深色相反：面板是**比背景更白更亮**的那一层，
+   文字是深色，所以透一点背景色彩完全不影响可读性 —— 反而能看出玻璃材质。
+   ============================================================================ */
+
+/* 亮色背景：浅色彩场。之前是近乎纯色 + 两团极淡光晕，颜色太寡淡。 */
+html:not(.dark) body {
+  background-color: #eef1f8;
+  background-image:
+    radial-gradient(60% 50% at 14% 16%, rgba(150, 132, 255, 0.3) 0%, rgba(150, 132, 255, 0.1) 44%, transparent 72%),
+    radial-gradient(52% 44% at 88% 10%, rgba(86, 190, 245, 0.28) 0%, rgba(86, 190, 245, 0.09) 46%, transparent 74%),
+    radial-gradient(56% 46% at 82% 86%, rgba(255, 176, 120, 0.24) 0%, rgba(255, 176, 120, 0.07) 46%, transparent 76%),
+    radial-gradient(48% 40% at 16% 88%, rgba(120, 220, 190, 0.24) 0%, transparent 70%),
+    radial-gradient(120% 60% at 50% -10%, rgba(255, 255, 255, 0.9), transparent 66%);
+  background-attachment: fixed;
+}
+
+/* 亮色的局部亮斑：给折射提供梯度（与深色同一思路，但用高光而非彩色光） */
+html:not(.dark) body::before {
+  content: '';
+  position: fixed;
+  inset: -10%;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    radial-gradient(14% 11% at 30% 30%, rgba(255, 255, 255, 0.85) 0%, transparent 68%),
+    radial-gradient(11% 9% at 72% 52%, rgba(255, 255, 255, 0.7) 0%, transparent 68%),
+    radial-gradient(12% 10% at 44% 78%, rgba(255, 255, 255, 0.6) 0%, transparent 70%);
+  will-change: transform;
+  animation: aurora-drift 60s ease-in-out infinite alternate;
+}
+
+/* 亮色玻璃面板 */
+html:not(.dark) .card,
+html:not(.dark) .glass {
+  background-color: rgba(255, 255, 255, 0.58);
+  background-image: linear-gradient(rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.16));
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 1),
+    0 1px 2px rgba(16, 24, 40, 0.05),
+    0 18px 40px -26px rgba(16, 24, 40, 0.3);
+}
+
+html:not(.dark) .card-hover:hover {
+  transform: translateY(-2px) scale(1.004);
+  border-color: rgba(255, 255, 255, 1);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 1),
+    0 2px 6px rgba(16, 24, 40, 0.07),
+    0 26px 54px -26px rgba(16, 24, 40, 0.34);
+}
+
+html:not(.dark) .seg {
+  background-color: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 6px 16px -12px rgba(16, 24, 40, 0.3);
+}
+
+html:not(.dark) .status-bar {
+  background-color: rgba(255, 255, 255, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.8);
 }
 
 /* ---------- 2. 液态玻璃：所有"框" ----------
@@ -603,8 +667,12 @@ html {
     transform: none;
   }
 }
+/* ⚠️ 用 backwards 而不是 both：both 会让动画结束后仍保留 transform，
+   而任何 transform（哪怕是等价单位矩阵）都会成为 position:fixed 后代的包含块，
+   把 fixed 遮罩/浮层困在页面容器里 —— 弹窗盖不住整页的 bug 就是这么来的。
+   动画的 to 状态本身就等于元素的自然状态，所以 backwards 视觉上无差异。 */
 .page-enter {
-  animation: page-enter 0.44s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: page-enter 0.44s cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
 
 /* ---------- 4. 无障碍与降级 ---------- */

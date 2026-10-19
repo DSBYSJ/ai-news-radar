@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import type { ReactNode } from 'react'
 
 interface Props {
@@ -35,7 +36,14 @@ export default function Modal({ open, onClose, title, subtitle, children, maxWid
 
   if (!open) return null
 
-  return (
+  /*
+   * ⚠️ 必须用 portal 挂到 document.body。
+   * 页面内容包在 .page-enter 里（页签切换动画），它带的 transform 会成为
+   * position:fixed 后代的**包含块** —— 遮罩会缩成内容区大小、只盖住一小块，
+   * 页面标题等内容依然可见并与弹窗文字重叠（实际出现过这个 bug）。
+   * 挂到 body 才能保证 fixed 相对视口定位、且不受祖先层叠上下文影响。
+   */
+  return createPortal(
     <div
       className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/70 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-[calc(0.75rem+env(safe-area-inset-top))] backdrop-blur-sm sm:p-4 sm:pb-[calc(1rem+env(safe-area-inset-bottom))] sm:pt-[calc(1rem+env(safe-area-inset-top))]"
       onClick={onClose}
@@ -57,6 +65,7 @@ export default function Modal({ open, onClose, title, subtitle, children, maxWid
         {subtitle}
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
