@@ -1,13 +1,27 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api.ts'
 import EditionView from '../components/EditionView.tsx'
+import PeriodView from '../components/PeriodView.tsx'
 import Modal from '../components/Modal.tsx'
-import type { Edition, SummaryListItem } from '../types.ts'
+import type { Edition, PeriodReport, SummaryListItem } from '../types.ts'
 
 /**
  * 每日简报：日期网格 + 点击看当天**结构化日报**（头条 / 分类分区 / 快讯）。
  * 版式思路参考 AIHOT（MIT）：一件事只出现一次，每条给来源与原文链接。
  */
+/** UTC 日期加减（周报上一期 = 减 7 天） */
+function shiftDays(dateIso: string, days: number): string {
+  const d = new Date(`${dateIso}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + days)
+  return d.toISOString().slice(0, 10)
+}
+
+/** 上个月 1 号（月报上一期） */
+function prevMonthStart(dateIso: string): string {
+  const [y, m] = dateIso.split('-').map(Number)
+  return new Date(Date.UTC(y, m - 2, 1)).toISOString().slice(0, 10)
+}
+
 export default function SummaryPage() {
   const [items, setItems] = useState<SummaryListItem[]>([])
   const [open, setOpen] = useState('')
@@ -17,6 +31,10 @@ export default function SummaryPage() {
   const [genDate, setGenDate] = useState('')
   const [message, setMessage] = useState('')
   const [error, setError] = useState<string | null>(null)
+  /** 日 / 周 / 月：周报月报是确定性统计汇编，不额外调模型 */
+  const [view, setView] = useState<'day' | 'week' | 'month'>('day')
+  const [period, setPeriod] = useState<PeriodReport | null>(null)
+  const [anchor, setAnchor] = useState('')
 
   const loadList = useCallback(async (): Promise<SummaryListItem[]> => {
     setLoading(true)
@@ -58,6 +76,26 @@ export default function SummaryPage() {
     }
   }, [open])
 
+  useEffect(() => {
+    if (view === 'day') {
+      setPeriod(null)
+      return
+    }
+    let alive = true
+    setPeriod(null)
+    api
+      .period(view, anchor || undefined)
+      .then((r) => {
+        if (alive) setPeriod(r)
+      })
+      .catch(() => {
+        if (alive) setPeriod(null)
+      })
+    return () => {
+      alive = false
+    }
+  }, [view, anchor])
+
   const generate = async () => {
     setGenerating(true)
     setMessage('')
@@ -93,6 +131,72 @@ export default function SummaryPage() {
         </p>
       </header>
 
+      {/* 日 / 周 / 月 */}
+      <div className="inline-flex rounded-xl border border-[var(--line)] bg-slate-100/70 p-1 dark:bg-white/5">
+        {(
+          [
+            ['day', '日报'],
+            ['week', '周报'],
+            ['month', '月报'],
+          ] as ['day' | 'week' | 'month', string][]
+        ).map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => {
+              setView(key)
+              setAnchor('')
+            }}
+            className={`rounded-lg px-3 py-1 text-xs transition ${
+              view === key
+                ? 'bg-white font-medium text-slate-900 shadow-sm dark:bg-white/10 dark:text-white'
+                : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {view !== 'day' && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                if (!period) return
+                setAnchor(view === 'week' ? shiftDays(period.start, -7) : prevMonthStart(period.start))
+              }}
+              className="rounded-lg border border-[var(--line)] px-2.5 py-1 text-xs text-slate-600 dark:text-slate-300"
+            >
+              ‹ 上一期
+            </button>
+            <button
+              type="button"
+              onClick={() => setAnchor('')}
+              className="rounded-lg border border-[var(--line)] px-2.5 py-1 text-xs text-slate-600 dark:text-slate-300"
+            >
+              最近一期
+            </button>
+            <span className="text-[11px] text-slate-400 dark:text-slate-500">
+              {view === 'week' ? '按周一至周日统计（UTC）' : '按自然月统计（UTC）'}
+            </span>
+          </div>
+          <div className="card p-4">
+            {period ? (
+              <PeriodView report={period} />
+            ) : (
+              <p className="flex items-center gap-2 py-6 text-xs text-slate-500 dark:text-slate-400">
+                <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-slate-300 border-t-violet-600" />
+                正在汇总本期数据…
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {view === 'day' && (
+        <>
       <div className="card flex flex-wrap items-end gap-3 p-4">
         <label className="flex flex-col gap-1 text-xs text-slate-500 dark:text-slate-400">
           生成指定日期（UTC）
@@ -193,6 +297,8 @@ export default function SummaryPage() {
           </p>
         )}
       </Modal>
+        </>
+      )}
     </div>
   )
 }

@@ -4,6 +4,7 @@ import type { Category } from './categories.ts'
 import { chat } from './deepseek.ts'
 import { normalizeEntity } from './entities.ts'
 import { classifyByRules } from './heuristic.ts'
+import { applySourceWeight } from './scoring.ts'
 import { parseStage1, parseStage2, type Stage1Result } from './parse.ts'
 import { buildStage1Prompt, buildStage2Prompt } from './prompts.ts'
 
@@ -136,14 +137,18 @@ export async function runProcessing(opts: ProcessOptions = {}): Promise<ProcessS
       // 优先按序号取，其次容忍模型直接回真实 id
       const hit = byId.get(i + 1) ?? byId.get(row.id)
       const picked: { category: Category; score: number; reason?: string } =
-        hit ?? classifyByRules(row.title, row.summary ?? '', row.weight)
+        hit ?? classifyByRules(row.title, row.summary ?? '')
       if (!hit) usedFallback = true
 
       const mode = hit ? 'ai' : 'heuristic'
+      // 信源权重统一在这里生效：官方一手 +5，聚合 -5，媒体 0
+      const weighted = applySourceWeight(picked.score, row.weight)
       const scoreParts = JSON.stringify({
         mode,
         reason: picked.reason ?? '',
         sourceWeight: row.weight,
+        baseScore: weighted.baseScore,
+        weightBonus: weighted.bonus,
       })
 
       const res = insertArticle.run(
@@ -152,7 +157,7 @@ export async function runProcessing(opts: ProcessOptions = {}): Promise<ProcessS
         row.title,
         row.summary ?? null,
         picked.category,
-        picked.score,
+        weighted.score,
         scoreParts,
         row.published_at,
         now,

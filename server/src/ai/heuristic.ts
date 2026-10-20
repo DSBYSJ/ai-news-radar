@@ -42,18 +42,15 @@ export interface HeuristicResult {
   reason: string
 }
 
-export function classifyByRules(title: string, summary: string, sourceWeight = 1): HeuristicResult {
+export function classifyByRules(title: string, summary: string): HeuristicResult {
   const text = `${title}\n${summary}`.toLowerCase()
 
   for (const rule of RULES) {
     for (const kw of rule.keywords) {
       if (text.includes(kw)) {
-        // 命中即给基础分；来源权重越高越值得看；标题命中比摘要命中更值钱
+        // 只给基础分；信源权重统一在 pipeline 里用 applySourceWeight 加减（避免两处口径不一致）
         const inTitle = title.toLowerCase().includes(kw)
-        const score = Math.max(
-          0,
-          Math.min(100, (inTitle ? 55 : 45) + sourceWeight * 5 + (rule.category === 'other' ? 0 : 5)),
-        )
+        const score = Math.max(0, Math.min(100, (inTitle ? 55 : 45) + (rule.category === 'other' ? 0 : 5)))
         return { category: rule.category, score, reason: `启发式命中「${kw}」（${inTitle ? '标题' : '摘要'}）` }
       }
     }

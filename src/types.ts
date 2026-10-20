@@ -274,3 +274,21 @@ export interface Edition {
   brief: { title: string; content: string; model: string; updatedAt: string } | null
   stats: { total: number; crossSource: number; byCategory: Record<string, number> }
 }
+
+// ---------- 周报 / 月报 ----------
+export interface PeriodReport {
+  kind: 'week' | 'month'
+  label: string
+  start: string
+  end: string
+  /** 周期是否还没结束（本周只过了几天） */
+  partial: boolean
+  daysElapsed: number
+  deltaNote: string | null
+  totals: { articles: number; perDay: number; crossEvents: number; bursts: number; deltaPct: number | null }
+  categories: { category: string; label: string; count: number; share: number }[]
+  topEvents: { title: string; sourceCount: number; articleCount: number; category: string; date: string }[]
+  topEntities: { name: string; count: number }[]
+  bursts: { date: string; category: string; count: number; z: number }[]
+  highlights: string[]
+}

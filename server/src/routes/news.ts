@@ -3,6 +3,7 @@ import { rebuildEvents } from '../analytics/events.ts'
 import { categoryRatio, crossSource, dailyVolume, topEntities, velocity } from '../analytics/trend.ts'
 import { widgetSnapshot } from '../analytics/widget.ts'
 import { dailyEdition } from '../analytics/edition.ts'
+import { periodReport } from '../analytics/period.ts'
 import { CATEGORY_LABELS, type Category } from '../ai/categories.ts'
 import { runProcessing } from '../ai/pipeline.ts'
 import { askQuestion } from '../ai/ask.ts'
@@ -224,6 +225,18 @@ export async function newsRoutes(app: FastifyInstance): Promise<void> {
       .prepare('SELECT id, name, url, kind, weight, enabled, last_fetch_at, last_status FROM sources ORDER BY id')
       .all(),
   }))
+
+  /** 周报 / 月报（确定性统计汇编，不额外调模型，数字可追溯） */
+  app.get('/api/news/period', async (req) => {
+    const q = req.query as Query
+    const db = getDb()
+    const latest = (db.prepare('SELECT MAX(date(published_at)) AS d FROM articles').get() as { d: string | null }).d
+    const anchor =
+      typeof q.anchor === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(q.anchor)
+        ? q.anchor
+        : (latest ?? new Date().toISOString().slice(0, 10))
+    return periodReport(db, q.kind === 'month' ? 'month' : 'week', anchor)
+  })
 
   /** 结构化日报：头条 + 分类分区 + 快讯（简报页按版面渲染） */
   app.get('/api/news/edition', async (req) => {

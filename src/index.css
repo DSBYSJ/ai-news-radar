@@ -699,3 +699,26 @@ html:not(.dark) .status-bar {
   }
 }
 
+
+/* ============ 原生下拉框在深色模式下的可读性 ============
+   Windows 上 <select> 展开的列表默认是浅底，配深色站的浅色文字就看不见了。
+   color-scheme 让浏览器/系统按深色渲染原生控件（含滚动条），option 再显式给色兜底。 */
+html {
+  color-scheme: light;
+}
+html.dark {
+  color-scheme: dark;
+}
+select option {
+  background-color: #ffffff;
+  color: #101423;
+}
+html.dark select option {
+  background-color: #141a25;
+  color: #e8ecf5;
+}
+html.dark select option:checked,
+html.dark select option:hover {
+  background-color: #2b2f45;
+  color: #ffffff;
+}

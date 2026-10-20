@@ -10,6 +10,7 @@ import type {
   ForecastResponse,
   GenerateSummaryResponse,
   Health,
+  PeriodReport,
   SentimentResponse,
   SourceItem,
   SummaryDetail,
@@ -73,6 +74,7 @@ export const api = {
   summaries: (limit = 60) => get<{ items: SummaryListItem[] }>('/summaries', { limit }),
   summary: (date: string) => get<SummaryDetail>(`/summaries/${date}`),
   edition: (date?: string) => get<Edition>('/edition', { date }),
+  period: (kind: 'week' | 'month', anchor?: string) => get<PeriodReport>('/period', { kind, anchor }),
   generateSummary: (date?: string, force = true) =>
     post<GenerateSummaryResponse>('/summaries/generate', { date, force }),
 }
