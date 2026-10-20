@@ -846,3 +846,30 @@ html:not(.dark) .card > header span[aria-hidden='true'] {
   background-image: none;
   background-color: var(--accent);
 }
+
+
+/* ==========================================================================
+   主题切换过渡：只在切换瞬间挂 .theme-switching（300ms 后移除）
+   —— 常驻 transition 会让长列表滚动与 SVG 重绘变卡，所以按需启用。
+   ========================================================================== */
+html.theme-switching,
+html.theme-switching body,
+html.theme-switching .card,
+html.theme-switching .chip,
+html.theme-switching .seg {
+  transition:
+    background-color 0.3s ease,
+    color 0.3s ease,
+    border-color 0.3s ease,
+    box-shadow 0.3s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.theme-switching,
+  html.theme-switching body,
+  html.theme-switching .card,
+  html.theme-switching .chip,
+  html.theme-switching .seg {
+    transition: none;
+  }
+}

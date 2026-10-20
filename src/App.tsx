@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { api } from './api.ts'
 import { applyRefraction, resetRefraction } from './utils/liquidGlass.ts'
@@ -20,18 +20,18 @@ function initialTheme(): Theme {
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
 }
 
-function SunIcon() {
+function SunIcon({ className = 'h-4 w-4' }: { className?: string }) {
   return (
-    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
       <circle cx="12" cy="12" r="4" />
       <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
     </svg>
   )
 }
 
-function MoonIcon() {
+function MoonIcon({ className = 'h-4 w-4' }: { className?: string }) {
   return (
-    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />
     </svg>
   )
@@ -112,8 +112,21 @@ export default function App() {
     return () => clearTimeout(timer)
   }, [toasts])
 
+  // 首次挂载不播过渡（否则进页面会闪一下）
+  const firstThemeRun = useRef(true)
+
   useEffect(() => {
-    document.documentElement.classList.toggle('dark', theme === 'dark')
+    const root = document.documentElement
+    if (!firstThemeRun.current) {
+      // 切主题的瞬间挂 300ms 过渡类：背景/文字/边框颜色平滑过渡，结束后移除
+      // —— 常驻 transition 会让长列表滚动与 SVG 重绘变卡。
+      root.classList.add('theme-switching')
+      // 强制回流：过渡类与颜色变化在同一帧发生时，浏览器会合并成"无过渡"
+      void root.offsetHeight
+    }
+    root.classList.toggle('dark', theme === 'dark')
+    firstThemeRun.current = false
+    const timer = window.setTimeout(() => root.classList.remove('theme-switching'), 320)
     localStorage.setItem('theme', theme)
 
     // 安卓壳：状态栏图标颜色跟随站内主题（浏览器里没有插件，静默跳过）。
@@ -124,6 +137,8 @@ export default function App() {
       }
     ).Capacitor?.Plugins?.StatusBar
     statusBar?.setStyle?.({ style: theme === 'dark' ? 'DARK' : 'LIGHT' }).catch(() => {})
+
+    return () => window.clearTimeout(timer)
   }, [theme])
 
   const loadMeta = useCallback(async () => {
@@ -167,7 +182,7 @@ export default function App() {
     'dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-300 dark:hover:border-white/25 dark:hover:text-white'
   const btnIcon =
     'inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200/90 bg-white/70 text-slate-500 backdrop-blur transition ' +
-    'hover:border-slate-300 hover:text-slate-900 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-400 dark:hover:border-white/25 dark:hover:text-white'
+    'hover:border-slate-300 hover:text-slate-900 active:scale-90 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-400 dark:hover:border-white/25 dark:hover:text-white'
 
   // 安全区适配（安卓 App edge-to-edge 下避让状态栏与手势区；桌面端 env() 为 0，不受影响）
   return (
@@ -220,11 +235,24 @@ export default function App() {
             </button>
             <button
               type="button"
-              aria-label="切换深色模式"
+              aria-label={theme === 'dark' ? '切换到浅色模式' : '切换到深色模式'}
+              aria-pressed={theme === 'dark'}
               onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
               className={btnIcon}
             >
-              {theme === 'dark' ? <SunIcon /> : <MoonIcon />}
+              {/* 两个图标叠放：当前的转 0° 淡入，另一个转 -90° 缩 50% 淡出 */}
+              <span className="relative block h-4 w-4">
+                <SunIcon
+                  className={`absolute inset-0 h-4 w-4 transition-all duration-500 ease-[cubic-bezier(0.22,0.68,0,1)] motion-reduce:transition-none ${
+                    theme === 'dark' ? 'rotate-0 scale-100 opacity-100' : '-rotate-90 scale-50 opacity-0'
+                  }`}
+                />
+                <MoonIcon
+                  className={`absolute inset-0 h-4 w-4 transition-all duration-500 ease-[cubic-bezier(0.22,0.68,0,1)] motion-reduce:transition-none ${
+                    theme === 'dark' ? 'rotate-90 scale-50 opacity-0' : 'rotate-0 scale-100 opacity-100'
+                  }`}
+                />
+              </span>
             </button>
           </div>
         </div>
