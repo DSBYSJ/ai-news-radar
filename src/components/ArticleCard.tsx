@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { api } from '../api.ts'
 import type { Article } from '../types.ts'
 import { CATEGORY_COLORS, formatDateTime } from '../utils/format.ts'
 
@@ -16,8 +17,24 @@ import { CATEGORY_COLORS, formatDateTime } from '../utils/format.ts'
  */
 export default function ArticleCard({ article }: { article: Article }) {
   const [open, setOpen] = useState(false)
+  // 站内正文：只有源提供全文（hasContent）时才拉，避免每次都请求
+  const [content, setContent] = useState<string | null>(null)
+  const [loadingContent, setLoadingContent] = useState(false)
   const accent = CATEGORY_COLORS[article.category] ?? '#9aa3ad'
   const crossSource = article.sourceCount !== null && article.sourceCount >= 2
+
+  const loadContent = async (): Promise<void> => {
+    if (content !== null || loadingContent) return
+    setLoadingContent(true)
+    try {
+      const res = await api.articleContent(article.id)
+      setContent(res.hasContent ? res.content : '')
+    } catch {
+      setContent('')
+    } finally {
+      setLoadingContent(false)
+    }
+  }
 
   return (
     <article className="card card-hover group relative overflow-hidden">
@@ -118,6 +135,32 @@ export default function ArticleCard({ article }: { article: Article }) {
                     </span>
                   ))}
                 </div>
+              )}
+
+              {article.hasContent && content === null && (
+                <button
+                  type="button"
+                  onClick={() => void loadContent()}
+                  disabled={loadingContent}
+                  className="inline-flex items-center gap-1 rounded-full border border-[var(--line)] px-2.5 py-1 text-[12px] text-slate-600 transition hover:border-violet-300 hover:text-violet-700 disabled:opacity-50 dark:text-slate-300 dark:hover:border-violet-500/40 dark:hover:text-violet-300"
+                >
+                  {loadingContent ? '载入中…' : '站内阅读全文'}
+                </button>
+              )}
+              {content !== null && content.length > 0 && (
+                <div className="rounded-xl bg-slate-50/80 p-3 dark:bg-white/[0.03]">
+                  <p className="mb-1.5 text-[10px] tracking-wide text-slate-400 dark:text-slate-500">
+                    以下为源自带全文（纯文本，{content.length} 字），无图无链接
+                  </p>
+                  <pre className="max-h-[50vh] overflow-y-auto whitespace-pre-wrap break-words font-sans text-[13px] leading-relaxed text-slate-700 dark:text-slate-200">
+                    {content}
+                  </pre>
+                </div>
+              )}
+              {content === '' && (
+                <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                  该源只提供摘要，没有全文可读 —— 点「阅读原文」去原站。
+                </p>
               )}
 
               <a

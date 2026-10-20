@@ -27,8 +27,8 @@ export function seedSources(db: DatabaseSync, sources: SeedSource[]): void {
 export function insertRawItems(db: DatabaseSync, sourceId: string, items: FeedItem[], fetchedAt: Date): number {
   const stmt = db.prepare(`
     INSERT OR IGNORE INTO raw_items
-      (source_id, guid, url, url_norm, title, summary, published_at, fingerprint, fetched_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (source_id, guid, url, url_norm, title, summary, content, published_at, fingerprint, fetched_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `)
 
   let inserted = 0
@@ -42,6 +42,7 @@ export function insertRawItems(db: DatabaseSync, sourceId: string, items: FeedIt
       normalizeUrl(item.url),
       item.title,
       item.summary || null,
+      item.content ?? null,
       publishedAt.toISOString(),
       titleFingerprint(item.title),
       fetchedAt.toISOString(),

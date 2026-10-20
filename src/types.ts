@@ -13,6 +13,20 @@ export interface Article {
   sourceName: string
   eventKey: string | null
   sourceCount: number | null
+  /** 源是否提供全文（有才能站内阅读） */
+  hasContent?: boolean
+}
+
+/** 单条正文（仅自用；未提供全文时 content 为空） */
+export interface ArticleContent {
+  id: number
+  title: string
+  url: string
+  sourceName: string
+  publishedAt: string
+  hasContent: boolean
+  chars: number
+  content: string
 }
 
 export interface ArticlesResponse {

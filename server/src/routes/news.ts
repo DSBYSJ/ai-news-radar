@@ -102,7 +102,8 @@ export async function newsRoutes(app: FastifyInstance): Promise<void> {
       .prepare(
         `SELECT a.id, a.title, a.tldr, a.summary, a.url, a.category, a.score, a.entities,
                 a.published_at, r.source_id AS sourceId, s.name AS sourceName,
-                a.event_key AS eventKey, e.source_count AS sourceCount
+                a.event_key AS eventKey, e.source_count AS sourceCount,
+                (length(COALESCE(r.content, '')) > 0) AS hasContent
          FROM articles a
          JOIN raw_items r ON r.id = a.raw_id
          JOIN sources s ON s.id = r.source_id
@@ -125,6 +126,7 @@ export async function newsRoutes(app: FastifyInstance): Promise<void> {
       sourceName: string
       eventKey: string | null
       sourceCount: number | null
+      hasContent: number
     }[]
 
     const totalRow = db
@@ -154,6 +156,7 @@ export async function newsRoutes(app: FastifyInstance): Promise<void> {
         sourceName: r.sourceName,
         eventKey: r.eventKey,
         sourceCount: r.sourceCount,
+        hasContent: Number(r.hasContent) > 0,
       })),
     }
   })
@@ -236,6 +239,36 @@ export async function newsRoutes(app: FastifyInstance): Promise<void> {
         ? q.anchor
         : (latest ?? new Date().toISOString().slice(0, 10))
     return periodReport(db, q.kind === 'month' ? 'month' : 'week', anchor)
+  })
+
+  /** 单条正文（仅当源提供全文时才有；供"站内阅读"，不做全文检索） */
+  app.get('/api/news/articles/:id/content', async (req, reply) => {
+    const id = Number((req.params as { id?: string }).id)
+    if (!Number.isInteger(id) || id <= 0) return reply.code(400).send({ error: 'id 非法' })
+    const db = getDb()
+    const row = db
+      .prepare(
+        `SELECT a.id, a.title, a.url, a.published_at AS publishedAt, s.name AS sourceName,
+                COALESCE(r.content, '') AS content
+           FROM articles a
+           JOIN raw_items r ON r.id = a.raw_id
+           JOIN sources s ON s.id = r.source_id
+          WHERE a.id = ?`,
+      )
+      .get(id) as
+      | { id: number; title: string; url: string; publishedAt: string; sourceName: string; content: string }
+      | undefined
+    if (!row) return reply.code(404).send({ error: '条目不存在' })
+    return {
+      id: Number(row.id),
+      title: row.title,
+      url: row.url,
+      sourceName: row.sourceName,
+      publishedAt: row.publishedAt,
+      hasContent: row.content.length > 0,
+      chars: row.content.length,
+      content: row.content,
+    }
   })
 
   /** 结构化日报：头条 + 分类分区 + 快讯（简报页按版面渲染） */

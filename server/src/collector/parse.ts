@@ -5,6 +5,8 @@ export interface FeedItem {
   url: string
   title: string
   summary: string
+  /** 源自带全文（仅当够长时才保留；多数中文源只有摘要） */
+  content?: string
   publishedAt: Date | null
 }
 
@@ -119,6 +121,11 @@ function extractDate(raw: XmlNode): Date | null {
   return null
 }
 
+/** 正文最小长度：低于它只是摘要，不值得单独存（也避免把 description 当全文） */
+const MIN_CONTENT_LENGTH = 600
+/** 正文上限：防止个别源塞整本书 */
+const MAX_CONTENT_LENGTH = 12000
+
 function truncate(s: string, max: number): string {
   return s.length > max ? `${s.slice(0, max)}…` : s
 }
@@ -132,11 +139,20 @@ function mapItem(raw: XmlNode): FeedItem | null {
     .map((v) => text(v))
     .find((s) => s.trim().length > 0)
 
+  // 全文：content:encoded / content 优先，其次是很长的 description。
+  // 取「最长的那个」而不是第一个非空——很多源 description 只有一句话，却把全文放在 content:encoded
+  const contentCandidates = [raw['content:encoded'], raw.content, raw.description, raw.summary]
+    .map((v) => stripHtml(text(v)).trim())
+    .filter((v) => v.length > 0)
+  const longest = contentCandidates.reduce((a, b) => (b.length > a.length ? b : a), '')
+  const content = longest.length >= MIN_CONTENT_LENGTH ? truncate(longest, MAX_CONTENT_LENGTH) : undefined
+
   return {
     title,
     url,
     guid: extractGuid(raw, url || title),
     summary: rawSummary ? truncate(stripHtml(rawSummary), MAX_SUMMARY_LENGTH) : '',
+    content,
     publishedAt: extractDate(raw),
   }
 }

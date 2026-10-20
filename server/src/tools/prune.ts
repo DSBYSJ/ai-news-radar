@@ -12,11 +12,12 @@
  * 它们只含标题与计数，体积小，且是趋势历史的依据。
  */
 import { statSync } from 'node:fs'
-import path from 'node:path'
-import { DatabaseSync } from 'node:sqlite'
+import { config } from '../config.ts'
+import { getDb } from '../db.ts'
 
 interface Args {
   days: number
+  contentDays: number
   dryRun: boolean
   vacuum: boolean
 }
@@ -28,13 +29,10 @@ function parseArgs(argv: string[]): Args {
   }
   return {
     days: Math.max(7, Number(get('days') ?? 180)),
+    contentDays: Math.max(1, Number(get('content-days') ?? 7)),
     dryRun: argv.includes('--dry-run'),
     vacuum: argv.includes('--vacuum'),
   }
-}
-
-function dbPath(): string {
-  return process.env.DB_PATH ?? path.join(import.meta.dirname, '../../data/ai-news.db')
 }
 
 function sizeMb(file: string): number {
@@ -45,10 +43,11 @@ function sizeMb(file: string): number {
   }
 }
 
-const { days, dryRun, vacuum } = parseArgs(process.argv.slice(2))
-const file = dbPath()
+const { days, contentDays, dryRun, vacuum } = parseArgs(process.argv.slice(2))
+// 走 getDb() 而不是直接 new DatabaseSync：那样会绕过建表与结构迁移（老库缺 content 列时 SQL 直接报错）
+const db = getDb()
+const file = config.databasePath
 const before = sizeMb(file)
-const db = new DatabaseSync(file)
 
 const cutoff = new Date(Date.now() - days * 86_400_000).toISOString()
 const cutoffDate = cutoff.slice(0, 10)
@@ -71,6 +70,17 @@ if (articles === 0 && raws === 0) {
   process.exit(0)
 }
 
+// 正文单独按更短的 TTL 清：摘要要长期留，正文只需要近期可读
+const contentCutoff = new Date(Date.now() - contentDays * 86_400_000).toISOString().slice(0, 10)
+const staleContent = Number(
+  (
+    db
+      .prepare('SELECT COUNT(*) AS n FROM raw_items WHERE content IS NOT NULL AND date(published_at) < ?')
+      .get(contentCutoff) as { n: number }
+  ).n,
+)
+console.log(`正文保留 ${contentDays} 天（早于 ${contentCutoff} 的正文将清空，条目与摘要保留）：${staleContent} 条`)
+
 if (dryRun) {
   console.log('（--dry-run：只看不删。去掉该参数并加 --vacuum 才会真正执行）')
   db.close()
@@ -84,11 +94,12 @@ const delRaws = db.prepare(`DELETE FROM raw_items WHERE date(published_at) < ? A
 
 db.exec('BEGIN')
 try {
+  const cleared = db.prepare('UPDATE raw_items SET content = NULL WHERE content IS NOT NULL AND date(published_at) < ?').run(contentCutoff).changes
   const vec = run.run(cutoffDate).changes
   const art = delArticles.run(cutoffDate).changes
   const raw = delRaws.run(cutoffDate).changes
   db.exec('COMMIT')
-  console.log(`已删除：向量 ${Number(vec)}、成品 ${Number(art)}、原始 ${Number(raw)}`)
+  console.log(`已清理正文 ${Number(cleared)} 条；已删除：向量 ${Number(vec)}、成品 ${Number(art)}、原始 ${Number(raw)}`)
 } catch (err) {
   db.exec('ROLLBACK')
   console.error('清理失败，已回滚：', err)

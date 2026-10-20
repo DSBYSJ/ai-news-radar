@@ -2,6 +2,20 @@
 
 版本号唯一来源：各 `package.json`。发布前照「升版本 → 写 changelog → 跑验证 → 推送部署」四步走。
 
+## 0.13.0（2026-10-20）
+
+**站内阅读：源提供全文时落库（B 方案，7 天 TTL）**
+
+- 解析层：`content:encoded` / `content` / 长 `description` 取**最长者**为正文，剥标签后纯文本入库；
+  **≥600 字才存**（低于视为摘要），上限 12,000 字（防止个别源塞整本书）
+- 存储：`raw_items.content` 新增列 + 幂等迁移（老库自动 ALTER）
+- 接口：`GET /api/news/articles/:id/content`（正文/字数/来源）；列表只返回 `hasContent` 布尔，**不下发正文**
+- 前端：卡片展开后多一个「站内阅读全文」→ 就地渲染（50vh 内滚动）；源只给摘要时提示「该源只提供摘要」
+- 回填：`npm run backfill:content --days=7` —— 实测补 **73 条 / 276 KB**，覆盖 6 个源
+  （Verge、Simon Willison 这类"长 description"也被识别，不只 content:encoded）
+- 清理：`npm run prune --content-days=7` 只清正文、保留条目与摘要；`--days=180` 再清理旧成品
+- 合规：仅登录后可见、纯文本不含外链与外图，原文入口始终保留
+
 ## 0.12.0（2026-10-20）
 
 **评分接入信源权重 + 周报/月报 + 深色下拉修复 + 存储清理**

@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS raw_items (
   url_norm     TEXT NOT NULL,        -- 归一化 URL（剥离 utm_* 等追踪参数）
   title        TEXT NOT NULL,
   summary      TEXT,                 -- 源摘要（已清 HTML 标签）
+  content      TEXT,                 -- 正文纯文本（仅当源提供全文时；按天清理，见 npm run prune）
   published_at TEXT NOT NULL,        -- 统一 UTC ISO，展示层再转本地
   fingerprint  TEXT NOT NULL,        -- 标题指纹
   fetched_at   TEXT NOT NULL,

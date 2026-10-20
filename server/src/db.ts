@@ -23,6 +23,11 @@ function migrate(conn: DatabaseSync): void {
   if (!columns.some((c) => c.name === 'sentiment')) {
     conn.exec('ALTER TABLE articles ADD COLUMN sentiment TEXT')
   }
+  // v0.13.0：源提供全文时落库（仅自用、按天清理）
+  const rawColumns = conn.prepare('PRAGMA table_info(raw_items)').all() as unknown as { name: string }[]
+  if (!rawColumns.some((c) => c.name === 'content')) {
+    conn.exec('ALTER TABLE raw_items ADD COLUMN content TEXT')
+  }
 }
 
 export function closeDb(): void {

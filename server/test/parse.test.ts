@@ -77,3 +77,31 @@ test('stripHtml：先剥标签再解实体，纯文本里的尖括号不被误�
   assert.equal(stripHtml('Hello &lt;world&gt;'), 'Hello <world>')
   assert.equal(stripHtml('分数 &#x4E2D; &#25991;'), '分数 中 文')
 })
+
+test('parseFeed：有 content:encoded 时抽出正文（≥600 字才保留，剥掉标签）', async () => {
+  const { parseFeed } = await import('../src/collector/parse.ts')
+  const body = '这是一段很长的正文。'.repeat(120) // ~1200 字
+  const xml = `<?xml version="1.0"?><rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+  <channel><title>t</title>
+    <item>
+      <title>有全文的条目</title>
+      <link>https://example.com/a</link>
+      <description>一句话摘要</description>
+      <content:encoded><![CDATA[<p>${body}</p><script>alert(1)</script>]]></content:encoded>
+      <pubDate>Mon, 20 Oct 2026 08:00:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>只有摘要的条目</title>
+      <link>https://example.com/b</link>
+      <description>短摘要</description>
+      <pubDate>Mon, 20 Oct 2026 09:00:00 GMT</pubDate>
+    </item>
+  </channel></rss>`
+  const feed = parseFeed(xml)
+  assert.equal(feed.items.length, 2)
+  const withContent = feed.items[0]
+  assert.ok(withContent.content && withContent.content.length > 600, '应抽出正文')
+  assert.ok(!withContent.content.includes('<script>'), '正文必须剥掉标签')
+  assert.ok(withContent.summary.length < 60, '摘要仍只取简短的那句')
+  assert.equal(feed.items[1].content, undefined, '只有摘要时不存正文')
+})

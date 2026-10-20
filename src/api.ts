@@ -1,5 +1,6 @@
 import type {
   ArticlesResponse,
+  ArticleContent,
   AskResult,
   CategoryRatioPoint,
   CrossSourceResponse,
@@ -59,6 +60,7 @@ export const api = {
   health: () => get<Health>('/health'),
   sources: () => get<{ items: SourceItem[] }>('/sources'),
   articles: (q: ArticleQuery) => get<ArticlesResponse>('/articles', q as Params),
+  articleContent: (id: number) => get<ArticleContent>(`/articles/${id}/content`),
   volume: (days: number) => get<{ days: number; points: DailyPoint[] }>('/trend/volume', { days }),
   category: (days: number) => get<{ days: number; points: CategoryRatioPoint[] }>('/trend/category', { days }),
   velocity: (days: number) => get<VelocityResponse>('/trend/velocity', { days }),
