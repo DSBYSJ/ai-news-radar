@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import { rebuildEvents } from '../analytics/events.ts'
 import { categoryRatio, crossSource, dailyVolume, topEntities, velocity } from '../analytics/trend.ts'
 import { widgetSnapshot } from '../analytics/widget.ts'
+import { dailyEdition } from '../analytics/edition.ts'
 import { CATEGORY_LABELS, type Category } from '../ai/categories.ts'
 import { runProcessing } from '../ai/pipeline.ts'
 import { askQuestion } from '../ai/ask.ts'
@@ -223,6 +224,19 @@ export async function newsRoutes(app: FastifyInstance): Promise<void> {
       .prepare('SELECT id, name, url, kind, weight, enabled, last_fetch_at, last_status FROM sources ORDER BY id')
       .all(),
   }))
+
+  /** 结构化日报：头条 + 分类分区 + 快讯（简报页按版面渲染） */
+  app.get('/api/news/edition', async (req) => {
+    const q = req.query as Query
+    const db = getDb()
+    const latest = (db.prepare('SELECT MAX(date(published_at)) AS d FROM articles').get() as { d: string | null }).d
+    const date =
+      typeof q.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(q.date) ? q.date : latest
+    if (!date) {
+      return { date: null, headline: null, sections: [], flash: [], brief: null, stats: { total: 0, crossSource: 0, byCategory: {} } }
+    }
+    return dailyEdition(db, date)
+  })
 
   /** 桌面小组件快照（轻量：几个关键数字 + 最新简报标题，字段稳定） */
   app.get('/api/news/widget', async () => widgetSnapshot(getDb()))

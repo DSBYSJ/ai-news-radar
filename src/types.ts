@@ -240,3 +240,37 @@ export interface GenerateSummaryResponse {
   reason?: string
   summary: SummaryDetail | null
 }
+
+// ---------- 结构化日报（v0.9.1：头条 / 分区 / 快讯） ----------
+export interface EditionItem {
+  id: number
+  title: string
+  tldr: string | null
+  summary: string | null
+  url: string
+  category: string
+  score: number | null
+  sourceName: string
+  /** 来源权重：3 = 官方/一手，2 = 媒体，1 = 聚合 */
+  sourceWeight: number
+  publishedAt: string
+  eventKey: string | null
+  /** 同一事件被几家独立源报道 */
+  sourceCount: number
+  sources: string[]
+}
+
+export interface EditionSection {
+  category: string
+  label: string
+  items: EditionItem[]
+}
+
+export interface Edition {
+  date: string
+  headline: EditionItem | null
+  sections: EditionSection[]
+  flash: EditionItem[]
+  brief: { title: string; content: string; model: string; updatedAt: string } | null
+  stats: { total: number; crossSource: number; byCategory: Record<string, number> }
+}

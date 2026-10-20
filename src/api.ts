@@ -4,6 +4,7 @@ import type {
   CategoryRatioPoint,
   CrossSourceResponse,
   DailyPoint,
+  Edition,
   EntityItem,
   EntitySentimentResponse,
   ForecastResponse,
@@ -71,6 +72,7 @@ export const api = {
     get<EntitySentimentResponse>(`/sentiment/entity/${encodeURIComponent(entity)}`, { days }),
   summaries: (limit = 60) => get<{ items: SummaryListItem[] }>('/summaries', { limit }),
   summary: (date: string) => get<SummaryDetail>(`/summaries/${date}`),
+  edition: (date?: string) => get<Edition>('/edition', { date }),
   generateSummary: (date?: string, force = true) =>
     post<GenerateSummaryResponse>('/summaries/generate', { date, force }),
 }
