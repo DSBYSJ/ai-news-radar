@@ -105,3 +105,33 @@ test('parseFeed：有 content:encoded 时抽出正文（≥600 字才保留，�
   assert.ok(withContent.summary.length < 60, '摘要仍只取简短的那句')
   assert.equal(feed.items[1].content, undefined, '只有摘要时不存正文')
 })
+
+test('htmlToText：块级标签转成换行，段落得以保留（不再是一堵墙）', async () => {
+  const { htmlToText } = await import('../src/collector/parse.ts')
+  const html = '<div><p>第一段内容。</p><p>第二段：<strong>加粗</strong>与<br>换行</p><p>第三段。</p><script>alert(1)</script></div>'
+  const text = htmlToText(html)
+  assert.ok(!text.includes('<'), '不应残留标签')
+  assert.ok(!text.includes('alert'), '脚本应被移除')
+  const paras = text.split(/\n{2,}/).filter(Boolean)
+  assert.equal(paras.length, 3, `应按段落切成 3 段，实际 ${paras.length}：${JSON.stringify(paras)}`)
+  assert.equal(paras[0], '第一段内容。')
+  assert.ok(paras[1].includes('加粗') && paras[1].includes('换行'))
+  assert.equal(paras[2], '第三段。')
+})
+
+test('htmlToText：stripHtml 仍是单行（标题/摘要不能被换行污染）', async () => {
+  const { stripHtml, htmlToText } = await import('../src/collector/parse.ts')
+  const html = '<p>标题一</p><p>标题二</p>'
+  assert.ok(!stripHtml(html).includes('\n'), 'stripHtml 应压成单行')
+  assert.ok(htmlToText(html).includes('\n'), 'htmlToText 应保留换行')
+})
+
+test('htmlToText：转义过的 HTML（IT之家式 &lt;p&gt;）也要清干净', async () => {
+  const { htmlToText } = await import('../src/collector/parse.ts')
+  const escaped = '&lt;p data-vmark="1612"&gt;第一段&lt;/p&gt;&lt;p&gt;第二段&lt;/p&gt;'
+  const text = htmlToText(escaped)
+  assert.ok(!text.includes('<p'), '不应残留 HTML 标签')
+  assert.ok(!text.includes('&lt;'), '不应残留转义实体')
+  const paras = text.split(/\n{2,}/).filter(Boolean)
+  assert.equal(paras.length, 2, `应切成 2 段，实际 ${JSON.stringify(paras)}`)
+})

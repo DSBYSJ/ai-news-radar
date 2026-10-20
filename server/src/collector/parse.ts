@@ -61,6 +61,50 @@ function decodeCodePoint(code: number): string {
   }
 }
 
+/**
+ * HTML → 纯文本（**保留段落**）
+ *
+ * 与 stripHtml 的区别：stripHtml 把所有标签换成空格再压缩空白，适合标题/摘要这种单行文本；
+ * 正文如果用它会丢掉全部换行，读者看到的是一堵墙。这里把块级标签转成 \n，段落得以保留。
+ *
+ * ⚠️ 必须**多轮「剥标签 + 解实体」**：部分源（如 IT之家）的 description 是被转义过的 HTML
+ * （`&lt;p data-vmark="…"&gt;`）。只剥一轮的话，实体会在剥完之后才变成真标签，正文里就残留 `<p>`；
+ * 反过来先解实体再剥，又会把正文里正常的 `<` 误伤。所以按「剥 → 解 → 再剥 → 再解」迭代到稳定。
+ */
+const BLOCK_TAG_RE = /<\/?(p|div|section|article|li|h[1-6]|blockquote|tr|figure|figcaption)[^>]*>/gi
+
+function stripTagsOnce(input: string): string {
+  return input
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(BLOCK_TAG_RE, '\n')
+    .replace(/<hr[^>]*>/gi, '\n')
+    .replace(/<[^>]*>/g, ' ')
+}
+
+function decodeEntities(input: string): string {
+  return input
+    .replace(/&#x([0-9a-f]+);/gi, (_, h: string) => decodeCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, d: string) => decodeCodePoint(Number(d)))
+    .replace(/&([a-z][a-z0-9]*);/gi, (m, name: string) => NAMED_ENTITIES[name.toLowerCase()] ?? m)
+}
+
+export function htmlToText(input: string): string {
+  if (!input) return ''
+  let out = input
+  for (let i = 0; i < 3; i++) {
+    const next = decodeEntities(stripTagsOnce(out))
+    if (next === out) break
+    out = next
+  }
+  return out
+    .replace(/[ \t\u00a0]+/g, ' ')
+    .replace(/ *\n */g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
 /** 剥离 HTML 标签 + 解码字符实体（顺序：先剥标签，再解码） */
 export function stripHtml(input: string): string {
   if (!input) return ''
@@ -141,10 +185,12 @@ function mapItem(raw: XmlNode): FeedItem | null {
 
   // 全文：content:encoded / content 优先，其次是很长的 description。
   // 取「最长的那个」而不是第一个非空——很多源 description 只有一句话，却把全文放在 content:encoded
-  const contentCandidates = [raw['content:encoded'], raw.content, raw.description, raw.summary]
-    .map((v) => stripHtml(text(v)).trim())
+  // 先取原始 HTML 里最长的一段，再用 htmlToText 转（保留段落）
+  const rawCandidates = [raw['content:encoded'], raw.content, raw.description, raw.summary]
+    .map((v) => text(v).trim())
     .filter((v) => v.length > 0)
-  const longest = contentCandidates.reduce((a, b) => (b.length > a.length ? b : a), '')
+  const longestRaw = rawCandidates.reduce((a, b) => (htmlToText(b).length > htmlToText(a).length ? b : a), '')
+  const longest = longestRaw ? htmlToText(longestRaw) : ''
   const content = longest.length >= MIN_CONTENT_LENGTH ? truncate(longest, MAX_CONTENT_LENGTH) : undefined
 
   return {

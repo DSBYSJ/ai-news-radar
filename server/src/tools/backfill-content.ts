@@ -6,6 +6,7 @@
  *
  *   node src/tools/backfill-content.ts --days=7
  *   node src/tools/backfill-content.ts --days=7 --dry-run
+ *   node src/tools/backfill-content.ts --days=7 --refresh   # 覆盖已有正文（换了转换规则后重跑）
  *
  * 只更新 content 为空的条目；不新增条目、不改摘要、不触发 AI。
  */
@@ -17,6 +18,7 @@ import { SEED_SOURCES } from '../collector/sources.ts'
 const argv = process.argv.slice(2)
 const days = Math.max(1, Number(argv.find((a) => a.startsWith('--days='))?.slice(7) ?? 7))
 const dryRun = argv.includes('--dry-run')
+const refresh = argv.includes('--refresh')
 const cutoff = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10)
 
 const db = getDb()
@@ -28,8 +30,11 @@ const sources = db.prepare('SELECT id, name, url, kind FROM sources WHERE enable
 }[]
 
 const update = db.prepare(
-  `UPDATE raw_items SET content = ?
-    WHERE source_id = ? AND guid = ? AND content IS NULL AND date(published_at) >= ?`,
+  refresh
+    ? `UPDATE raw_items SET content = ?
+        WHERE source_id = ? AND guid = ? AND date(published_at) >= ?`
+    : `UPDATE raw_items SET content = ?
+        WHERE source_id = ? AND guid = ? AND content IS NULL AND date(published_at) >= ?`,
 )
 
 let total = 0
@@ -44,7 +49,7 @@ for (const source of sources) {
         const hit = db
           .prepare(
             `SELECT COUNT(*) AS n FROM raw_items
-              WHERE source_id = ? AND guid = ? AND content IS NULL AND date(published_at) >= ?`,
+              WHERE source_id = ? AND guid = ?${refresh ? '' : ' AND content IS NULL'} AND date(published_at) >= ?`,
           )
           .get(source.id, item.guid, cutoff) as { n: number }
         filled += Number(hit.n)
