@@ -339,6 +339,8 @@ export default function App() {
       <div key={tab} className="page-enter">
         {tab === 'overview' ? (
           <OverviewPage health={health} onNavigate={setTab} />
+        ) : tab === 'hot' ? (
+          <HotPage />
         ) : tab === 'list' ? (
           <ListPage sources={sources} />
         ) : tab === 'trend' ? (
