@@ -241,7 +241,11 @@ export default function OverviewPage({ health, onNavigate }: Props) {
                 : `周环比 ${change >= 0 ? '↑' : '↓'} ${Math.abs(change)}%`
             }
             tone={change === null || change === undefined ? 'default' : change >= 0 ? 'up' : 'down'}
-            hint={change === null || change === undefined ? '数据不足，暂无环比' : '对比上一周同期'}
+            hint={
+              change === null || change === undefined
+                ? (velocity?.note ?? '数据不足，暂无环比')
+                : '对比上一周同期'
+            }
           />
           <Kpi
             label="跨源事件"
@@ -422,7 +426,7 @@ export default function OverviewPage({ health, onNavigate }: Props) {
               <div className="mt-3 border-t border-slate-100 pt-2.5 text-[10.5px] leading-relaxed text-slate-400 dark:border-white/[0.06] dark:text-slate-500">
                 <p>
                   数据规模 {health.sources} 源 · {health.rawItems.toLocaleString('en-US')} 原始 ·{' '}
-                  {health.articles.toLocaleString('en-US')} 成品 · {health.events.toLocaleString('en-US')} 事件
+                  {(health.aiArticles ?? health.articles).toLocaleString('en-US')} 条 AI 成品 · {health.events.toLocaleString('en-US')} 个事件
                 </p>
                 {health.collectAt && (
                   <p className="mt-0.5">定时 采集 {health.collectAt.split(',').join(' / ')} · 简报 {health.summaryAt || '23:00'}</p>

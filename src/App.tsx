@@ -287,7 +287,7 @@ export default function App() {
               <Divider />
               <Stat label="原始" value={health.rawItems} />
               <Divider />
-              <Stat label="成品" value={health.articles} />
+              <Stat label="成品" value={health.aiArticles ?? health.articles} />
               <Divider />
               <Stat label="事件" value={health.events} />
               <Divider />

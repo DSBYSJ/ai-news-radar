@@ -80,21 +80,39 @@ test('第 2 层 categoryRatio：占比合计为 1，且不受总条数影响', (
   db.close()
 })
 
-test('第 3 层 velocity：窗口只有 7 天时也能算出周环比', () => {
+test('第 3 层 velocity：窗口只有 7 天时也能算出周环比（基期样本足够）', () => {
   const db = setup()
-  // 上周每天 2 条、本周每天 4 条 → 环比 +100%
+  // 上周每天 6 条、本周每天 8 条 → 环比 +33.3%（基期日均 6 ≥ 门槛 5，可比）
   for (let d = 7; d <= 13; d++) {
-    for (let i = 0; i < 2; i++) addArticle(db, addRaw(db, 's1', `w0-${d}-${i}`, iso(d)), `上周${d}-${i}`, 'policy', 50, iso(d))
+    for (let i = 0; i < 6; i++) addArticle(db, addRaw(db, 's1', `w0-${d}-${i}`, iso(d)), `上周${d}-${i}`, 'policy', 50, iso(d))
   }
   for (let d = 0; d <= 6; d++) {
-    for (let i = 0; i < 4; i++) addArticle(db, addRaw(db, 's1', `w1-${d}-${i}`, iso(d)), `本周${d}-${i}`, 'policy', 50, iso(d))
+    for (let i = 0; i < 8; i++) addArticle(db, addRaw(db, 's1', `w1-${d}-${i}`, iso(d)), `本周${d}-${i}`, 'policy', 50, iso(d))
   }
   const result = velocity(db, 7)
   assert.equal(result.points.length, 7, '返回的点仍按调用窗口')
   assert.equal(result.points[0].ma7, null, 'ma7 的 null 语义不变')
-  assert.equal(result.thisWeekAvg, 4)
-  assert.equal(result.lastWeekAvg, 2)
-  assert.equal(result.changePct, 100)
+  assert.equal(result.comparable, true)
+  assert.equal(result.note, null)
+  assert.equal(result.thisWeekAvg, 8)
+  assert.equal(result.lastWeekAvg, 6)
+  assert.equal(result.changePct, 33.3)
+  db.close()
+})
+
+test('第 3 层 velocity：基期样本太少时不给百分比（避免 +1578% 这种假信号）', () => {
+  const db = setup()
+  // 上周每天 1 条（日均 1 < 门槛 5），本周每天 8 条
+  for (let d = 7; d <= 13; d++) {
+    addArticle(db, addRaw(db, 's1', `w0-${d}`, iso(d)), `上周${d}`, 'policy', 50, iso(d))
+  }
+  for (let d = 0; d <= 6; d++) {
+    for (let i = 0; i < 8; i++) addArticle(db, addRaw(db, 's1', `w1-${d}-${i}`, iso(d)), `本周${d}-${i}`, 'policy', 50, iso(d))
+  }
+  const result = velocity(db, 7)
+  assert.equal(result.comparable, false)
+  assert.equal(result.changePct, null, '基期太少时必须为 null，而不是给一个夸张的百分比')
+  assert.ok(result.note && result.note.includes('暂不比较'), `应给出原因，实际：${result.note}`)
   db.close()
 })
 

@@ -54,7 +54,7 @@ export function widgetSnapshot(db: DatabaseSync): WidgetSnapshot {
   if (!today) return EMPTY(updatedAt)
 
   const todayCount = Number(
-    (db.prepare('SELECT COUNT(*) AS n FROM articles WHERE date(published_at) = ?').get(today) as { n: number }).n,
+    (db.prepare('SELECT COUNT(*) AS n FROM articles WHERE ai_relevant = 1 AND date(published_at) = ?').get(today) as { n: number }).n,
   )
   const crossToday = Number(
     (
@@ -71,7 +71,9 @@ export function widgetSnapshot(db: DatabaseSync): WidgetSnapshot {
     .get(today) as { category: string } | undefined
 
   const senti = db
-    .prepare('SELECT sentiment, COUNT(*) AS n FROM articles WHERE date(published_at) = ? AND sentiment IS NOT NULL GROUP BY sentiment')
+    .prepare(
+      'SELECT sentiment, COUNT(*) AS n FROM articles WHERE ai_relevant = 1 AND date(published_at) = ? AND sentiment IS NOT NULL GROUP BY sentiment',
+    )
     .all(today) as unknown as { sentiment: string; n: number }[]
   const classified = senti.reduce((sum, r) => sum + Number(r.n), 0)
   const negative = Number(senti.find((r) => r.sentiment === 'negative')?.n ?? 0)

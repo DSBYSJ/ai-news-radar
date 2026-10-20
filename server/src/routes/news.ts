@@ -56,6 +56,7 @@ export async function newsRoutes(app: FastifyInstance): Promise<void> {
       sources: countOf('SELECT COUNT(*) AS n FROM sources WHERE enabled = 1'),
       rawItems: countOf('SELECT COUNT(*) AS n FROM raw_items'),
       articles: countOf('SELECT COUNT(*) AS n FROM articles'),
+      aiArticles: countOf('SELECT COUNT(*) AS n FROM articles WHERE ai_relevant = 1'),
       events: countOf('SELECT COUNT(*) AS n FROM events'),
       aiEnabled: config.aiEnabled,
       authEnabled: Boolean(config.jwtSecret),

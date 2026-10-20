@@ -131,7 +131,7 @@ export function sentimentAlerts(
     .prepare(
       `SELECT m.entity AS entity, COUNT(*) AS n
        FROM mentions m JOIN articles a ON a.id = m.article_id
-       WHERE a.published_at >= ?
+       WHERE a.ai_relevant = 1 AND a.published_at >= ?
        GROUP BY m.entity ORDER BY n DESC LIMIT ?`,
     )
     .all(cutoffIso(days), topN) as unknown as { entity: string; n: number }[]
@@ -190,7 +190,7 @@ export function topEntitiesWithSentiment(db: DatabaseSync, days = 30, limit = 8)
       `SELECT m.entity AS entity, COUNT(*) AS n,
               SUM(CASE WHEN a.sentiment = 'negative' THEN 1 ELSE 0 END) AS neg
        FROM mentions m JOIN articles a ON a.id = m.article_id
-       WHERE a.published_at >= ?
+       WHERE a.ai_relevant = 1 AND a.published_at >= ?
        GROUP BY m.entity ORDER BY n DESC LIMIT ?`,
     )
     .all(cutoffIso(days), limit) as unknown as { entity: string; n: number; neg: number }[]

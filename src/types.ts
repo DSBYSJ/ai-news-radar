@@ -59,6 +59,14 @@ export interface VelocityResponse {
   thisWeekAvg: number
   lastWeekAvg: number
   changePct: number | null
+  /** 两期都够数据才为 true；false 时 changePct 为 null */
+  comparable: boolean
+  /** 不可比的原因（可直接展示） */
+  note: string | null
+  thisWeekDays: number
+  lastWeekDays: number
+  thisWeekSources: number
+  lastWeekSources: number
 }
 
 export interface CrossSourcePoint {
@@ -103,6 +111,8 @@ export interface Health {
   sources: number
   rawItems: number
   articles: number
+  /** 其中与 AI 相关、会进入榜单/日报/列表的条数 */
+  aiArticles: number
   events: number
   aiEnabled: boolean
   authEnabled: boolean

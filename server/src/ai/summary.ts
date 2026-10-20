@@ -95,7 +95,7 @@ function loadDayArticles(db: DatabaseSync, date: string): ArticleRow[] {
 export function collectStats(db: DatabaseSync, date: string, total: number): DailyStats {
   const byCategory: Record<string, number> = {}
   for (const row of db
-    .prepare('SELECT category, COUNT(*) AS n FROM articles WHERE date(published_at) = ? GROUP BY category')
+    .prepare('SELECT category, COUNT(*) AS n FROM articles WHERE ai_relevant = 1 AND date(published_at) = ? GROUP BY category')
     .all(date) as unknown as { category: string; n: number }[]) {
     byCategory[row.category] = Number(row.n)
   }
@@ -112,7 +112,7 @@ export function collectStats(db: DatabaseSync, date: string, total: number): Dai
   )
 
   const prevTotal = Number(
-    (db.prepare('SELECT COUNT(*) AS n FROM articles WHERE date(published_at) = ?').get(prevDate(date)) as unknown as { n: number }).n,
+    (db.prepare('SELECT COUNT(*) AS n FROM articles WHERE ai_relevant = 1 AND date(published_at) = ?').get(prevDate(date)) as unknown as { n: number }).n,
   )
   const deltaPct = prevTotal > 0 ? Number((((total - prevTotal) / prevTotal) * 100).toFixed(1)) : null
 
