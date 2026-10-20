@@ -10,6 +10,7 @@ import type {
   CategoryRatioPoint,
   CrossSourceResponse,
   DailyPoint,
+  EntityDailySeries,
   EntityItem,
   EntitySentimentResponse,
   ForecastResponse,
@@ -36,6 +37,11 @@ export default function TrendPage() {
   const [forecast, setForecast] = useState<ForecastResponse | null>(null)
   const [sentiment, setSentiment] = useState<SentimentResponse | null>(null)
   const [selectedEntity, setSelectedEntity] = useState('')
+  // item 6：分类占比图点选某个类目后，联动过滤均线预测与实体热度
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null)
+  // item 4：多实体横向对比（最多 3 个）
+  const [compareEntities, setCompareEntities] = useState<string[]>([])
+  const [compareSeries, setCompareSeries] = useState<EntityDailySeries | null>(null)
   const [entityDetail, setEntityDetail] = useState<EntitySentimentResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -46,9 +52,9 @@ export default function TrendPage() {
         const [v, c, vel, cr, en, fc, se] = await Promise.all([
           api.volume(days),
           api.category(days),
-          api.velocity(days),
+          api.velocity(days, categoryFilter ?? undefined),
           api.cross(days),
-          api.entities(days),
+          api.entities(days, 40, categoryFilter ?? undefined),
           api.forecast(days, 7),
           api.sentiment(days),
         ])
@@ -70,7 +76,22 @@ export default function TrendPage() {
     return () => {
       alive = false
     }
-  }, [days])
+  }, [days, categoryFilter])
+
+  // item 4：选中实体变化时拉取对比序列
+  useEffect(() => {
+    if (compareEntities.length < 2) {
+      setCompareSeries(null)
+      return
+    }
+    let alive = true
+    void api.entitySeries(compareEntities, days).then((r) => {
+      if (alive) setCompareSeries(r)
+    })
+    return () => {
+      alive = false
+    }
+  }, [compareEntities, days])
 
   useEffect(() => {
     if (!selectedEntity) {
@@ -185,7 +206,46 @@ export default function TrendPage() {
             />
           </ChartCard>
 
-          <ChartCard level="第 2 层" title="分类占比趋势" hint="每根柱子 = 当天的构成占比，点击图例可隐藏某类。">
+          <ChartCard
+            level="第 2 层"
+            title="分类占比趋势"
+            hint="每根柱子 = 当天的构成占比；点下面的类目可联动过滤下方图表。"
+          >
+            {/* item 6：分类联动筛选（cross-filtering） */}
+            <div className="mb-3 flex flex-wrap items-center gap-1.5">
+              <span className="text-[10.5px] text-slate-400 dark:text-slate-500">联动筛选：</span>
+              {CATEGORY_ORDER.map((c) => {
+                const active = categoryFilter === c
+                return (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => setCategoryFilter(active ? null : c)}
+                    className={`rounded-full px-2 py-0.5 text-[10.5px] transition ${
+                      active ? 'text-white' : 'text-slate-500 hover:opacity-80 dark:text-slate-400'
+                    }`}
+                    style={active ? { backgroundColor: CATEGORY_COLORS[c] } : { backgroundColor: `${CATEGORY_COLORS[c]}1f` }}
+                    title={active ? '点击取消筛选' : `只看「${CATEGORY_LABELS[c] ?? c}」`}
+                  >
+                    {CATEGORY_LABELS[c] ?? c}
+                  </button>
+                )
+              })}
+              {categoryFilter && (
+                <button
+                  type="button"
+                  onClick={() => setCategoryFilter(null)}
+                  className="ml-1 rounded-full border border-[var(--line)] px-2 py-0.5 text-[10.5px] text-slate-500 transition hover:border-slate-400 dark:text-slate-400"
+                >
+                  ✕ 清除筛选
+                </button>
+              )}
+              {categoryFilter && (
+                <span className="num text-[10.5px] text-[var(--accent)]">
+                  均线预测与实体热度已只显示该分类
+                </span>
+              )}
+            </div>
             <StackedBarChart points={ratios} categories={CATEGORY_ORDER} height={250} />
           </ChartCard>
 
@@ -361,6 +421,76 @@ export default function TrendPage() {
       <aside className="w-full shrink-0 lg:w-[380px]">
         <div className="space-y-4 lg:sticky lg:top-4">
           <AskPanel />
+          {/* item 4：多实体横向对比（2–3 个实体，每日提及量叠加） */}
+          <ChartCard
+            level="对比"
+            title="多实体横向对比"
+            hint="选 2–3 个实体，叠加看每日提及量；点实体可多选。"
+          >
+            <div className="mb-3 flex flex-wrap items-center gap-1.5">
+              {entities.slice(0, 12).map((e) => {
+                const idx = compareEntities.indexOf(e.entity)
+                const active = idx >= 0
+                return (
+                  <button
+                    key={e.entity}
+                    type="button"
+                    onClick={() => {
+                      setCompareEntities((cur) => {
+                        if (cur.includes(e.entity)) return cur.filter((x) => x !== e.entity)
+                        if (cur.length >= 3) return cur
+                        return [...cur, e.entity]
+                      })
+                    }}
+                    className={`rounded-full px-2 py-0.5 text-[10.5px] transition ${
+                      active
+                        ? 'bg-[var(--accent)] text-white'
+                        : 'border border-[var(--line)] text-slate-500 hover:border-slate-400 dark:text-slate-400'
+                    }`}
+                    title={active ? '点击移除' : compareEntities.length >= 3 ? '最多选 3 个' : '点击加入对比'}
+                  >
+                    {e.entity}
+                    <span className="num ml-1 opacity-70">{e.count}</span>
+                  </button>
+                )
+              })}
+              {compareEntities.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCompareEntities([])
+                    setCompareSeries(null)
+                  }}
+                  className="ml-1 rounded-full border border-[var(--line)] px-2 py-0.5 text-[10.5px] text-slate-500 transition hover:border-slate-400 dark:text-slate-400"
+                >
+                  ✕ 清空
+                </button>
+              )}
+            </div>
+
+            {compareEntities.length < 2 ? (
+              <p className="py-6 text-center text-[12px] text-slate-400 dark:text-slate-500">
+                至少选 2 个实体才能对比（当前 {compareEntities.length} 个）
+              </p>
+            ) : (
+              <>
+                <LineChart
+                  labels={compareSeries?.dates ?? []}
+                  series={(compareSeries?.series ?? []).map((s2, i) => ({
+                    name: s2.name,
+                    color: ['#176b75', '#b3402a', '#b8873a'][i % 3],
+                    values: s2.values,
+                  }))}
+                  height={220}
+                />
+                <p className="num mt-2 text-[10.5px] text-slate-400 dark:text-slate-500">
+                  合计：
+                  {(compareSeries?.series ?? []).map((s2) => `${s2.name} ${s2.values.reduce((a, b) => a + b, 0)}`).join(' · ')}
+                </p>
+              </>
+            )}
+          </ChartCard>
+
           {/* 实体热度：原本在主栏，导致右栏助手下方空出一大截；移到此处让两栏高度接近 */}
             <ChartCard level="实体" title="实体热度与负面占比" hint="点击实体查看它的负面占比走势（7 日平滑）。">
               {entityChips.length === 0 ? (

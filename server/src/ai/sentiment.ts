@@ -18,17 +18,33 @@ const NEG_WORDS = ['裁员', '破产', '诉讼', '起诉', '罚款', '处罚', '
 const POS_EN = /\b(launch(es|ed)?|release[sd]?|raise[sd]?|surge[sd]?|breakthrough|partner(ship)?|growth|beat[s]?|win[s]?|improve[sd]?|milestone|open[- ]source[sd]?)\b/i
 const NEG_EN = /\b(layoff[s]?|bankrupt(cy)?|lawsuit[s]?|fine[sd]?|breach(es)?|leak(s|ed)?|warn(s|ing)?|risk[s]?|shutdown|sue[sd]?|scandal|slump(ed)?|crash(ed)?|investigat(e|es|ed|ion)|probe[s]?|sanction(s|ed)?)\b/i
 
-/** 关键词启发式（AI 不可用时的兜底） */
-export function sentimentHeuristic(text: string): Sentiment {
+/** 关键词启发式（AI 不可用时的兜底）；附带返回命中的关键词，供「判定依据」溯源 */
+export function sentimentHeuristic(text: string): { sentiment: Sentiment; hits: string[] } {
+  const hits: string[] = []
   let pos = 0
   let neg = 0
-  for (const word of POS_WORDS) if (text.includes(word)) pos += 1
-  for (const word of NEG_WORDS) if (text.includes(word)) neg += 1
-  if (POS_EN.test(text)) pos += 1
-  if (NEG_EN.test(text)) neg += 1
-  if (pos > neg) return 'positive'
-  if (neg > pos) return 'negative'
-  return 'neutral'
+  for (const word of POS_WORDS) {
+    if (text.includes(word)) {
+      pos += 1
+      hits.push(`+${word}`)
+    }
+  }
+  for (const word of NEG_WORDS) {
+    if (text.includes(word)) {
+      neg += 1
+      hits.push(`-${word}`)
+    }
+  }
+  if (POS_EN.test(text)) {
+    pos += 1
+    hits.push('+[英文正面]')
+  }
+  if (NEG_EN.test(text)) {
+    neg += 1
+    hits.push('-[英文负面]')
+  }
+  const sentiment: Sentiment = pos > neg ? 'positive' : neg > pos ? 'negative' : 'neutral'
+  return { sentiment, hits: hits.slice(0, 8) }
 }
 
 export interface SentimentItem {
@@ -122,11 +138,17 @@ export async function runSentiment(
     }
   }
 
-  const update = db.prepare('UPDATE articles SET sentiment = ? WHERE id = ?')
+  // 同时记录「判定依据」：AI 判定时写模型与提示词摘要，启发式时写命中的关键词
+  const update = db.prepare('UPDATE articles SET sentiment = ?, sentiment_keywords = ? WHERE id = ?')
   let updated = 0
   for (const row of rows) {
-    const sentiment = aiResults.get(row.id) ?? sentimentHeuristic(`${row.title} ${row.text}`)
-    update.run(sentiment, row.id)
+    const aiVerdict = aiResults.get(row.id)
+    if (aiVerdict) {
+      update.run(aiVerdict, `ai:${config.deepseek.model}`, row.id)
+    } else {
+      const { sentiment, hits } = sentimentHeuristic(`${row.title} ${row.text}`)
+      update.run(sentiment, `heuristic:${hits.join(',') || '无命中'}`, row.id)
+    }
     updated += 1
   }
 

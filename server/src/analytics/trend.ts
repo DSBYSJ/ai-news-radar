@@ -24,12 +24,18 @@ export interface DailyPoint {
 }
 
 /** 第 1 层 · 当日条数 —— ⚠️ 假趋势（源一变多数字就涨），只作基线对照 */
-export function dailyVolume(db: DatabaseSync, days = 30): DailyPoint[] {
+export function dailyVolume(db: DatabaseSync, days = 30, category?: string): DailyPoint[] {
+  const where = ['ai_relevant = 1', 'published_at >= ?']
+  const params: (string | number)[] = [cutoffIso(days)]
+  if (category) {
+    where.push('category = ?')
+    params.push(category)
+  }
   const rows = db
     .prepare(
-      "SELECT date(published_at) AS d, COUNT(*) AS n FROM articles WHERE ai_relevant = 1 AND published_at >= ? GROUP BY d",
+      `SELECT date(published_at) AS d, COUNT(*) AS n FROM articles WHERE ${where.join(' AND ')} GROUP BY d`,
     )
-    .all(cutoffIso(days)) as { d: string; n: number }[]
+    .all(...params) as { d: string; n: number }[]
   const map = new Map(rows.map((r) => [r.d, Number(r.n)]))
   return dayRange(days).map((d) => ({ date: d, value: map.get(d) ?? 0 }))
 }
@@ -89,8 +95,8 @@ export interface VelocityResult {
 }
 
 /** 第 3 层 · 斜率 —— 7 日移动平均 + 周环比（看出「在涨还是在跌」） */
-export function velocity(db: DatabaseSync, days = 30): VelocityResult {
-  const series = dailyVolume(db, days)
+export function velocity(db: DatabaseSync, days = 30, category?: string): VelocityResult {
+  const series = dailyVolume(db, days, category)
   const points: VelocityPoint[] = series.map((p, i) => {
     if (i < 6) return { date: p.date, count: p.value, ma7: null }
     let sum = 0
@@ -102,7 +108,7 @@ export function velocity(db: DatabaseSync, days = 30): VelocityResult {
   // 「上一周」永远是空数组 → lastWeekAvg 恒为 0 → changePct 恒为 null，
   // 概览 KPI 与桌面小组件的环比一直是空的。这里多取 7 天专用于算基线，
   // 返回的点仍按调用方要的窗口（ma7 的 null 语义保持不变）。
-  const extended = days >= 14 ? series : dailyVolume(db, 14)
+  const extended = days >= 14 ? series : dailyVolume(db, 14, category)
   const avg = (from: number, to: number) => {
     const slice = extended.slice(from, to).map((p) => p.value)
     if (slice.length === 0) return 0
@@ -318,16 +324,27 @@ export function crossSource(db: DatabaseSync, days = 30): CrossSourceResult {
 }
 
 /** 实体热度（mentions 表） */
-export function topEntities(db: DatabaseSync, days = 30, limit = 15): { entity: string; count: number }[] {
+export function topEntities(
+  db: DatabaseSync,
+  days = 30,
+  limit = 15,
+  category?: string,
+): { entity: string; count: number }[] {
+  const where = ['a.ai_relevant = 1', 'a.published_at >= ?']
+  const params: (string | number)[] = [cutoffIso(days)]
+  if (category) {
+    where.push('a.category = ?')
+    params.push(category)
+  }
   const rows = db
     .prepare(
       `SELECT m.entity AS entity, COUNT(*) AS n
        FROM mentions m
        JOIN articles a ON a.id = m.article_id
-       WHERE a.ai_relevant = 1 AND a.published_at >= ?
+       WHERE ${where.join(' AND ')}
        GROUP BY m.entity`,
     )
-    .all(cutoffIso(days)) as unknown as { entity: string; n: number }[]
+    .all(...params) as unknown as { entity: string; n: number }[]
 
   /*
    * 归并到"标准名"再排序截断：别名合并可能让排名后面的实体反超，

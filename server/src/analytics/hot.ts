@@ -30,6 +30,10 @@ export interface HotItem {
   firstSeen: string
   lastSeen: string
   hourly: number[]
+  /** 参与报道的来源（名字 + 各自最新一篇的原文直链）—— item 8 跨源直链 */
+  sourceLinks: { name: string; url: string }[]
+  /** 跨天事件的时间线（按日期分组；单日事件为空数组）—— item 5 */
+  timeline: { date: string; items: { title: string; sourceName: string; url: string }[] }[]
   related: { id: number; title: string; url: string; sourceName: string }[]
   topArticle: { id: number; title: string; url: string; sourceName: string; publishedAt: string; tldr: string | null; summary: string | null } | null
 }
@@ -158,6 +162,33 @@ export function hotRanking(db: DatabaseSync, opts: { hours?: number; limit?: num
       summary: top.summary,
     }
 
+  // 每个事件的来源直链 + 跨天时间线
+    const sourceRows = db.prepare(
+      `SELECT a.event_key, a.url, a.published_at, s.name AS source_name
+         FROM articles a JOIN raw_items r ON r.id = a.raw_id JOIN sources s ON s.id = r.source_id
+        WHERE a.event_key = ? AND a.ai_relevant = 1
+        ORDER BY a.published_at DESC`,
+    )
+    const sourceUrls = new Map<string, { name: string; url: string }>()
+    const byDate = new Map<string, { title: string; sourceName: string; url: string }[]>()
+    for (const k of g.keys) {
+      for (const r of sourceRows.all(k) as unknown as { event_key: string; url: string; published_at: string; source_name: string }[]) {
+        // 每个来源只保留最新一篇的直链
+        if (!sourceUrls.has(r.source_name)) sourceUrls.set(r.source_name, { name: r.source_name, url: r.url })
+        // 时间线：每天最多 3 条
+        const day = r.published_at.slice(0, 10)
+        const list = byDate.get(day) ?? []
+        if (list.length < 3) {
+          list.push({ title: sorted.find((a) => a.url === r.url)?.title ?? r.url, sourceName: r.source_name, url: r.url })
+          byDate.set(day, list)
+        }
+      }
+    }
+    const timeline = [...byDate.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([date, items]) => ({ date, items }))
+
+
     items.push({
       rank: 0,
       title: top.title,
@@ -172,6 +203,8 @@ export function hotRanking(db: DatabaseSync, opts: { hours?: number; limit?: num
       firstSeen,
       lastSeen,
       hourly,
+      sourceLinks: [...sourceUrls.values()].slice(0, 12),
+      timeline: timeline.length > 1 ? timeline : [],
       related: [],
       topArticle,
     })

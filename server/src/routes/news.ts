@@ -79,11 +79,12 @@ export async function newsRoutes(app: FastifyInstance): Promise<void> {
    * 安卓 WebView 在移动网络下，6 个并行请求 = 6 个 RTT + 6 次 JSON 解析，
    * 合并成 1 个后首屏明显更快（数据本身都是本地 SQLite 查询，服务端开销可忽略）。
    */
-  app.get('/api/news/overview', async () => {
+  app.get('/api/news/overview', async (req) => {
+    const q = req.query as Query
     const db = getDb()
     return {
       health: healthPayload(),
-      velocity: velocity(db, 7),
+      velocity: velocity(db, 7, typeof q.category === 'string' ? q.category : undefined),
       cross: crossSource(db, 7),
       summaries: { items: listSummaries(db, 7) },
       entities: { days: 7, items: topEntities(db, 7, 15) },
@@ -205,8 +206,10 @@ export async function newsRoutes(app: FastifyInstance): Promise<void> {
 
   /** 第 3 层 · 7 日移动平均 + 周环比 */
   app.get('/api/news/trend/velocity', async (req) => {
-    const days = num((req.query as Query).days, 30)
-    return { days, ...velocity(getDb(), days) }
+    const q = req.query as Query
+    const days = num(q.days, 30)
+    const category = typeof q.category === 'string' && q.category ? q.category : undefined
+    return { days, ...velocity(getDb(), days, category) }
   })
 
   /** 第 4 层 · 跨源交叉度 + 突发检测（★ 差异化核心） */
@@ -249,7 +252,8 @@ export async function newsRoutes(app: FastifyInstance): Promise<void> {
   /** 实体热度 */
   app.get('/api/news/entities', async (req) => {
     const q = req.query as Query
-    return { days: num(q.days, 30), items: topEntities(getDb(), num(q.days, 30), num(q.limit, 15)) }
+    const category = typeof q.category === 'string' && q.category ? q.category : undefined
+    return { days: num(q.days, 30), items: topEntities(getDb(), num(q.days, 30), num(q.limit, 15), category) }
   })
 
   /** 源清单（含最近抓取状态） */
@@ -431,6 +435,62 @@ export async function newsRoutes(app: FastifyInstance): Promise<void> {
       .prepare('SELECT source_id, error, at FROM collect_log WHERE ok = 0 AND at >= ? ORDER BY at DESC LIMIT 50')
       .all(cutoff) as unknown as { source_id: string; error: string | null; at: string }[]
     return { days, perSource, daily, errors }
+  })
+
+
+  /**
+   * 判定依据溯源（item 7）
+   * - kind=sentiment：某天被判定为负面的文章 + 每条的关键词/AI 模型依据
+   * - kind=burst：某天某类目的突发，基线 vs 实际 + 当日文章列表
+   */
+  app.get('/api/news/debug/evidence', async (req) => {
+    const db = getDb()
+    const q = req.query as Query
+    const kind = typeof q.kind === 'string' ? q.kind : 'sentiment'
+    const date = typeof q.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(q.date) ? q.date : null
+    if (!date) return { error: '缺少有效 date（YYYY-MM-DD）' }
+
+    if (kind === 'sentiment') {
+      const items = db
+        .prepare(
+          `SELECT a.id, a.title, a.url, a.sentiment, a.sentiment_keywords, s.name AS source_name
+             FROM articles a JOIN raw_items r ON r.id = a.raw_id JOIN sources s ON s.id = r.source_id
+            WHERE date(a.published_at) = ? AND a.ai_relevant = 1 AND a.sentiment = 'negative'
+            ORDER BY a.published_at DESC LIMIT 30`,
+        )
+        .all(date) as unknown as { id: number; title: string; url: string; sentiment: string; sentiment_keywords: string | null; source_name: string }[]
+      return {
+        kind,
+        date,
+        rule: 'AI 判定（DeepSeek 行业分析师提示词）优先；AI 不可用时走关键词启发式（正面/负面词表 + 英文正则）',
+        items,
+      }
+    }
+
+    const category = typeof q.category === 'string' && q.category ? q.category : 'all'
+    const burst = db
+      .prepare('SELECT article_count, baseline_mean, z_score FROM burst_detection WHERE date = ? AND category = ?')
+      .get(date, category) as { article_count: number; baseline_mean: number; z_score: number } | undefined
+    const items = db
+      .prepare(
+        `SELECT a.id, a.title, a.url, a.published_at, s.name AS source_name
+           FROM articles a JOIN raw_items r ON r.id = a.raw_id JOIN sources s ON s.id = r.source_id
+          WHERE date(a.published_at) = ? AND a.ai_relevant = 1${category === 'all' ? '' : ' AND a.category = ?'}
+          ORDER BY a.published_at DESC LIMIT 30`,
+      )
+      .all(...(category === 'all' ? [date] : [date, category])) as unknown as {
+      id: number; title: string; url: string; published_at: string; source_name: string
+    }[]
+    return {
+      kind,
+      date,
+      category,
+      rule: '突发判定：14 天滑动基线（不含当日），z = (当日条数 − 基线均值) / 基线标准差，z ≥ 2.5 入库',
+      baseline: burst ? Number(burst.baseline_mean) : null,
+      actual: burst ? Number(burst.article_count) : null,
+      z: burst ? Number(burst.z_score) : null,
+      items,
+    }
   })
 
   /** AI 处理状态（item 12）：按日期统计 ai_status 分布 */

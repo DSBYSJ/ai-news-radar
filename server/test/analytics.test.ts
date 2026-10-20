@@ -244,3 +244,21 @@ test('第 4 层 crossSource：返回 dayEvents（悬浮提示用，含来源列�
   assert.deepEqual(events[0].sources, ['源一', '源二'])
   db.close()
 })
+
+test('velocity：按分类过滤后条数下降（item 6 图表联动）', () => {
+  const db = setup()
+  const day = iso(0)
+  for (let i = 0; i < 6; i++) {
+    addArticle(db, addRaw(db, 's1', `m${i}`, day), `模型发布 ${i}`, 'model_release', 60, day)
+  }
+  for (let i = 0; i < 4; i++) {
+    addArticle(db, addRaw(db, 's1', `p${i}`, day), `政策新闻 ${i}`, 'policy', 60, day)
+  }
+  const all = velocity(db, 7)
+  const onlyModel = velocity(db, 7, 'model_release')
+  const sum = (r: { points: { count: number }[] }): number => r.points.reduce((s, p) => s + p.count, 0)
+  assert.equal(sum(all), 10)
+  assert.equal(sum(onlyModel), 6, '只应剩模型发布那 6 条')
+  assert.ok(sum(onlyModel) < sum(all))
+  db.close()
+})

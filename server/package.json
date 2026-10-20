@@ -1,6 +1,6 @@
 {
   "name": "ai-news-server",
-  "version": "0.24.0",
+  "version": "0.25.0",
   "private": true,
   "description": "AI 资讯趋势雷达 · 后端（采集 / 存储 / 趋势统计）",
   "type": "module",

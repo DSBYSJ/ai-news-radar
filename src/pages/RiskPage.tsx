@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api.ts'
 import type { RiskFactor, RiskReport } from '../types.ts'
+import MetricInfo from '../components/MetricInfo.tsx'
 
 const BAND_TEXT: Record<string, { label: string; hint: string }> = {
   calm: { label: '冷静', hint: '叙事没有明显过热：融资话题占比低、情绪不偏、关注点分散。' },
@@ -158,7 +159,10 @@ export default function RiskPage() {
       {/* 危机风险分 */}
       <section className="card p-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <p className="eyebrow text-[10px] text-slate-400 dark:text-slate-500">危机风险分 CRS</p>
+          <p className="eyebrow flex items-center gap-1.5 text-[10px] text-slate-400 dark:text-slate-500">
+            危机风险分 CRS
+            <MetricInfo metric="crs" />
+          </p>
           <p className="text-[10.5px] text-slate-400 dark:text-slate-500">未来 12 个月</p>
         </div>
 

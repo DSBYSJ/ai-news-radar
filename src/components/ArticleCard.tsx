@@ -186,7 +186,13 @@ export default function ArticleCard({ article }: { article: Article }) {
       </div>
 
       {/* 站内阅读器（portal 挂到 body，不占卡片布局） */}
-      <ReaderModal open={readerOpen} onClose={() => setReaderOpen(false)} data={reader} loading={loadingContent} />
+      <ReaderModal
+        open={readerOpen}
+        onClose={() => setReaderOpen(false)}
+        data={reader}
+        loading={loadingContent}
+        scope={`article:${article.id}`}
+      />
     </article>
   )
 }

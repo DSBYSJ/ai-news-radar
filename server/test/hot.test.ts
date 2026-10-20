@@ -104,3 +104,42 @@ test('hotRanking：标记新事件与动量（近 6 小时 vs 前 6 小时）', 
   assert.ok(Array.isArray(rising.related))
   db.close()
 })
+
+test('hotRanking：返回来源直链与跨天时间线（item 8 / item 5）', () => {
+  const db = setup()
+  // setup() 已建 a / b / c 三个源，直接用 a 和 b 当"两家独立源"
+  const mk = (key: string, at: string, source: string, url: string): void => {
+    const rawId = Number(
+      db
+        .prepare(
+          `INSERT INTO raw_items (source_id, guid, url, url_norm, title, summary, published_at, fingerprint, fetched_at)
+           VALUES (?, ?, ?, ?, ?, 's', ?, ?, ?)`,
+        )
+        .run(source, url, url, url, '同一个事件', at, url, at).lastInsertRowid,
+    )
+    db.prepare(
+      `INSERT INTO articles (raw_id, url, title, tldr, summary, category, entities, score, score_parts, sentiment, event_key, published_at, created_at, ai_relevant)
+       VALUES (?, ?, ?, NULL, '摘要', 'model_release', NULL, 70, NULL, NULL, ?, ?, ?, 1)`,
+    ).run(rawId, url, '同一个事件', key, at, at)
+  }
+  mk('e1', '2026-10-20T03:00:00Z', 'a', 'https://x/1')
+  mk('e2', '2026-10-21T03:00:00Z', 'b', 'https://x/2')
+
+  const items = hotRanking(db, { now: Date.parse('2026-10-21T13:00:00Z') })
+  assert.equal(items.length, 1, '跨天同标题应合并')
+  const it = items[0]
+  assert.equal(it.sourceLinks.length, 2, '两家来源都应给出直链')
+  assert.ok(it.sourceLinks.every((s) => s.url.startsWith('https://x/')), '直链应指向原文')
+  assert.equal(it.timeline.length, 2, '跨天事件应有 2 个时间点')
+  assert.equal(it.timeline[0].date, '2026-10-20')
+  assert.equal(it.timeline[1].date, '2026-10-21')
+  db.close()
+})
+
+test('hotRanking：单日事件不返回时间线', () => {
+  const db = setup()
+  addArticle(db, { key: 'e1', at: at(2), source: 'a', url: 'https://x/1', title: '只在今天' })
+  const items = hotRanking(db, { now: NOW })
+  assert.equal(items[0].timeline.length, 0, '单日事件时间线为空数组')
+  db.close()
+})

@@ -96,9 +96,10 @@ export const api = {
   risk: (days = 30) => get<RiskReport>('/risk', { days }),
   volume: (days: number) => get<{ days: number; points: DailyPoint[] }>('/trend/volume', { days }),
   category: (days: number) => get<{ days: number; points: CategoryRatioPoint[] }>('/trend/category', { days }),
-  velocity: (days: number) => get<VelocityResponse>('/trend/velocity', { days }),
+  velocity: (days: number, category?: string) => get<VelocityResponse>('/trend/velocity', { days, category }),
   cross: (days: number) => get<CrossSourceResponse>('/trend/cross', { days }),
-  entities: (days: number, limit = 15) => get<{ days: number; items: EntityItem[] }>('/entities', { days, limit }),
+  entities: (days: number, limit = 15, category?: string) =>
+    get<{ days: number; items: EntityItem[] }>('/entities', { days, limit, category }),
   runCollect: () => post<unknown>('/collect'),
   runProcess: () => post<unknown>('/process'),
   forecast: (days = 30, horizon = 7) => get<ForecastResponse>('/forecast', { days, horizon }),

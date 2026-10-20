@@ -48,11 +48,11 @@ function addArticle(
 }
 
 test('启发式情感：明显利好 / 利空 / 中性', () => {
-  assert.equal(sentimentHeuristic('OpenAI 发布 GPT-6，性能大幅提升'), 'positive')
-  assert.equal(sentimentHeuristic('某公司宣布裁员 500 人'), 'negative')
-  assert.equal(sentimentHeuristic('一篇关于向量数据库的入门教程'), 'neutral')
+  assert.equal(sentimentHeuristic('OpenAI 发布 GPT-6，性能大幅提升').sentiment, 'positive')
+  assert.equal(sentimentHeuristic('某公司宣布裁员 500 人').sentiment, 'negative')
+  assert.equal(sentimentHeuristic('一篇关于向量数据库的入门教程').sentiment, 'neutral')
   // 混合时按命中数量比较（利空占多）
-  assert.equal(sentimentHeuristic('某公司融资失败，宣布破产'), 'negative')
+  assert.equal(sentimentHeuristic('某公司融资失败，宣布破产').sentiment, 'negative')
 })
 
 test('parseSentimentResult：解析围栏 JSON；空/垃圾返回 null', () => {

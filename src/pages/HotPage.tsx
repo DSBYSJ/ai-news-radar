@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api.ts'
 import type { HotItem } from '../types.ts'
+import MetricInfo from '../components/MetricInfo.tsx'
 
 /** 动量标记：新出现 / 发酵中 / 持平 / 回落 */
 function Momentum({ item, size = 'md' }: { item: HotItem; size?: 'md' | 'sm' }) {
@@ -56,7 +57,12 @@ function HotScore({ value, big = false }: { value: number; big?: boolean }) {
   return (
     <div className="text-right">
       <p className={`num font-semibold leading-none text-[var(--hot)] ${big ? 'text-[26px]' : 'text-lg'}`}>{value}</p>
-      {big && <p className="mt-1 text-[10px] text-slate-400 dark:text-slate-500">热度指数</p>}
+      {big && (
+        <p className="mt-1 flex items-center gap-1 text-[10px] text-slate-400 dark:text-slate-500">
+          热度指数
+          <MetricInfo metric="hot" />
+        </p>
+      )}
     </div>
   )
 }
@@ -71,6 +77,7 @@ function SourceLine({ item }: { item: HotItem }) {
 
 /** 大卡（NO.01 用完整版，右侧 NO.02/03 用 compact） */
 function HotCard({ item, compact = false, fill = false }: { item: HotItem; compact?: boolean; fill?: boolean }) {
+  const [expanded, setExpanded] = useState(false)
   const summary = item.topArticle?.summary || item.topArticle?.tldr || ''
   return (
     <article className={`card card-accent relative flex flex-col overflow-hidden ${compact ? 'p-3.5' : 'p-4'} ${fill ? 'h-full' : ''}`}>
@@ -139,6 +146,59 @@ function HotCard({ item, compact = false, fill = false }: { item: HotItem; compa
           </aside>
         )}
       </div>
+
+      {/* 展开：参与报道的媒体 + 直链（item 8） */}
+      {expanded && item.sourceLinks.length > 0 && (
+        <div className="mt-2 rounded-lg border border-[var(--line)] bg-[var(--surface-2)] p-2.5">
+          <p className="eyebrow mb-1.5 text-[10px] text-slate-400 dark:text-slate-500">参与报道的媒体</p>
+          <ul className="flex flex-wrap gap-x-3 gap-y-1">
+            {item.sourceLinks.map((src) => (
+              <li key={src.name} className="text-[11px]">
+                <a
+                  href={src.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-slate-600 hover:text-[var(--accent)] hover:underline dark:text-slate-300"
+                >
+                  {src.name} ↗
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* 时间线：跨天持续发酵的事件（item 5） */}
+      {item.timeline.length > 1 && (
+        <div className="mt-3 border-t border-[var(--line)] pt-2.5">
+          <p className="eyebrow mb-2 text-[10px] text-slate-400 dark:text-slate-500">
+            事件时间线 · {item.timeline.length} 天
+          </p>
+          <ol className="relative space-y-3 border-l border-[var(--line)] pl-3.5">
+            {item.timeline.map((day) => (
+              <li key={day.date} className="relative">
+                <span className="absolute -left-[17px] top-1 h-2 w-2 rounded-full bg-[var(--accent)]" />
+                <p className="num text-[10.5px] text-slate-400 dark:text-slate-500">{day.date}</p>
+                <ul className="mt-1 space-y-1">
+                  {day.items.map((it, i) => (
+                    <li key={`${day.date}-${i}`} className="text-[11.5px] leading-snug">
+                      <a
+                        href={it.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-slate-600 hover:text-[var(--accent)] hover:underline dark:text-slate-300"
+                      >
+                        {it.title}
+                      </a>
+                      <span className="num ml-1.5 text-[10px] text-slate-400">{it.sourceName}</span>
+                    </li>
+                  ))}
+                </ul>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
 
       {compact ? (
         <div className="mt-2 flex items-end justify-between gap-2">

@@ -42,7 +42,11 @@ function migrate(conn: DatabaseSync): void {
     conn.exec(ddl)
   }
   const artCols24 = conn.prepare('PRAGMA table_info(articles)').all() as unknown as { name: string }[]
-  for (const [col, ddl] of [['ai_status', 'ALTER TABLE articles ADD COLUMN ai_status TEXT'], ['ai_error', 'ALTER TABLE articles ADD COLUMN ai_error TEXT']] as const) {
+  for (const [col, ddl] of [
+    ['ai_status', 'ALTER TABLE articles ADD COLUMN ai_status TEXT'],
+    ['ai_error', 'ALTER TABLE articles ADD COLUMN ai_error TEXT'],
+    ['sentiment_keywords', 'ALTER TABLE articles ADD COLUMN sentiment_keywords TEXT'],
+  ] as const) {
     if (!artCols24.some((c) => c.name === col)) conn.exec(ddl)
   }
   // v0.19.0：AI 相关性（非 AI 内容不进榜单/日报/列表）

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { api } from '../api.ts'
+import EvidenceModal from '../components/EvidenceModal.tsx'
 import AskPanel from '../components/AskPanel.tsx'
 import type { CrossSourceResponse, EntityItem, Health, SentimentResponse, SummaryListItem, VelocityResponse } from '../types.ts'
 import { CATEGORY_COLORS, CATEGORY_LABELS } from '../utils/format.ts'
@@ -180,6 +181,7 @@ export default function OverviewPage({ health, onNavigate }: Props) {
   const [summaries, setSummaries] = useState<SummaryListItem[]>([])
   const [entities, setEntities] = useState<EntityItem[]>([])
   const [sentiment, setSentiment] = useState<SentimentResponse | null>(null)
+  const [evidence, setEvidence] = useState<{ kind: 'sentiment' | 'burst'; date: string; category?: string } | null>(null)
 
   useEffect(() => {
     let alive = true
@@ -269,6 +271,32 @@ export default function OverviewPage({ health, onNavigate }: Props) {
             tone={negShare !== null && negShare >= 0.35 ? 'up' : 'default'}
             hint={sentiToday ? `已判定 ${sentiToday.classified} 条` : '情感判定待补齐'}
           />
+        </div>
+
+        {/* 判定依据入口（item 7）：负面情绪 + 突发 */}
+        <div className="flex flex-wrap items-center gap-2 text-[11px]">
+          <button
+            type="button"
+            onClick={() => {
+              setEvidence({ kind: 'sentiment', date: today })
+            }}
+            disabled={!today}
+            className="inline-flex items-center gap-1 rounded-full border border-[var(--line)] px-2.5 py-1 text-slate-500 transition hover:border-slate-400 disabled:opacity-40 dark:text-slate-400"
+          >
+            负面情绪 · 判定依据
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const top = recentBursts[0]
+              setEvidence({ kind: 'burst', date: top?.date ?? today, category: top?.category ?? 'all' })
+            }}
+            disabled={!today || recentBursts.length === 0}
+            className="inline-flex items-center gap-1 rounded-full border border-[var(--line)] px-2.5 py-1 text-slate-500 transition hover:border-slate-400 disabled:opacity-40 dark:text-slate-400"
+          >
+            突发检测 · 判定依据
+          </button>
+          <span className="text-slate-400 dark:text-slate-500">看触发判断的原始条目与规则</span>
         </div>
 
         {/* 今日简报 */}
@@ -437,6 +465,15 @@ export default function OverviewPage({ health, onNavigate }: Props) {
           )}
         </Card>
       </aside>
+      {evidence && (
+        <EvidenceModal
+          open
+          onClose={() => setEvidence(null)}
+          kind={evidence.kind}
+          date={evidence.date}
+          category={evidence.category}
+        />
+      )}
     </div>
   )
 }

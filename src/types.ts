@@ -335,6 +335,10 @@ export interface HotItem {
   hourly: number[]
   /** 同一事件的其它报道（仅前 3 名有，用于大卡） */
   related: { id: number; title: string; url: string; sourceName: string }[]
+  /** 参与报道的来源 + 各自最新一篇原文直链（item 8） */
+  sourceLinks: { name: string; url: string }[]
+  /** 跨天事件的时间线（单日事件为空数组；item 5） */
+  timeline: { date: string; items: { title: string; sourceName: string; url: string }[] }[]
   topArticle: {
     id: number
     title: string
