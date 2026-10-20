@@ -6,6 +6,9 @@ import { dailyEdition } from '../analytics/edition.ts'
 import { periodReport } from '../analytics/period.ts'
 import { hotRanking } from '../analytics/hot.ts'
 import { riskReport } from '../risk/index.ts'
+import { deleteAlias, listAliases, listMapping, upsertAlias } from '../entities/alias.ts'
+import { realign } from '../entities/realign.ts'
+import { entityDailySeries } from '../analytics/trend.ts'
 import { CATEGORY_LABELS, type Category } from '../ai/categories.ts'
 import { runProcessing } from '../ai/pipeline.ts'
 import { askQuestion } from '../ai/ask.ts'
@@ -315,6 +318,146 @@ export async function newsRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/news/risk', async (req) => {
     const q = req.query as Query
     return riskReport(getDb(), { days: num(q.days, 30) })
+  })
+
+
+  // ==================== v0.24.0：实体别名 / 底表映射 / 调试 ====================
+
+  /** 别名规则列表 */
+  app.get('/api/news/entities/aliases', async () => ({ items: listAliases(getDb()) }))
+
+  /** 新增/更新别名（幂等）：保存后立即生效，无需重算 */
+  app.post('/api/news/entities/aliases', async (req) => {
+    const body = (req.body ?? {}) as { alias?: string; canonical?: string; note?: string }
+    if (!body.alias?.trim() || !body.canonical?.trim()) {
+      return { ok: false, error: 'alias 与 canonical 都不能为空' }
+    }
+    try {
+      upsertAlias(getDb(), body.alias, body.canonical, body.note ?? '')
+      return { ok: true, items: listAliases(getDb()) }
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  })
+
+  app.delete('/api/news/entities/aliases', async (req) => {
+    const q = req.query as Query
+    const id = Number(q.id)
+    if (!Number.isFinite(id) || id <= 0) return { ok: false, error: '缺少有效 id' }
+    deleteAlias(getDb(), id)
+    return { ok: true, items: listAliases(getDb()) }
+  })
+
+  /** 实体底表映射视图（item 13：原文 → 标准名） */
+  app.get('/api/news/entities/mapping', async (req) => {
+    const q = req.query as Query
+    return { items: listMapping(getDb(), { limit: num(q.limit, 100), q: typeof q.q === 'string' ? q.q : '' }) }
+  })
+
+  /** 多实体每日提及量（item 4：横向对比） */
+  app.get('/api/news/entities/trend', async (req) => {
+    const q = req.query as Query
+    const names = typeof q.names === 'string' ? q.names.split(',') : []
+    return entityDailySeries(getDb(), names.slice(0, 3), num(q.days, 30))
+  })
+
+  /**
+   * 异步重算任务（item 3）：后台跑，立即返回 job id，不阻塞接口。
+   * 语料很小（几千条 mentions），通常几百毫秒就完，但仍走异步路径。
+   */
+  const realignJobs = new Map<string, { status: 'running' | 'done' | 'error'; startedAt: string; finishedAt?: string; report?: unknown; error?: string }>()
+  app.post('/api/news/entities/realign', async () => {
+    const id = `rj_${Date.now().toString(36)}`
+    realignJobs.set(id, { status: 'running', startedAt: new Date().toISOString() })
+    setImmediate(() => {
+      try {
+        const report = realign(getDb(), { apply: true })
+        realignJobs.set(id, { status: 'done', startedAt: '', finishedAt: new Date().toISOString(), report })
+      } catch (err) {
+        realignJobs.set(id, { status: 'error', startedAt: '', finishedAt: new Date().toISOString(), error: String(err) })
+      }
+    })
+    return { ok: true, jobId: id }
+  })
+  app.get('/api/news/entities/realign/:id', async (req) => {
+    const job = realignJobs.get((req.params as { id: string }).id)
+    if (!job) return { status: 'unknown' }
+    return job
+  })
+
+  /** 采集健康度（item 11）：每源成功率 / 延迟 / 最近一次 + 近 7 天折线 + 错误日志 */
+  app.get('/api/news/debug/collect', async (req) => {
+    const db = getDb()
+    const q = req.query as Query
+    const days = Math.max(1, Math.min(30, num(q.days, 7)))
+    const cutoff = new Date(Date.now() - days * 86_400_000).toISOString()
+    const sources = db.prepare('SELECT id, name, last_fetch_at, last_status, fail_streak FROM sources ORDER BY id').all() as unknown as {
+      id: string; name: string; last_fetch_at: string | null; last_status: string | null; fail_streak: number
+    }[]
+    const stats = db
+      .prepare(
+        `SELECT source_id,
+                COUNT(*) AS runs,
+                SUM(ok) AS oks,
+                AVG(ms) AS avg_ms,
+                MAX(ms) AS max_ms,
+                MAX(at) AS last_at
+           FROM collect_log WHERE at >= ? GROUP BY source_id`,
+      )
+      .all(cutoff) as unknown as { source_id: string; runs: number; oks: number; avg_ms: number; max_ms: number; last_at: string }[]
+    const byId = new Map(stats.map((s) => [s.source_id, s]))
+    const perSource = sources.map((s) => {
+      const st = byId.get(s.id)
+      return {
+        id: s.id,
+        name: s.name,
+        runs: st ? Number(st.runs) : 0,
+        successRate: st && Number(st.runs) > 0 ? Number(st.oks) / Number(st.runs) : null,
+        avgMs: st ? Math.round(Number(st.avg_ms)) : null,
+        maxMs: st ? Math.round(Number(st.max_ms)) : null,
+        lastAt: st?.last_at ?? s.last_fetch_at,
+        lastStatus: s.last_status,
+        failStreak: Number(s.fail_streak ?? 0),
+      }
+    })
+    // 近 N 天：每天的总抓取量与失败量
+    const daily = db
+      .prepare(
+        `SELECT date(at) AS d, COUNT(*) AS runs, SUM(CASE WHEN ok = 0 THEN 1 ELSE 0 END) AS fails
+           FROM collect_log WHERE at >= ? GROUP BY d ORDER BY d`,
+      )
+      .all(cutoff) as unknown as { d: string; runs: number; fails: number }[]
+    const errors = db
+      .prepare('SELECT source_id, error, at FROM collect_log WHERE ok = 0 AND at >= ? ORDER BY at DESC LIMIT 50')
+      .all(cutoff) as unknown as { source_id: string; error: string | null; at: string }[]
+    return { days, perSource, daily, errors }
+  })
+
+  /** AI 处理状态（item 12）：按日期统计 ai_status 分布 */
+  app.get('/api/news/debug/ai-status', async (req) => {
+    const db = getDb()
+    const q = req.query as Query
+    const days = Math.max(1, Math.min(90, num(q.days, 14)))
+    const cutoff = new Date(Date.now() - days * 86_400_000).toISOString()
+    const byDay = db
+      .prepare(
+        `SELECT date(published_at) AS d,
+                SUM(CASE WHEN COALESCE(ai_status, 'ok') = 'ok' THEN 1 ELSE 0 END) AS ok,
+                SUM(CASE WHEN ai_status = 'failed' THEN 1 ELSE 0 END) AS failed,
+                SUM(CASE WHEN ai_status = 'timeout' THEN 1 ELSE 0 END) AS timeout,
+                SUM(CASE WHEN ai_status = 'heuristic' THEN 1 ELSE 0 END) AS heuristic
+           FROM articles WHERE published_at >= ? GROUP BY d ORDER BY d`,
+      )
+      .all(cutoff) as unknown as { d: string; ok: number; failed: number; timeout: number; heuristic: number }[]
+    const recent = db
+      .prepare(
+        `SELECT a.id, a.title, a.ai_status, a.ai_error, a.published_at, s.name AS source_name
+           FROM articles a JOIN raw_items r ON r.id = a.raw_id JOIN sources s ON s.id = r.source_id
+          WHERE a.ai_status IS NOT NULL AND a.published_at >= ?
+          ORDER BY a.published_at DESC LIMIT 30`,
+      )
+      .all(cutoff) as unknown as { id: number; title: string; ai_status: string; ai_error: string | null; published_at: string; source_name: string }[]
+    return { days, byDay, recent }
   })
 
   /** 结构化日报：头条 + 分类分区 + 快讯（简报页按版面渲染） */

@@ -1,4 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite'
+import { aggregateByCanonical } from '../entities/realign.ts'
+import { entityKey } from '../entities/alias.ts'
 import { CATEGORIES } from '../ai/categories.ts'
 
 const DAY_MS = 86_400_000
@@ -323,10 +325,54 @@ export function topEntities(db: DatabaseSync, days = 30, limit = 15): { entity: 
        FROM mentions m
        JOIN articles a ON a.id = m.article_id
        WHERE a.ai_relevant = 1 AND a.published_at >= ?
-       GROUP BY m.entity
-       ORDER BY n DESC
-       LIMIT ?`,
+       GROUP BY m.entity`,
     )
-    .all(cutoffIso(days), limit) as { entity: string; n: number }[]
-  return rows.map((r) => ({ entity: r.entity, count: Number(r.n) }))
+    .all(cutoffIso(days)) as unknown as { entity: string; n: number }[]
+
+  /*
+   * 归并到"标准名"再排序截断：别名合并可能让排名后面的实体反超，
+   * 所以先把窗口内所有原始行取回来再归并。mentions 里的原文不动。
+   */
+  const merged = aggregateByCanonical(db, rows, (r) => Number(r.n))
+  return [...merged.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, limit)
+    .map(([entity, count]) => ({ entity, count }))
+}
+
+/** 多实体每日提及量（item 4：横向对比，最多 3 个实体） */
+export function entityDailySeries(
+  db: DatabaseSync,
+  names: string[],
+  days = 30,
+): { dates: string[]; series: { name: string; values: number[] }[] } {
+  const wanted = names.map((n) => n.trim()).filter(Boolean)
+  if (wanted.length === 0) return { dates: dayRange(days), series: [] }
+  const rows = db
+    .prepare(
+      `SELECT date(a.published_at) AS d, m.entity AS entity, COUNT(*) AS n
+       FROM mentions m
+       JOIN articles a ON a.id = m.article_id
+       WHERE a.ai_relevant = 1 AND a.published_at >= ?
+       GROUP BY d, m.entity`,
+    )
+    .all(cutoffIso(days)) as unknown as { d: string; entity: string; n: number }[]
+
+  const perEntity = new Map<string, Map<string, number>>()
+  for (const r of rows) {
+    // 按 key 匹配请求的实体（兼容 "Open AI"/"OpenAI" 等不同写法）
+    const matched = wanted.find((w) => entityKey(w) === entityKey(r.entity))
+    if (!matched) continue
+    const byDay = perEntity.get(matched) ?? new Map<string, number>()
+    byDay.set(r.d, (byDay.get(r.d) ?? 0) + Number(r.n))
+    perEntity.set(matched, byDay)
+  }
+  const dates = dayRange(days)
+  return {
+    dates,
+    series: wanted.map((name) => ({
+      name,
+      values: dates.map((d) => perEntity.get(name)?.get(d) ?? 0),
+    })),
+  }
 }

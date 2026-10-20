@@ -6,7 +6,7 @@ import { DatabaseSync } from 'node:sqlite'
 
 const schemaSql = readFileSync(path.join(import.meta.dirname, '../src/schema.sql'), 'utf8')
 
-test('schema.sql：可在空库上建出 9 张表', () => {
+test('schema.sql：可在空库上建出全部表（含 v0.24.0 新增 3 张）', () => {
   const db = new DatabaseSync(':memory:')
   db.exec(schemaSql)
   const rows = db
@@ -18,7 +18,10 @@ test('schema.sql：可在空库上建出 9 张表', () => {
       'article_vectors',
       'articles',
       'burst_detection',
+      'collect_log',
       'daily_summaries',
+      'entity_aliases',
+      'entity_mapping',
       'event_clusters',
       'events',
       'mentions',

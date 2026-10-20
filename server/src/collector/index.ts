@@ -51,6 +51,13 @@ export async function runCollect(opts: { sourceIds?: string[] } = {}): Promise<C
     sources = sources.filter((s) => wanted.has(s.id))
   }
 
+  /** 写一条采集日志（健康度看板用；失败也记，便于回溯某天的数据断层） */
+  const logRun = (source: SourceRow, ok: boolean, fetched: number, inserted: number, ms: number, error: string | null): void => {
+    db.prepare(
+      `INSERT INTO collect_log (source_id, ok, fetched, inserted, ms, error, at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    ).run(source.id, ok ? 1 : 0, fetched, inserted, ms, error ? error.slice(0, 300) : null, new Date().toISOString())
+  }
+
   const collectOne = async (source: SourceRow): Promise<SourceRunResult> => {
     const startedAt = Date.now()
 
@@ -86,6 +93,7 @@ export async function runCollect(opts: { sourceIds?: string[] } = {}): Promise<C
       const fetchedAt = new Date()
       const inserted = insertRawItems(db, source.id, capped, fetchedAt)
       markSourceOk(db, source.id, fetchedAt)
+      logRun(source, true, feed.items.length, inserted, Date.now() - startedAt, null)
 
       return {
         sourceId: source.id,
@@ -99,6 +107,7 @@ export async function runCollect(opts: { sourceIds?: string[] } = {}): Promise<C
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       markSourceFail(db, source.id, message, new Date())
+      logRun(source, false, 0, 0, Date.now() - startedAt, message)
       return {
         sourceId: source.id,
         name: source.name,

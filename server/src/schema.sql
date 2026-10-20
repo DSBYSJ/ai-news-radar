@@ -124,3 +124,40 @@ CREATE TABLE IF NOT EXISTS article_vectors (
   fingerprint TEXT    NOT NULL,
   updated_at  TEXT    NOT NULL
 );
+
+
+-- ============ v0.24.0：实体别名 / 底表映射 / 采集日志 / AI 处理状态 ============
+-- 实体别名规则（手工维护，权威）：alias → canonical
+CREATE TABLE IF NOT EXISTS entity_aliases (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  alias      TEXT NOT NULL UNIQUE,
+  canonical  TEXT NOT NULL,
+  note       TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_entity_aliases_canonical ON entity_aliases(canonical);
+
+-- 实体底表映射（异步任务的产物，供溯源与校准；mentions 表保持原文不动）
+CREATE TABLE IF NOT EXISTS entity_mapping (
+  raw        TEXT PRIMARY KEY,
+  canonical  TEXT NOT NULL,
+  source     TEXT NOT NULL,           -- 'rule'（手工别名）| 'auto'（语料频率对齐）
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_entity_mapping_canonical ON entity_mapping(canonical);
+
+-- 采集日志（健康度看板 / 排查数据断层）
+CREATE TABLE IF NOT EXISTS collect_log (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  source_id  TEXT NOT NULL,
+  ok         INTEGER NOT NULL,
+  fetched    INTEGER DEFAULT 0,
+  inserted   INTEGER DEFAULT 0,
+  ms         INTEGER DEFAULT 0,
+  error      TEXT,
+  at         TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_collect_log_at ON collect_log(at);
+
+-- AI 处理状态（articles 的调试字段；不影响现有查询）
+-- ai_status: 'ok' | 'failed' | 'timeout' | 'heuristic'

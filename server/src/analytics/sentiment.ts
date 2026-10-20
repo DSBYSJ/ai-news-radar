@@ -1,4 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite'
+import { aggregateByCanonical } from '../entities/realign.ts'
 import { dayRange } from './trend.ts'
 
 /** 情感趋势分析：每日正/负/中比例、实体负面占比曲线、实体负面飙升预警 */
@@ -191,11 +192,19 @@ export function topEntitiesWithSentiment(db: DatabaseSync, days = 30, limit = 8)
               SUM(CASE WHEN a.sentiment = 'negative' THEN 1 ELSE 0 END) AS neg
        FROM mentions m JOIN articles a ON a.id = m.article_id
        WHERE a.ai_relevant = 1 AND a.published_at >= ?
-       GROUP BY m.entity ORDER BY n DESC LIMIT ?`,
+       GROUP BY m.entity ORDER BY n DESC LIMIT 200`,
     )
-    .all(cutoffIso(days), limit) as unknown as { entity: string; n: number; neg: number }[]
+    .all(cutoffIso(days)) as unknown as { entity: string; n: number; neg: number }[]
 
-  return rows.map((r) => ({
+  // 按标准名归并后再排序截断（别名一保存立即生效）
+  const merged = aggregateByCanonical(db, rows, (r) => Number(r.n))
+  const negMerged = aggregateByCanonical(db, rows, (r) => Number(r.neg ?? 0))
+  const mergedRows = [...merged.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, limit)
+    .map(([entity, n]) => ({ entity, n, neg: negMerged.get(entity) ?? 0 }))
+
+  return mergedRows.map((r) => ({
     entity: r.entity,
     count: Number(r.n),
     negative: Number(r.neg),

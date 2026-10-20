@@ -6,13 +6,15 @@ import { useBurstFeed } from './hooks/useBurstFeed.ts'
 import ListPage from './pages/ListPage.tsx'
 import HotPage from './pages/HotPage.tsx'
 import RiskPage from './pages/RiskPage.tsx'
+import SettingsPage from './pages/SettingsPage.tsx'
+import CommandPalette from './components/CommandPalette.tsx'
 import OverviewPage from './pages/OverviewPage.tsx'
 import SummaryPage from './pages/SummaryPage.tsx'
 import TrendPage from './pages/TrendPage.tsx'
 import type { Health, SourceItem } from './types.ts'
 import { CATEGORY_LABELS } from './utils/format.ts'
 
-type Tab = 'overview' | 'list' | 'hot' | 'trend' | 'risk' | 'summary'
+type Tab = 'overview' | 'list' | 'hot' | 'trend' | 'risk' | 'settings' | 'summary'
 type Theme = 'light' | 'dark'
 
 function initialTheme(): Theme {
@@ -70,6 +72,18 @@ export default function App() {
   const [sources, setSources] = useState<SourceItem[]>([])
   const [running, setRunning] = useState<string>('')
   const [toasts, setToasts] = useState<{ id: number; text: string }[]>([])
+  // 全局检索面板（Ctrl+K / Cmd+K）
+  const [paletteOpen, setPaletteOpen] = useState(false)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setPaletteOpen((v) => !v)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   // 液态玻璃折射：按元素尺寸生成 SVG 位移贴图并挂到 backdrop-filter 上。
   // 只在深色模式生效（亮色模式保持原样）；内容变化 / 窗口尺寸变化后重扫。
@@ -196,6 +210,12 @@ export default function App() {
   // 安全区适配（安卓 App edge-to-edge 下避让状态栏与手势区；桌面端 env() 为 0，不受影响）
   return (
     <div className="mx-auto max-w-6xl overflow-x-hidden px-4 pb-[calc(env(safe-area-inset-bottom)+2rem)] pt-[calc(env(safe-area-inset-top)+1.25rem)] md:px-6 md:pt-[calc(env(safe-area-inset-top)+1.75rem)]">
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        onNavigate={(t) => setTab(t)}
+      />
+
       <header className="mb-6">
         {/* ===== 顶部：两层结构 =====
             第一层：品牌（字标 + 产品名 + 版本）+ 操作
@@ -332,6 +352,7 @@ export default function App() {
               ['list', '资讯'],
               ['trend', '趋势'],
               ['risk', '风险'],
+              ['settings', '后台'],
               ['summary', '简报'],
             ] as [Tab, string][]
           ).map(([key, label]) => (
@@ -362,6 +383,8 @@ export default function App() {
           <TrendPage />
         ) : tab === 'risk' ? (
           <RiskPage />
+        ) : tab === 'settings' ? (
+          <SettingsPage />
         ) : (
           <SummaryPage />
         )}

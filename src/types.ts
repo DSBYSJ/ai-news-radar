@@ -417,3 +417,50 @@ export interface RiskReport {
   crisis: CrisisAssessment | null
   disclaimer: string
 }
+
+// ---------- 实体别名 / 底表映射 / 调试（v0.24.0） ----------
+export interface AliasRule {
+  id: number
+  alias: string
+  canonical: string
+  note: string | null
+  created_at: string
+}
+
+export interface MappingRow {
+  raw: string
+  canonical: string
+  source: string
+  updated_at: string
+  mentions: number
+}
+
+export interface EntityDailySeries {
+  dates: string[]
+  series: { name: string; values: number[] }[]
+}
+
+export interface CollectSourceStat {
+  id: string
+  name: string
+  runs: number
+  successRate: number | null
+  avgMs: number | null
+  maxMs: number | null
+  lastAt: string | null
+  lastStatus: string | null
+  failStreak: number
+}
+
+export interface CollectDebug {
+  days: number
+  perSource: CollectSourceStat[]
+  daily: { d: string; runs: number; fails: number }[]
+  errors: { source_id: string; error: string | null; at: string }[]
+}
+
+export interface AiStatusDebug {
+  days: number
+  byDay: { d: string; ok: number; failed: number; timeout: number; heuristic: number }[]
+  recent: { id: number; title: string; ai_status: string; ai_error: string | null; published_at: string; source_name: string }[]
+}

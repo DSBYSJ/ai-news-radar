@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api.ts'
+import { exportVelocityCsv, exportEntitiesCsv } from '../lib/exporters.ts'
 import AskPanel from '../components/AskPanel.tsx'
 import ChartCard from '../components/ChartCard.tsx'
 import CrossSourceChart from '../components/CrossSourceChart.tsx'
@@ -28,6 +29,10 @@ export default function TrendPage() {
   const [velocity, setVelocity] = useState<VelocityResponse | null>(null)
   const [cross, setCross] = useState<CrossSourceResponse | null>(null)
   const [entities, setEntities] = useState<EntityItem[]>([])
+  const exportTrendCsv = (): void => {
+    if (velocity) exportVelocityCsv(velocity)
+    if (entities.length > 0) exportEntitiesCsv(entities, 30)
+  }
   const [forecast, setForecast] = useState<ForecastResponse | null>(null)
   const [sentiment, setSentiment] = useState<SentimentResponse | null>(null)
   const [selectedEntity, setSelectedEntity] = useState('')
@@ -117,7 +122,17 @@ export default function TrendPage() {
               四层递进：条数 → 构成 → 斜率 → 跨源与突发。越往后越接近「真正发生了什么」。
             </p>
           </div>
-        </header>
+                <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={exportTrendCsv}
+            className="rounded-lg border border-[var(--line)] px-3 py-1.5 text-[11.5px] text-slate-600 transition hover:border-slate-400 dark:text-slate-300"
+            title="导出每日条数/均线与实体热度为 CSV（Excel 可直接打开）"
+          >
+            导出 CSV
+          </button>
+        </div>
+      </header>
 
         <div className="card flex flex-wrap items-end gap-x-3 gap-y-2 p-3.5">
           <label className="flex flex-col gap-1 text-[10.5px] font-medium uppercase tracking-wider text-slate-400 dark:text-slate-500">

@@ -14,6 +14,11 @@ import type {
   HotResponse,
   OverviewResponse,
   RiskReport,
+  AliasRule,
+  MappingRow,
+  EntityDailySeries,
+  CollectDebug,
+  AiStatusDebug,
   PeriodReport,
   SentimentResponse,
   SourceItem,
@@ -38,6 +43,12 @@ async function get<T>(path: string, params?: Params): Promise<T> {
   return (await res.json()) as T
 }
 
+async function del<T>(path: string): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, { method: 'DELETE', credentials: 'include' })
+  if (!res.ok) throw new Error(`接口 ${path} 返回 ${res.status}`)
+  return (await res.json()) as T
+}
+
 async function post<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     method: 'POST',
@@ -57,6 +68,8 @@ export interface ArticleQuery {
   q?: string
   limit?: number
   offset?: number
+  /** 1 = 连被判定为非 AI 的条目一起查（全局检索要能搜到全部） */
+  includeOfftopic?: string
 }
 
 export const api = {
@@ -67,6 +80,18 @@ export const api = {
   hot: (limit = 10, hours = 48) => get<HotResponse>('/hot', { limit, hours }),
   /** 概览首屏：1 次请求代替 health/velocity/cross/summaries/entities/sentiment 六个 */
   overview: () => get<OverviewResponse>('/overview'),
+  // v0.24.0 实体别名 / 调试
+  aliasList: () => get<{ items: AliasRule[] }>('/entities/aliases'),
+  aliasSave: (alias: string, canonical: string, note = '') =>
+    post<{ ok: boolean; items?: AliasRule[]; error?: string }>('/entities/aliases', { alias, canonical, note }),
+  aliasDelete: (id: number) => del<{ ok: boolean; items?: AliasRule[] }>(`/entities/aliases?id=${id}`),
+  entityMapping: (q = '', limit = 100) => get<{ items: MappingRow[] }>('/entities/mapping', { q, limit }),
+  entitySeries: (names: string[], days = 30) => get<EntityDailySeries>('/entities/trend', { names: names.join(','), days }),
+  realignStart: () => post<{ ok: boolean; jobId?: string }>('/entities/realign'),
+  realignStatus: (id: string) => get<{ status: string; report?: unknown; error?: string }>(`/entities/realign/${id}`),
+  collectDebug: (days = 7) => get<CollectDebug>('/debug/collect', { days }),
+  aiStatus: (days = 14) => get<AiStatusDebug>('/debug/ai-status', { days }),
+
   /** 独立模块：AI 估值与危机风险（叙事指数 + 可选危机分） */
   risk: (days = 30) => get<RiskReport>('/risk', { days }),
   volume: (days: number) => get<{ days: number; points: DailyPoint[] }>('/trend/volume', { days }),

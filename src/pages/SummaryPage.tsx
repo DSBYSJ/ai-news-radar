@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api.ts'
+import { exportEditionMarkdown } from '../lib/exporters.ts'
 import EditionView from '../components/EditionView.tsx'
 import PeriodView from '../components/PeriodView.tsx'
 import Modal from '../components/Modal.tsx'
@@ -215,6 +216,15 @@ export default function SummaryPage() {
         >
           {generating ? '生成中…' : '生成 / 更新'}
         </button>
+            <button
+              type="button"
+              onClick={() => edition && exportEditionMarkdown(edition)}
+              disabled={!edition}
+              className="rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs text-slate-600 transition hover:border-slate-400 disabled:opacity-40 dark:text-slate-300"
+              title="导出当天日报为 Markdown（Obsidian / Notion 语法，含表格与图表占位符）"
+            >
+              导出 Markdown
+            </button>
         <button
           type="button"
           onClick={() => void loadList()}
