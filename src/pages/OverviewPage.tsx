@@ -185,19 +185,14 @@ export default function OverviewPage({ health, onNavigate }: Props) {
     let alive = true
     void (async () => {
       try {
-        const [vel, cr, su, en, se] = await Promise.all([
-          api.velocity(7),
-          api.cross(30),
-          api.summaries(7),
-          api.entities(7),
-          api.sentiment(7),
-        ])
+        // 一次请求拿齐六份数据：移动端（尤其安卓 WebView）省掉 5 个 RTT
+        const res = await api.overview()
         if (!alive) return
-        setVelocity(vel)
-        setCross(cr)
-        setSummaries(su.items)
-        setEntities(en.items)
-        setSentiment(se)
+        setVelocity(res.velocity)
+        setCross(res.cross)
+        setSummaries(res.summaries.items)
+        setEntities(res.entities.items)
+        setSentiment(res.sentiment)
       } catch {
         // 后端不可用时静默降级（顶栏已有提示）
       }

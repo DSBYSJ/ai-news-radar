@@ -13,7 +13,10 @@ export default function ListPage({ sources }: { sources: SourceItem[] }) {
     q: '',
   })
   const [data, setData] = useState<ArticlesResponse | null>(null)
-  const [limit, setLimit] = useState(50)
+  // 触屏/窄屏首屏只渲染 24 条：50 张卡（带阴影与展开动画）在 WebView 里首屏会明显卡
+  const [limit, setLimit] = useState(() =>
+    typeof window !== 'undefined' && window.matchMedia('(max-width: 820px)').matches ? 24 : 40,
+  )
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 

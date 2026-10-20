@@ -43,7 +43,8 @@ function safeJson(text: string | null): string[] {
 }
 
 export async function newsRoutes(app: FastifyInstance): Promise<void> {
-  app.get('/api/news/health', async () => {
+  /** health 负载（供 /health 与聚合接口 /overview 复用） */
+  const healthPayload = () => {
     const db = getDb()
     const countOf = (sql: string): number => {
       const row = db.prepare(sql).get() as unknown as { n: number } | undefined
@@ -60,13 +61,34 @@ export async function newsRoutes(app: FastifyInstance): Promise<void> {
       events: countOf('SELECT COUNT(*) AS n FROM events'),
       aiEnabled: config.aiEnabled,
       authEnabled: Boolean(config.jwtSecret),
-      /** 定时策略（北京时间）：采集时间点 / 简报时刻 */
       collectAt: config.collectAt,
       summaryAt: config.summaryAt,
-      // 库里最新一条成品的日期（UTC）：概览页要用它当「今天」而不是服务器当天 ——
-      // 采集是每天五个时间点，服务器当天常常还没有数据，按当天算会让 KPI 全为 0。
       latestDate: (db.prepare('SELECT MAX(date(published_at)) AS d FROM articles').get() as { d: string | null }).d,
       time: new Date().toISOString(),
+    }
+  }
+
+  app.get('/api/news/health', async () => healthPayload())
+
+  /**
+   * 概览页聚合接口：一次请求拿齐首屏需要的六份数据。
+   * 安卓 WebView 在移动网络下，6 个并行请求 = 6 个 RTT + 6 次 JSON 解析，
+   * 合并成 1 个后首屏明显更快（数据本身都是本地 SQLite 查询，服务端开销可忽略）。
+   */
+  app.get('/api/news/overview', async () => {
+    const db = getDb()
+    return {
+      health: healthPayload(),
+      velocity: velocity(db, 7),
+      cross: crossSource(db, 7),
+      summaries: { items: listSummaries(db, 7) },
+      entities: { days: 7, items: topEntities(db, 7, 15) },
+      sentiment: {
+        days: 7,
+        byDay: dailySentiment(db, 7),
+        alerts: sentimentAlerts(db, 7),
+        entities: topEntitiesWithSentiment(db, 7),
+      },
     }
   })
 

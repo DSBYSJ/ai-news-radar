@@ -277,9 +277,20 @@ export function crossSource(db: DatabaseSync, days = 30): CrossSourceResult {
   }))
 
   const topEvents = allEvents.slice(0, 20)
+
+  /*
+   * dayEvents 只服务"图表悬浮提示"，**不能把窗口内全部事件都塞进去**：
+   * 30 天 × 每天上百个事件 × 每个事件的完整来源数组 = 396KB，
+   * 这一个接口就占了概览首屏 98% 的传输量（安卓 WebView 上首屏明显慢）。
+   * 每天只留来源数最高的 12 条，来源名最多 6 个（提示框也放不下更多）。
+   */
+  const MAX_PER_DAY = 12
+  const MAX_SOURCES_IN_HINT = 6
   const dayEvents: Record<string, CrossSourceEvent[]> = {}
   for (const e of allEvents) {
-    ;(dayEvents[e.date] ??= []).push(e)
+    const list = (dayEvents[e.date] ??= [])
+    if (list.length >= MAX_PER_DAY) continue
+    list.push({ ...e, sources: e.sources.slice(0, MAX_SOURCES_IN_HINT) })
   }
 
   // 突发：直接读 burst_detection（rebuildBursts 写入；14 天滑动基线，z ≥ 2.5）

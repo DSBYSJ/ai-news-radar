@@ -12,6 +12,7 @@ import type {
   GenerateSummaryResponse,
   Health,
   HotResponse,
+  OverviewResponse,
   PeriodReport,
   SentimentResponse,
   SourceItem,
@@ -63,6 +64,8 @@ export const api = {
   articles: (q: ArticleQuery) => get<ArticlesResponse>('/articles', q as Params),
   articleContent: (id: number) => get<ArticleContent>(`/articles/${id}/content`),
   hot: (limit = 10, hours = 48) => get<HotResponse>('/hot', { limit, hours }),
+  /** 概览首屏：1 次请求代替 health/velocity/cross/summaries/entities/sentiment 六个 */
+  overview: () => get<OverviewResponse>('/overview'),
   volume: (days: number) => get<{ days: number; points: DailyPoint[] }>('/trend/volume', { days }),
   category: (days: number) => get<{ days: number; points: CategoryRatioPoint[] }>('/trend/category', { days }),
   velocity: (days: number) => get<VelocityResponse>('/trend/velocity', { days }),

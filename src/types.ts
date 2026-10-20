@@ -351,3 +351,14 @@ export interface HotResponse {
   updatedAt: string
   items: HotItem[]
 }
+
+
+// ---------- 概览首屏聚合（一次请求拿齐六份数据） ----------
+export interface OverviewResponse {
+  health: Health
+  velocity: VelocityResponse
+  cross: CrossSourceResponse
+  summaries: { items: SummaryListItem[] }
+  entities: { days: number; items: EntityItem[] }
+  sentiment: SentimentResponse
+}

@@ -2,6 +2,25 @@
 
 版本号唯一来源：各 `package.json`。发布前照「升版本 → 写 changelog → 跑验证 → 推送部署」四步走。
 
+## 0.22.0（2026-10-21）
+
+**安卓端性能优化（核心是首屏 404KB → 35KB）**
+
+- **定位过程**：先排除了网络因素（HTML `no-cache` + JS `immutable` 一年缓存都正常），
+  再量各接口体积 —— 发现 `/trend/cross` 单接口 **396KB**，占概览首屏 98%
+- **删冗余**：`dayEvents`（只服务图表悬浮提示）原来返回窗口内**全部事件 + 完整来源数组**，
+  改为每天最多 12 条、每事件最多 6 个来源名；概览聚合只取 7 天
+  - `/trend/cross?days=30`：396KB → **52KB**；`?days=7`：371KB → 28KB
+- **新增聚合接口** `GET /api/news/overview`：一次拿齐 health/velocity/cross/summaries/entities/sentiment
+  - 概览页从 6 个请求变 1 个；实测首屏 JSON **404KB → 35KB**
+- **WebView 性能模式**（`@media (max-width:820px), (hover:none)`）：
+  - 关掉全站 28 处 `backdrop-filter`（WebView 每帧重新合成，是最吃 GPU 的一项），半透明底改实底
+  - 关掉 `hover:-translate-y` 位移与 `.page-enter` 切页动画（触屏没有 hover，纯白算）
+  - 卡片阴影收敛为 `0 1px 2px`
+- 资讯列表首屏条数：50 → **窄屏 24 / 桌面 40**
+- 安卓壳启动页：底色改为跟随 `prefers-color-scheme`（原来写死深色，浅色模式下会"黑闪"一下）
+- ⚠️ 以上服务端/网页改动**在 App 里重启即生效**；启动页底色需重新打包 APK
+
 ## 0.21.2（2026-10-21）
 
 **昼夜切换的动画**
