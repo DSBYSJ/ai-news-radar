@@ -204,21 +204,24 @@ export default function App() {
         {/* ===== 品牌行 ===== */}
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex min-w-0 items-center gap-3.5">
-            {/* 品牌标：渐变瓷片 + 走势线 + 内高光 */}
-            <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-[14px] bg-gradient-to-br from-violet-500 via-violet-600 to-indigo-600 shadow-[0_14px_30px_-14px_rgba(109,40,217,0.95)] ring-1 ring-white/30">
-              <span className="absolute inset-0 bg-[radial-gradient(circle_at_30%_16%,rgba(255,255,255,0.5),transparent_60%)]" />
-              <span className="absolute inset-x-0 bottom-0 h-1/2 bg-[linear-gradient(180deg,transparent,rgba(0,0,0,0.22))]" />
-              <svg
-                viewBox="0 0 24 24"
-                className="absolute inset-0 m-auto h-5 w-5 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.35)]"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M3.5 16.5l4.5-4.5 3.5 3 8-8.5" />
-                <circle cx="19.5" cy="6.5" r="1.9" fill="currentColor" stroke="none" />
+            {/*
+              品牌标：纯色瓷片 + 雷达信号环
+              - 去掉渐变/外投影/多层高光：44px 里堆六层效果只会显脏
+              - 图形换成「三道同心弧 + 中心点」：对应「趋势雷达」，缩到 20px 仍可辨认
+              - 只保留一层 inset 高光，做出瓷片厚度
+            */}
+            <div
+              className="grid h-11 w-11 shrink-0 place-items-center rounded-[13px] ring-1 ring-inset ring-white/15"
+              style={{
+                backgroundColor: 'var(--brand)',
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.22)',
+              }}
+              aria-hidden="true"
+            >
+              <svg viewBox="0 0 24 24" className="h-[26px] w-[26px] text-white" fill="none" stroke="currentColor" strokeLinecap="round">
+                <path d="M3.8 17.4a8.2 8.2 0 0 1 16.4 0" strokeWidth="2.2" opacity="0.95" />
+                <path d="M7.4 17.4a4.6 4.6 0 0 1 9.2 0" strokeWidth="2" opacity="0.6" />
+                <circle cx="12" cy="17.4" r="2.35" fill="currentColor" stroke="none" />
               </svg>
             </div>
 

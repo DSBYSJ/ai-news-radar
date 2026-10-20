@@ -64,6 +64,9 @@
   --grain-opacity: 0;
   --radius-card: 12px;
 
+  /* 品牌色（标志底色） */
+  --brand: #176b75;
+
   /* 热点榜（锈红） */
   --hot: #b3402a;
   --hot-soft: rgba(179, 64, 42, 0.08);
@@ -110,6 +113,9 @@
 
   --hot: #f87171;
   --hot-soft: rgba(248, 113, 113, 0.14);
+
+  /* 暗色下标志略提亮，避免糊在黑底里 */
+  --brand: #1c8490;
   --shadow-card: var(--shadow-2);
 
   --bevel: inset 0 1px 0 rgba(255, 255, 255, 0.05);
