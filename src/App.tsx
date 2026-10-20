@@ -62,34 +62,6 @@ function SparkIcon() {
   )
 }
 
-/** 状态条里的一个读数：标签小字 + 等宽数字 */
-function Stat({ label, value }: { label: string; value: number }) {
-  return (
-    <span className="flex items-baseline gap-1">
-      <span className="opacity-70">{label}</span>
-      <span className="num font-semibold text-slate-800 dark:text-slate-100">{value.toLocaleString('en-US')}</span>
-    </span>
-  )
-}
-
-function Divider() {
-  return <span className="hidden h-3 w-px bg-slate-200 sm:block dark:bg-white/10" />
-}
-
-/** 状态指示：圆点 + 文案（未启用时点变灰，不喧宾夺主） */
-function Flag({ on, label }: { on: boolean; label: string }) {
-  return (
-    <span className="flex items-center gap-1.5">
-      <span
-        className={`inline-block h-1.5 w-1.5 rounded-full ${
-          on ? 'bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.16)]' : 'bg-slate-300 dark:bg-slate-600'
-        }`}
-      />
-      {label}
-    </span>
-  )
-}
-
 export default function App() {
   const [tab, setTab] = useState<Tab>('overview')
   const [theme, setTheme] = useState<Theme>(initialTheme)
@@ -201,67 +173,42 @@ export default function App() {
   return (
     <div className="mx-auto max-w-6xl overflow-x-hidden px-4 pb-[calc(env(safe-area-inset-bottom)+2rem)] pt-[calc(env(safe-area-inset-top)+1.25rem)] md:px-6 md:pt-[calc(env(safe-area-inset-top)+1.75rem)]">
       <header className="mb-6">
-        {/* ===== 品牌行 ===== */}
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="flex min-w-0 items-center gap-3.5">
-            {/*
-              字标：SONAR（声呐）
-              - O 换成「同心环 + 实心点 + 一道外脉冲」：对应"靠回声定位"，
-                与 AIHOT 的"开口环 + 菱形"刻意区分（我们是闭合环 + 实心点 + 脉冲线）
-              - 字母用几何无衬线 + 收紧字距；符号尺寸按 cap-height 对齐（0.72em）
-            */}
-            <div
-              className="flex h-11 shrink-0 items-center gap-2.5"
-              aria-label="SONAR · AI 资讯趋势雷达"
+        {/* ===== 顶部：两层结构 =====
+            第一层：品牌（字标 + 产品名 + 版本）+ 操作
+            第二层：一句说明 + 数据读数（右侧）
+            健康状态只在"异常时"出现 —— 三个常绿点占位但零信息量，是之前显乱的主因。
+        */}
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+          <div className="flex min-w-0 items-center gap-3">
+            {/* 字标：SONAR，O = 闭合环 + 实心点 + 外脉冲 */}
+            <span
+              className="flex select-none items-center text-slate-900 dark:text-white"
+              aria-label="SONAR"
             >
-              <span className="flex select-none items-center text-slate-900 dark:text-white">
-                <span className="text-[22px] font-semibold uppercase tracking-[-0.03em] leading-none">S</span>
-                <svg viewBox="0 0 24 24" className="mx-[0.01em] h-[19px] w-[19px]" fill="none" aria-hidden="true">
-                  <circle cx="12" cy="12" r="8.1" stroke="var(--brand)" strokeWidth="2.3" />
-                  <circle cx="12" cy="12" r="2.5" fill="var(--brand)" />
-                  <path d="M17.6 6.4L21.6 2.4" stroke="var(--brand)" strokeWidth="2" strokeLinecap="round" />
-                </svg>
-                <span className="text-[22px] font-semibold uppercase tracking-[-0.03em] leading-none">NAR</span>
-              </span>
-            </div>
+              <span className="text-[22px] font-semibold uppercase leading-none tracking-[-0.03em]">S</span>
+              <svg viewBox="0 0 24 24" className="mx-[0.01em] h-[19px] w-[19px]" fill="none" aria-hidden="true">
+                <circle cx="12" cy="12" r="8.1" stroke="var(--brand)" strokeWidth="2.3" />
+                <circle cx="12" cy="12" r="2.5" fill="var(--brand)" />
+                <path d="M17.6 6.4L21.6 2.4" stroke="var(--brand)" strokeWidth="2" strokeLinecap="round" />
+              </svg>
+              <span className="text-[22px] font-semibold uppercase leading-none tracking-[-0.03em]">NAR</span>
+            </span>
 
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-[15px] font-medium leading-none tracking-[-0.01em] text-slate-700 dark:text-slate-200">
-                  AI 资讯趋势雷达
-                </h1>
-                {health && (
-                  <span className="chip num" title="当前版本">
-                    v{health.version}
-                  </span>
-                )}
-                {health?.latestDate && (
-                  <span
-                    className={`chip num ${
-                      health.latestDate === new Date().toISOString().slice(0, 10)
-                        ? ''
-                        : '!border-amber-300/60 !text-amber-700 dark:!border-amber-500/30 dark:!text-amber-400'
-                    }`}
-                    title="库内最新一条成品的日期（UTC）；采集每天 5 个时间点，非当天说明最近一轮还没跑或失败了"
-                  >
-                    <span
-                      className={`inline-block h-1.5 w-1.5 rounded-full ${
-                        health.latestDate === new Date().toISOString().slice(0, 10)
-                          ? 'bg-emerald-500'
-                          : 'bg-amber-500'
-                      }`}
-                    />
-                    数据截至 {health.latestDate.slice(5)}
-                  </span>
-                )}
-              </div>
-              <p className="mt-1.5 truncate text-[12px] text-slate-500 dark:text-slate-400">
-                看的是「变化」：哪个方向在升温，哪些事件被多家独立源印证
-              </p>
+            <span aria-hidden="true" className="h-4 w-px shrink-0 bg-[var(--line)]" />
+
+            <div className="flex min-w-0 items-baseline gap-1.5">
+              <h1 className="truncate text-[13px] font-medium tracking-[-0.01em] text-slate-600 dark:text-slate-300">
+                AI 资讯趋势雷达
+              </h1>
+              {health && (
+                <span className="num shrink-0 text-[10.5px] text-slate-400 dark:text-slate-500" title="当前版本">
+                  v{health.version}
+                </span>
+              )}
             </div>
           </div>
 
-          {/* 操作区：主次分明（主按钮实心，次按钮描边） */}
+          {/* 操作区：主按钮实心 / 次按钮描边 / 主题为图标按钮 */}
           <div className="flex items-center gap-2">
             <button type="button" onClick={() => void run('collect')} disabled={running !== ''} className={btnPrimary}>
               <RefreshIcon spinning={running === '采集中…'} />
@@ -282,35 +229,62 @@ export default function App() {
           </div>
         </div>
 
-        {/* ===== 状态条：等宽数字 + 细分隔。不是"彩色胶囊堆叠"，而是仪表盘读数 ===== */}
-        <div className="status-bar mt-4 flex flex-wrap items-center gap-x-3.5 gap-y-2 rounded-xl border border-slate-200/70 bg-white/60 px-3 py-2 text-[11px] text-slate-500 backdrop-blur-md dark:text-slate-400">
+        {/* 第二层：说明 + 读数（读数在窄屏隐藏，避免挤成两行） */}
+        <div className="mt-2.5 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+          <p className="min-w-0 truncate text-[11.5px] text-slate-400 dark:text-slate-500">
+            看的是「变化」：哪个方向在升温，哪些事件被多家独立源印证
+          </p>
+
           {health ? (
-            <>
-              <Stat label="源" value={health.sources} />
-              <Divider />
-              <Stat label="原始" value={health.rawItems} />
-              <Divider />
-              <Stat label="成品" value={health.aiArticles ?? health.articles} />
-              <Divider />
-              <Stat label="事件" value={health.events} />
-              <Divider />
-              <Flag on={health.aiEnabled} label={`AI ${health.aiEnabled ? '已启用' : '未配置'}`} />
-              <Flag on={health.authEnabled} label={`鉴权 ${health.authEnabled ? '已开启' : '未开启'}`} />
-              <Flag on={connected} label={`推送 ${connected ? '已连接' : '未连接'}`} />
-            </>
+            <p className="num hidden shrink-0 items-center gap-x-3 text-[11px] text-slate-400 sm:flex dark:text-slate-500">
+              <span>{health.sources} 源</span>
+              <span aria-hidden="true" className="text-slate-300 dark:text-slate-600">·</span>
+              <span>{health.rawItems.toLocaleString('en-US')} 原始</span>
+              <span aria-hidden="true" className="text-slate-300 dark:text-slate-600">·</span>
+              <span>{(health.aiArticles ?? health.articles).toLocaleString('en-US')} 成品</span>
+              <span aria-hidden="true" className="text-slate-300 dark:text-slate-600">·</span>
+              <span>{health.events.toLocaleString('en-US')} 事件</span>
+              {health.latestDate && (
+                <>
+                  <span aria-hidden="true" className="text-slate-300 dark:text-slate-600">·</span>
+                  <span
+                    className={
+                      health.latestDate === new Date().toISOString().slice(0, 10)
+                        ? ''
+                        : 'text-amber-600 dark:text-amber-400'
+                    }
+                    title="库内最新一条成品的日期（UTC）"
+                  >
+                    数据截至 {health.latestDate.slice(5)}
+                  </span>
+                </>
+              )}
+            </p>
           ) : (
-            <span className="flex items-center gap-1.5 text-amber-700 dark:text-amber-400">
-              <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-500" />
-              后端未连接（先启动 server：cd server && npm start）
-            </span>
-          )}
-          {running && (
-            <span className="ml-auto flex items-center gap-1.5 font-medium text-slate-700 dark:text-slate-200">
-              <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-violet-500" />
-              {running}
-            </span>
+            <p className="text-[11px] text-amber-700 dark:text-amber-400">
+              后端未连接（cd server && npm start）
+            </p>
           )}
         </div>
+
+        {/* 只在异常时出现：AI 未配置 / 鉴权未开 / 推送断开 / 正在跑任务 */}
+        {((health && (!health.aiEnabled || !health.authEnabled)) || !connected || running !== '') && (
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
+            {health && !health.aiEnabled && (
+              <span className="text-amber-700 dark:text-amber-400">AI 未启用（走启发式兜底）</span>
+            )}
+            {health && !health.authEnabled && (
+              <span className="text-amber-700 dark:text-amber-400">鉴权未开启</span>
+            )}
+            {!connected && <span className="text-amber-700 dark:text-amber-400">实时推送未连接</span>}
+            {running && (
+              <span className="flex items-center gap-1.5 font-medium text-slate-600 dark:text-slate-300">
+                <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-violet-500" />
+                {running}
+              </span>
+            )}
+          </div>
+        )}
 
         {/* ===== 页签：分段控件 ===== */}
         <nav className="seg mt-4" role="tablist">
