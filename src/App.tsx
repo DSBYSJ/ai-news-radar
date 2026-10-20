@@ -4,13 +4,14 @@ import { api } from './api.ts'
 import { applyRefraction, resetRefraction } from './utils/liquidGlass.ts'
 import { useBurstFeed } from './hooks/useBurstFeed.ts'
 import ListPage from './pages/ListPage.tsx'
+import HotPage from './pages/HotPage.tsx'
 import OverviewPage from './pages/OverviewPage.tsx'
 import SummaryPage from './pages/SummaryPage.tsx'
 import TrendPage from './pages/TrendPage.tsx'
 import type { Health, SourceItem } from './types.ts'
 import { CATEGORY_LABELS } from './utils/format.ts'
 
-type Tab = 'overview' | 'list' | 'trend' | 'summary'
+type Tab = 'overview' | 'list' | 'hot' | 'trend' | 'summary'
 type Theme = 'light' | 'dark'
 
 function initialTheme(): Theme {
@@ -313,6 +314,7 @@ export default function App() {
           {(
             [
               ['overview', '概览'],
+              ['hot', '热点'],
               ['list', '资讯'],
               ['trend', '趋势'],
               ['summary', '简报'],

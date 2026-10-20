@@ -306,3 +306,34 @@ export interface PeriodReport {
   bursts: { date: string; category: string; count: number; z: number }[]
   highlights: string[]
 }
+
+// ---------- AI 热点榜 ----------
+export interface HotItem {
+  rank: number
+  title: string
+  category: string
+  eventKeys: string[]
+  sources: number
+  articles: number
+  hot: number
+  recent: number
+  deltaPct: number | null
+  isNew: boolean
+  firstSeen: string
+  lastSeen: string
+  topArticle: {
+    id: number
+    title: string
+    url: string
+    sourceName: string
+    publishedAt: string
+    tldr: string | null
+    summary: string | null
+  } | null
+}
+
+export interface HotResponse {
+  hours: number
+  updatedAt: string
+  items: HotItem[]
+}

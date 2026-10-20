@@ -4,6 +4,7 @@ import { categoryRatio, crossSource, dailyVolume, topEntities, velocity } from '
 import { widgetSnapshot } from '../analytics/widget.ts'
 import { dailyEdition } from '../analytics/edition.ts'
 import { periodReport } from '../analytics/period.ts'
+import { hotRanking } from '../analytics/hot.ts'
 import { CATEGORY_LABELS, type Category } from '../ai/categories.ts'
 import { runProcessing } from '../ai/pipeline.ts'
 import { askQuestion } from '../ai/ask.ts'
@@ -268,6 +269,16 @@ export async function newsRoutes(app: FastifyInstance): Promise<void> {
       hasContent: row.content.length > 0,
       chars: row.content.length,
       content: row.content,
+    }
+  })
+
+  /** AI 热点榜：近 48 小时讨论最多的事件（事件级热度 + 6 小时动量） */
+  app.get('/api/news/hot', async (req) => {
+    const q = req.query as Query
+    return {
+      hours: num(q.hours, 48),
+      updatedAt: new Date().toISOString(),
+      items: hotRanking(getDb(), { hours: num(q.hours, 48), limit: num(q.limit, 10) }),
     }
   })
 

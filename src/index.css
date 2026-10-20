@@ -10,59 +10,63 @@
    ========================================================================== */
 :root {
   /* 图表 */
-  --chart-grid: #e9ebf2;
-  --chart-axis: #98a1b2;
-  --chart-baseline: #c9d0dc;
-  --chart-dot-stroke: #ffffff;
+  --chart-grid: #e6e9e4;
+  --chart-axis: #6f7a78;
+  --chart-baseline: #cfd6d2;
+  --chart-dot-stroke: #faf9f6;
   --chart-sep: #ffffff;
 
   /* 画布：比卡片明显深一档的中性灰 —— 卡片要"浮"起来，底就必须沉下去。
      之前底和卡都是近白，阴影等于不存在，整页看着发虚、像后台模板。 */
-  --bg: #eaeef5;
-  --bg-glow: rgba(109, 40, 217, 0.075);
-  --bg-glow-2: rgba(14, 165, 233, 0.055);
-  --bg-glow-3: rgba(236, 72, 153, 0.035);
+  --bg: #faf9f6;            /* 羊皮纸底：AIHOT 的亮色画布 */
+  --bg-glow: rgba(23, 107, 117, 0);
+  --bg-glow-2: rgba(23, 107, 117, 0);
+  --bg-glow-3: rgba(23, 107, 117, 0);
 
   /* 表面层级（elevation）：0 是画布，1/2/3 逐层抬升 */
   --surface: #ffffff;
-  --surface-2: #fafbfe;
-  --surface-sunk: #f1f3f9;
+  --surface-2: #fdfdfb;
+  --surface-sunk: #f3f3ef;
 
   /* 线条：常规描边 + 更淡的"发丝线" */
-  --line: #dde2ed;
-  --line-soft: #e9edf5;
-  --line-strong: #c8d0e0;
+  --line: #dfe4e1;
+  --line-soft: #e9ede9;
+  --line-strong: #d1d9d5;
 
   /* 文字：正文 / 次要 / 弱化 / 极弱 */
-  --ink: #0e1220;
-  --ink-2: #3d4557;
-  --ink-muted: #6b7488;
-  --ink-faint: #9aa2b4;
+  --ink: #202a30;
+  --ink-2: #303c42;
+  --ink-muted: #59656b;
+  --ink-faint: #83908d;
 
   /* 强调色 */
-  --accent: #6d28d9;
-  --accent-2: #4f46e5;
-  --accent-soft: rgba(109, 40, 217, 0.08);
-  --accent-line: rgba(109, 40, 217, 0.42);
-  --ring: rgba(109, 40, 217, 0.38);
+  --accent: #176b75;         /* 青绿：AIHOT 的强调色 */
+  --accent-2: #145f68;
+  --accent-soft: rgba(23, 107, 117, 0.08);
+  --accent-line: rgba(23, 107, 117, 0.38);
+  --ring: rgba(23, 107, 117, 0.35);
 
   /* 语义色 */
-  --up: #dc2626;
-  --down: #059669;
-  --warn: #b45309;
+  --up: #b3402a;
+  --down: #2f7d5a;
+  --warn: #b8873a;
 
   /* 阴影：三层，越往上越"飘" */
   /* 三层 elevation：比之前更"实"，因为画布变深了，阴影必须更锐利才立得住 */
-  --shadow-1: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 1px rgba(16, 24, 40, 0.04);
-  --shadow-2: 0 1px 2px rgba(16, 24, 40, 0.06), 0 8px 16px -8px rgba(16, 24, 40, 0.14), 0 20px 40px -24px rgba(16, 24, 40, 0.3);
-  --shadow-3: 0 2px 4px rgba(16, 24, 40, 0.07), 0 14px 28px -12px rgba(16, 24, 40, 0.18), 0 32px 60px -28px rgba(16, 24, 40, 0.36);
+  --shadow-1: 0 1px 2px rgba(32, 42, 48, 0.04);
+  --shadow-2: 0 1px 2px rgba(32, 42, 48, 0.05), 0 10px 24px -18px rgba(32, 42, 48, 0.22);
+  --shadow-3: 0 2px 4px rgba(32, 42, 48, 0.06), 0 18px 36px -24px rgba(32, 42, 48, 0.26);
   --shadow-card: var(--shadow-2);
 
   /* 高光边（1px 内描边做"玻璃厚度"） */
-  --bevel: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  --bevel: inset 0 1px 0 rgba(255, 255, 255, 0.6);
 
-  --grain-opacity: 0.022;
-  --radius-card: 16px;
+  --grain-opacity: 0;
+  --radius-card: 12px;
+
+  /* 热点榜（锈红） */
+  --hot: #b3402a;
+  --hot-soft: rgba(179, 64, 42, 0.08);
 }
 
 .dark {
@@ -103,6 +107,9 @@
   --shadow-1: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 1px 2px rgba(0, 0, 0, 0.6);
   --shadow-2: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 16px 36px -22px rgba(0, 0, 0, 0.95);
   --shadow-3: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 30px 60px -30px rgba(0, 0, 0, 1);
+
+  --hot: #f87171;
+  --hot-soft: rgba(248, 113, 113, 0.14);
   --shadow-card: var(--shadow-2);
 
   --bevel: inset 0 1px 0 rgba(255, 255, 255, 0.05);
@@ -721,4 +728,93 @@ html.dark select option:checked,
 html.dark select option:hover {
   background-color: #2b2f45;
   color: #ffffff;
+}
+
+/* ==========================================================================
+   亮色模式的强调色重映射（暗色不动）
+   组件的工具类是 var(--color-violet-*)，所以只覆盖变量即可整体换色：
+   紫 → 青绿（#176b75），与 AIHOT 的亮色观感一致。
+   ========================================================================== */
+html:not(.dark) {
+  --color-violet-50: oklch(97.2% 0.008 197);
+  --color-violet-100: oklch(94% 0.018 197);
+  --color-violet-200: oklch(89% 0.032 197);
+  --color-violet-300: oklch(80% 0.05 197);
+  --color-violet-400: oklch(70% 0.068 197);
+  --color-violet-500: oklch(58% 0.075 197);
+  --color-violet-600: #176b75;
+  --color-violet-700: #145f68;
+  --color-violet-800: #124e55;
+  --color-violet-900: #0f4147;
+  --color-violet-950: #08272b;
+
+  --color-indigo-400: #347f87;
+  --color-indigo-500: #1c7f88;
+  --color-indigo-600: #176b75;
+  --color-indigo-700: #145f68;
+}
+
+/* ==========================================================================
+   亮色模式最终覆盖：改为 AIHOT 的「纸 + 墨 + 青绿」，去掉紫色极光与玻璃折射
+   （暗色模式完全不受影响；本节必须在全文件最后，靠顺序压过上面的玻璃规则）
+   ========================================================================== */
+html:not(.dark) body {
+  background-color: #faf9f6;
+  background-image: none;
+  animation: none;
+}
+
+/* 去掉那层给"折射"用的高光斑与漂移动画 */
+html:not(.dark) body::before {
+  content: none;
+  display: none;
+}
+
+/* 卡片：实底 + 发丝线，不做半透明玻璃 */
+html:not(.dark) .card,
+html:not(.dark) .glass {
+  background-color: #ffffff;
+  background-image: none;
+  border: 1px solid #dfe4e1;
+  box-shadow: 0 1px 2px rgba(32, 42, 48, 0.04);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+html:not(.dark) .card-hover:hover {
+  background-color: #ffffff;
+  border-color: #cfd8d4;
+  box-shadow: 0 2px 6px rgba(32, 42, 48, 0.07);
+}
+
+/* 分段控件 / 状态条：纸感中性色 */
+html:not(.dark) .seg {
+  background-color: #f3f3ef;
+  border-color: #dfe4e1;
+  background-image: none;
+}
+
+html:not(.dark) .status-bar {
+  background-color: transparent;
+  border-color: #e9ede9;
+  background-image: none;
+}
+
+/* 表单控件跟着纸面走，避免出现玻璃白块 */
+html:not(.dark) input,
+html:not(.dark) select,
+html:not(.dark) textarea,
+html:not(.dark) .chip {
+  background-color: #ffffff;
+  border-color: #dfe4e1;
+  background-image: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+/* 顶部菜单/吸顶容器如果用了玻璃，也压成纸面 */
+html:not(.dark) .glass-bar {
+  background-color: rgba(250, 249, 246, 0.92);
+  background-image: none;
+  border-color: #dfe4e1;
 }
