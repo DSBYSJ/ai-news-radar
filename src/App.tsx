@@ -205,29 +205,29 @@ export default function App() {
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex min-w-0 items-center gap-3.5">
             {/*
-              品牌标：纯色瓷片 + 雷达信号环
-              - 去掉渐变/外投影/多层高光：44px 里堆六层效果只会显脏
-              - 图形换成「三道同心弧 + 中心点」：对应「趋势雷达」，缩到 20px 仍可辨认
-              - 只保留一层 inset 高光，做出瓷片厚度
+              字标：SONAR（声呐）
+              - O 换成「同心环 + 实心点 + 一道外脉冲」：对应"靠回声定位"，
+                与 AIHOT 的"开口环 + 菱形"刻意区分（我们是闭合环 + 实心点 + 脉冲线）
+              - 字母用几何无衬线 + 收紧字距；符号尺寸按 cap-height 对齐（0.72em）
             */}
             <div
-              className="grid h-11 w-11 shrink-0 place-items-center rounded-[13px] ring-1 ring-inset ring-white/15"
-              style={{
-                backgroundColor: 'var(--brand)',
-                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.22)',
-              }}
-              aria-hidden="true"
+              className="flex h-11 shrink-0 items-center gap-2.5"
+              aria-label="SONAR · AI 资讯趋势雷达"
             >
-              <svg viewBox="0 0 24 24" className="h-[26px] w-[26px] text-white" fill="none" stroke="currentColor" strokeLinecap="round">
-                <path d="M3.8 17.4a8.2 8.2 0 0 1 16.4 0" strokeWidth="2.2" opacity="0.95" />
-                <path d="M7.4 17.4a4.6 4.6 0 0 1 9.2 0" strokeWidth="2" opacity="0.6" />
-                <circle cx="12" cy="17.4" r="2.35" fill="currentColor" stroke="none" />
-              </svg>
+              <span className="flex select-none items-center text-slate-900 dark:text-white">
+                <span className="text-[22px] font-semibold uppercase tracking-[-0.03em] leading-none">S</span>
+                <svg viewBox="0 0 24 24" className="mx-[0.01em] h-[19px] w-[19px]" fill="none" aria-hidden="true">
+                  <circle cx="12" cy="12" r="8.1" stroke="var(--brand)" strokeWidth="2.3" />
+                  <circle cx="12" cy="12" r="2.5" fill="var(--brand)" />
+                  <path d="M17.6 6.4L21.6 2.4" stroke="var(--brand)" strokeWidth="2" strokeLinecap="round" />
+                </svg>
+                <span className="text-[22px] font-semibold uppercase tracking-[-0.03em] leading-none">NAR</span>
+              </span>
             </div>
 
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-[23px] font-semibold leading-none tracking-[-0.03em] text-slate-900 dark:text-white">
+                <h1 className="text-[15px] font-medium leading-none tracking-[-0.01em] text-slate-700 dark:text-slate-200">
                   AI 资讯趋势雷达
                 </h1>
                 {health && (
