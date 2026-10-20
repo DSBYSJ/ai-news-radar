@@ -108,4 +108,40 @@ export const SEED_SOURCES: SeedSource[] = [
     kind: 'rss',
     weight: 2, // ⚠️ 需跟随重定向，fetch 已 redirect: 'follow'
   },
+  // ---------- 中文源（v0.16.0，均在服务器实测可达；括号内为样本里 AI 相关占比） ----------
+  {
+    id: 'geekpark',
+    name: '极客公园',
+    url: 'https://www.geekpark.net/rss',
+    kind: 'rss',
+    weight: 2, // 24/30 条与 AI 相关，中文源里质量最高
+  },
+  {
+    id: 'leiphone',
+    name: '雷峰网',
+    url: 'https://www.leiphone.com/feed',
+    kind: 'rss',
+    weight: 2, // 15/20
+  },
+  {
+    id: 'infoq-cn',
+    name: 'InfoQ 中文',
+    url: 'https://www.infoq.cn/feed',
+    kind: 'rss',
+    weight: 2, // 12/20，偏工程与架构
+  },
+  {
+    id: 'ifanr',
+    name: '爱范儿',
+    url: 'https://www.ifanr.com/feed',
+    kind: 'rss',
+    weight: 2, // 11/20，消费科技 + AI
+  },
+  {
+    id: 'ithome',
+    name: 'IT之家',
+    url: 'https://www.ithome.com/rss/',
+    kind: 'rss',
+    weight: 2, // 32/60，量大速度快（AIHOT 也用它）
+  },
 ]
