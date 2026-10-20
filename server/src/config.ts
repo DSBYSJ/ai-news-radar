@@ -19,6 +19,13 @@ export const config = {
   port: Number(process.env.PORT ?? 3001),
   databasePath: path.resolve(rootDir, process.env.DATABASE_PATH ?? './data/ai-news.db'),
   fetchUa: process.env.FETCH_UA ?? 'ai-news-radar/0.1 (personal feed reader)',
+  /** 单源单轮最多入库多少条（防止 HN/IT之家 这类大流量源一次刷几百条） */
+  maxItemsPerSource: Math.max(5, Number(process.env.MAX_ITEMS_PER_SOURCE ?? 50)),
+  /** 只收最近 N 天发布的条目（挡住新源首次抓到的全量历史归档） */
+  collectMaxAgeDays: Math.max(1, Number(process.env.COLLECT_MAX_AGE_DAYS ?? 3)),
+  /** 失败退避：连续失败后，重试间隔 = min(backoffMax, backoffBase * 2^failStreak) */
+  sourceBackoffBaseMin: Math.max(1, Number(process.env.SOURCE_BACKOFF_BASE_MIN ?? 10)),
+  sourceBackoffMaxMin: Math.max(10, Number(process.env.SOURCE_BACKOFF_MAX_MIN ?? 360)),
   version: pkg.version,
 
   // DeepSeek（AI 加工；未配置 Key 时自动降级为启发式，不丢数据）

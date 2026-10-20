@@ -11,7 +11,8 @@ CREATE TABLE IF NOT EXISTS sources (
   weight        INTEGER DEFAULT 1,  -- 来源质量权重 1~3（打分用）
   enabled       INTEGER DEFAULT 1,
   last_fetch_at TEXT,               -- UTC ISO
-  last_status   TEXT                -- 'ok' | 'error:...'
+  last_status   TEXT,               -- 'ok' | 'error:...'
+  fail_streak   INTEGER DEFAULT 0   -- 连续失败次数（退避用）
 );
 
 -- 2. 原始条目（落地层，去重前）

@@ -28,6 +28,11 @@ function migrate(conn: DatabaseSync): void {
   if (!rawColumns.some((c) => c.name === 'content')) {
     conn.exec('ALTER TABLE raw_items ADD COLUMN content TEXT')
   }
+  // v0.17.0：连续失败计数，用于退避（失败源不再每轮空等 20s 超时）
+  const srcColumns = conn.prepare('PRAGMA table_info(sources)').all() as unknown as { name: string }[]
+  if (!srcColumns.some((c) => c.name === 'fail_streak')) {
+    conn.exec('ALTER TABLE sources ADD COLUMN fail_streak INTEGER DEFAULT 0')
+  }
 }
 
 export function closeDb(): void {

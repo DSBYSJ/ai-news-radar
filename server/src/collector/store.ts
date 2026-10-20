@@ -52,11 +52,19 @@ export function insertRawItems(db: DatabaseSync, sourceId: string, items: FeedIt
   return inserted
 }
 
-/** 记录单源最近一次抓取状态（'ok' | 'error:...'），失败不抛错、不中断整轮 */
-export function updateSourceStatus(db: DatabaseSync, sourceId: string, status: string, at: Date): void {
-  db.prepare('UPDATE sources SET last_fetch_at = ?, last_status = ? WHERE id = ?').run(
+/** 抓取成功：记录状态并重置失败计数 */
+export function markSourceOk(db: DatabaseSync, sourceId: string, at: Date): void {
+  db.prepare("UPDATE sources SET last_fetch_at = ?, last_status = 'ok', fail_streak = 0 WHERE id = ?").run(
     at.toISOString(),
-    status.slice(0, 300),
+    sourceId,
+  )
+}
+
+/** 抓取失败：记录状态并累加失败计数（不抛错、不中断整轮） */
+export function markSourceFail(db: DatabaseSync, sourceId: string, message: string, at: Date): void {
+  db.prepare('UPDATE sources SET last_fetch_at = ?, last_status = ?, fail_streak = fail_streak + 1 WHERE id = ?').run(
+    at.toISOString(),
+    `error:${message.slice(0, 280)}`,
     sourceId,
   )
 }
