@@ -1,13 +1,19 @@
 /**
- * 宏观数据接入（可选）
+ * 宏观数据接入（免 API key 也能用）
  *
  * 为什么单独一层：**危机风险必须有市场数据**（利率、信用利差、指数位置）。
- * 新闻只能算"叙事温度"，算不出"估值是否过高"。
+ * 新闻只能算"叙事温度"，算不出"资产多贵"。
  *
- * 设计成「可插拔 + 明确缺失」：
- *   - 配了 FRED_API_KEY 且能连通 → 拉 10Y 国债、高收益债利差、纳斯达克指数
- *   - 没配 / 拉不到 / 超时 → 返回 available=false 且列出缺哪些，上层**不出危机概率**
- *     （而不是拿 0 填上、算出一个看起来很精确的假数字）
+ * 数据源（按优先级）：
+ *   1. FRED 的 CSV 下载 `fredgraph.csv?id=<ID>` —— **不需要 API key**（境内实测可达，~2s）
+ *   2. FRED JSON API —— 需要 key，仅在 CSV 失败且配了 key 时兜底
+ *   3. 都没有 → available=false，明确列出缺哪几项，上层**不出危机概率**
+ *      （而不是拿 0 填上、算出一个看起来很精确的假数字）
+ *
+ * 序列：
+ *   DGS10           10 年期美债收益率（%）
+ *   BAMLH0A0HYM2    高收益债信用利差 OAS（%）
+ *   NASDAQCOM       纳斯达克综合指数
  */
 
 export interface MacroPoint {
@@ -19,7 +25,7 @@ export interface MacroPoint {
   asOf: string
   /** 一年前值（用于算变化；没有则为 null） */
   yearAgo: number | null
-  /** 200 日均值（指数用；其它为 null） */
+  /** 200 个观测的均值（指数用；其它为 null） */
   avg200: number | null
   source: string
 }
@@ -33,129 +39,160 @@ export interface MacroSnapshot {
   fetchedAt: string
 }
 
-const TIMEOUT_MS = 8000
+const TIMEOUT_MS = 12_000
 
-interface FredObservation {
+interface Observation {
   date: string
-  value: string
+  value: number
 }
 
-/** 拉 FRED 单序列（最近 N 个观测，按时间倒序） */
-async function fredSeries(seriesId: string, apiKey: string, limit: number): Promise<FredObservation[]> {
+/** 解析 FRED 的 CSV（两列：observation_date, 值；缺值为 "."） */
+function parseFredCsv(text: string): Observation[] {
+  const out: Observation[] = []
+  const lines = text.split('\n')
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i].trim()
+    if (!line) continue
+    const comma = line.indexOf(',')
+    if (comma <= 0) continue
+    const date = line.slice(0, comma).trim()
+    const raw = line.slice(comma + 1).trim()
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue
+    const value = Number.parseFloat(raw)
+    if (!Number.isFinite(value)) continue
+    out.push({ date, value })
+  }
+  return out
+}
+
+/** 取离目标日期最近的观测（一年前用） */
+function nearest(obs: Observation[], target: string): number | null {
+  if (obs.length === 0) return null
+  const t = Date.parse(target)
+  let best: Observation | null = null
+  let bestDiff = Infinity
+  for (const o of obs) {
+    const d = Math.abs(Date.parse(o.date) - t)
+    if (d < bestDiff) {
+      bestDiff = d
+      best = o
+    }
+  }
+  // 相差超过 30 天视为缺失
+  return best && bestDiff <= 30 * 86_400_000 ? best.value : null
+}
+
+async function fetchFredCsv(seriesId: string): Promise<Observation[]> {
+  // cosd = 起始日期：只要最近两年（DGS10 全量有 269KB / 1962 年至今，够用即可）
+  const cosd = new Date(Date.now() - 800 * 86_400_000).toISOString().slice(0, 10)
+  const url = `https://fred.stlouisfed.org/graph/fredgraph.csv?id=${encodeURIComponent(seriesId)}&cosd=${cosd}`
+  const res = await fetch(url, {
+    headers: { 'user-agent': 'ai-news-radar/0.1 (personal feed reader)' },
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  })
+  if (!res.ok) throw new Error(`FRED CSV ${seriesId} HTTP ${res.status}`)
+  return parseFredCsv(await res.text())
+}
+
+/** 兜底：FRED JSON API（需要 key） */
+async function fetchFredApi(seriesId: string, apiKey: string): Promise<Observation[]> {
   const url =
     `https://api.stlouisfed.org/fred/series/observations?series_id=${encodeURIComponent(seriesId)}` +
-    `&api_key=${encodeURIComponent(apiKey)}&file_type=json&sort_order=desc&limit=${limit}`
+    `&api_key=${encodeURIComponent(apiKey)}&file_type=json&sort_order=desc&limit=400`
   const res = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS) })
-  if (!res.ok) throw new Error(`FRED ${seriesId} HTTP ${res.status}`)
-  const json = (await res.json()) as { observations?: FredObservation[] }
-  return (json.observations ?? []).filter((o) => o.value !== '.')
+  if (!res.ok) throw new Error(`FRED API ${seriesId} HTTP ${res.status}`)
+  const json = (await res.json()) as { observations?: { date: string; value: string }[] }
+  const out: Observation[] = []
+  for (const o of json.observations ?? []) {
+    const v = Number.parseFloat(o.value)
+    if (Number.isFinite(v)) out.push({ date: o.date, value: v })
+  }
+  return out
 }
 
-function parseNum(s: string): number {
-  return Number.parseFloat(s)
+interface SeriesSpec {
+  key: string
+  label: string
+  id: string
+  needAvg200: boolean
 }
 
-/** 取第 n 个观测（0 = 最新）；不足则 null */
-function at(obs: FredObservation[], n: number): MacroPoint['yearAgo'] {
-  const o = obs[n]
-  if (!o) return null
-  const v = parseNum(o.value)
-  return Number.isFinite(v) ? v : null
-}
+const SPECS: SeriesSpec[] = [
+  { key: 'rates10y', label: '10 年期美债收益率', id: 'DGS10', needAvg200: false },
+  { key: 'creditSpread', label: '高收益债信用利差（OAS）', id: 'BAMLH0A0HYM2', needAvg200: false },
+  { key: 'nasdaq', label: '纳斯达克综合指数', id: 'NASDAQCOM', needAvg200: true },
+]
+
+/** 宏观快照缓存：一天只变几个点，30 分钟内复用（避免每次打开页面都等 2–4 秒） */
+let cached: { at: number; data: MacroSnapshot } | null = null
+const CACHE_TTL_MS = 30 * 60_000
 
 /**
  * 读取宏观快照。
- * @param apiKey FRED API Key；为空则直接返回不可用（不发起网络请求）
+ * @param apiKey 可选的 FRED API Key；CSV 主路径不需要它
  */
-export async function loadMacro(apiKey: string | undefined): Promise<MacroSnapshot> {
+export async function loadMacro(apiKey: string | undefined, opts: { force?: boolean } = {}): Promise<MacroSnapshot> {
+  if (!opts.force && cached && Date.now() - cached.at < CACHE_TTL_MS) {
+    return { ...cached.data, notes: [...cached.data.notes, '（30 分钟缓存内，未重新拉取）'] } }
   const fetchedAt = new Date().toISOString()
   const missing: string[] = []
   const notes: string[] = []
   const series: Record<string, MacroPoint> = {}
 
-  if (!apiKey) {
-    return {
-      available: false,
-      missing: ['10 年期美债收益率', '高收益债信用利差', '纳斯达克指数'],
-      series,
-      notes: [
-        '未配置 FRED_API_KEY，模块不会输出「危机概率」——',
-        '用新闻数据算危机概率是不成立的，宁可缺，也不编。',
-      ],
-      fetchedAt,
-    }
-  }
-
-  // 10 年期国债（日频；260 个交易日≈1 年）
-  try {
-    const obs = await fredSeries('DGS10', apiKey, 300)
-    const value = at(obs, 0)
-    if (value !== null) {
-      series.rates10y = {
-        key: 'rates10y',
-        label: '10 年期美债收益率',
-        value,
-        asOf: obs[0].date,
-        yearAgo: at(obs, Math.min(obs.length - 1, 250)),
-        avg200: null,
-        source: 'FRED DGS10',
+  // 三个序列并发拉，任一失败不影响其它
+  const results = await Promise.all(
+    SPECS.map(async (spec) => {
+      try {
+        const obs = await fetchFredCsv(spec.id)
+        if (obs.length === 0) throw new Error('空数据')
+        return { spec, obs, via: 'FRED CSV（免 key）' }
+      } catch (csvErr) {
+        if (!apiKey) return { spec, obs: [] as Observation[], via: '', err: String(csvErr) }
+        try {
+          const obs = await fetchFredApi(spec.id, apiKey)
+          if (obs.length === 0) throw new Error('空数据')
+          return { spec, obs, via: 'FRED API' }
+        } catch (apiErr) {
+          return { spec, obs: [] as Observation[], via: '', err: `${csvErr} / ${apiErr}` }
+        }
       }
-    } else {
-      missing.push('10 年期美债收益率')
-    }
-  } catch (err) {
-    missing.push('10 年期美债收益率')
-    notes.push(`DGS10 拉取失败：${err instanceof Error ? err.message : String(err)}`)
-  }
+    }),
+  )
 
-  // 高收益债 OAS（信用利差）
-  try {
-    const obs = await fredSeries('BAMLH0A0HYM2', apiKey, 300)
-    const value = at(obs, 0)
-    if (value !== null) {
-      series.creditSpread = {
-        key: 'creditSpread',
-        label: '高收益债信用利差（OAS）',
-        value,
-        asOf: obs[0].date,
-        yearAgo: at(obs, Math.min(obs.length - 1, 250)),
-        avg200: null,
-        source: 'FRED BAMLH0A0HYM2',
-      }
-    } else {
-      missing.push('高收益债信用利差')
+  for (const r of results) {
+    if (r.obs.length === 0) {
+      missing.push(r.spec.label)
+      notes.push(`${r.spec.label} 拉取失败${r.err ? `：${r.err}` : ''}`)
+      continue
     }
-  } catch (err) {
-    missing.push('高收益债信用利差')
-    notes.push(`信用利差拉取失败：${err instanceof Error ? err.message : String(err)}`)
-  }
-
-  // 纳斯达克综合指数
-  try {
-    const obs = await fredSeries('NASDAQCOM', apiKey, 300)
-    const value = at(obs, 0)
-    if (value !== null) {
-      const vals = obs.slice(0, 200).map((o) => parseNum(o.value)).filter(Number.isFinite)
-      series.nasdaq = {
-        key: 'nasdaq',
-        label: '纳斯达克综合指数',
-        value,
-        asOf: obs[0].date,
-        yearAgo: at(obs, Math.min(obs.length - 1, 250)),
-        avg200: vals.length >= 60 ? vals.reduce((a, b) => a + b, 0) / vals.length : null,
-        source: 'FRED NASDAQCOM',
-      }
-    } else {
-      missing.push('纳斯达克指数')
+    const obs = r.obs
+    const last = obs[obs.length - 1]
+    const yearTarget = new Date(Date.parse(last.date) - 365 * 86_400_000).toISOString().slice(0, 10)
+    const window200 = obs.slice(-200)
+    series[r.spec.key] = {
+      key: r.spec.key,
+      label: r.spec.label,
+      value: last.value,
+      asOf: last.date,
+      yearAgo: nearest(obs, yearTarget),
+      avg200:
+        r.spec.needAvg200 && window200.length >= 60
+          ? window200.reduce((a, b) => a + b.value, 0) / window200.length
+          : null,
+      source: `${r.spec.id} · ${r.via}`,
     }
-  } catch (err) {
-    missing.push('纳斯达克指数')
-    notes.push(`指数拉取失败：${err instanceof Error ? err.message : String(err)}`)
   }
 
   const available = Object.keys(series).length > 0
   if (!available) {
-    notes.push('宏观数据全部拉取失败（可能是境内网络无法访问 FRED），本次不输出危机概率。')
+    notes.push('宏观数据全部拉取失败（可能是网络受限），本次不输出危机概率。')
+  } else {
+    const dates = Object.values(series).map((s) => s.asOf).sort()
+    notes.push(
+      `宏观数据源：FRED（免 key 的 CSV 下载）；数据日期 ${dates[0]} ~ ${dates[dates.length - 1]}，滞后 1–2 个交易日属正常。`,
+    )
   }
-  return { available, missing, series, notes, fetchedAt }
+  const snapshot: MacroSnapshot = { available, missing, series, notes, fetchedAt }
+  cached = { at: Date.now(), data: snapshot }
+  return snapshot
 }

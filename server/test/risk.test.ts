@@ -79,7 +79,15 @@ test('narrativeFroth：融资密集 + 情绪偏正 + 实体集中 + 加速 → �
 test('riskReport：没有宏观数据时不给危机概率，并说明缺什么', async () => {
   const db = setup()
   for (let d = 1; d <= 10; d++) add(db, { i: d, daysAgo: d, title: `消息 ${d}`, sentiment: 'neutral' })
-  const r = await riskReport(db, { now: NOW, macroKey: '' })
+  // 显式注入"宏观不可用"，避免测试依赖网络
+  const unavailable: MacroSnapshot = {
+    available: false,
+    missing: ['10 年期美债收益率', '高收益债信用利差', '纳斯达克指数'],
+    series: {},
+    notes: ['测试注入'],
+    fetchedAt: new Date(NOW).toISOString(),
+  }
+  const r = await riskReport(db, { now: NOW, macro: unavailable })
   assert.equal(r.crisis, null)
   assert.equal(r.macro.available, false)
   assert.equal(r.macro.missing.length, 3)

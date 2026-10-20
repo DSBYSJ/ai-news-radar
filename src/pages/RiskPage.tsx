@@ -162,6 +162,25 @@ export default function RiskPage() {
           <p className="text-[10.5px] text-slate-400 dark:text-slate-500">未来 12 个月</p>
         </div>
 
+        {/* 三个宏观读数：先看事实，再看合成分 */}
+        {report && Object.keys(report.macro.series).length > 0 && (
+          <div className="mt-2 grid gap-2 sm:grid-cols-3">
+            {Object.values(report.macro.series).map((s) => (
+              <div key={s.key} className="rounded-lg bg-slate-50/80 p-2.5 dark:bg-white/[0.03]">
+                <p className="text-[10px] text-slate-400 dark:text-slate-500">{s.label}</p>
+                <p className="num mt-0.5 text-[15px] font-semibold text-slate-800 dark:text-slate-100">
+                  {s.key === 'nasdaq' ? s.value.toFixed(0) : `${s.value.toFixed(2)}%`}
+                </p>
+                <p className="num mt-0.5 text-[10px] text-slate-400 dark:text-slate-500">
+                  {s.yearAgo === null
+                    ? `截至 ${s.asOf}`
+                    : `一年前 ${s.key === 'nasdaq' ? s.yearAgo.toFixed(0) : `${s.yearAgo.toFixed(2)}%`}`}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+
         {report?.crisis ? (
           <>
             <div className="mt-1 flex flex-wrap items-baseline gap-3">
@@ -196,8 +215,8 @@ export default function RiskPage() {
               新闻只能说明"大家在聊什么"，说明不了"资产多贵、钱多贵"——用新闻算危机概率等于编。
             </p>
             <p className="mt-1.5 text-[10.5px] leading-relaxed text-slate-400 dark:text-slate-500">
-              接入方式：在 <code className="num">server/.env</code> 配置 <code className="num">FRED_API_KEY</code>
-              （免费申请），模块会自动拉 10Y 国债 / 高收益债 OAS / 纳指，并给出风险分与概率区间。
+              接入方式：模块默认从 FRED 免 key 的 CSV 拉 10Y 国债 / 高收益债 OAS / 纳指；
+              若服务器网络受限，可在 <code className="num">server/.env</code> 配 <code className="num">FRED_API_KEY</code> 走 API 兜底。
             </p>
             {report?.macro.notes.map((note) => (
               <p key={note} className="mt-1 text-[10.5px] text-slate-400 dark:text-slate-500">
@@ -207,6 +226,34 @@ export default function RiskPage() {
           </div>
         )}
       </section>
+
+      {/* 怎么读这个分 */}
+      <details className="rounded-xl border border-[var(--line)] px-3 py-2">
+        <summary className="cursor-pointer list-none text-[11px] text-slate-500 dark:text-slate-400">
+          怎么读这个分？
+        </summary>
+        <div className="mt-2 space-y-1.5 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+          <p>
+            <b className="text-slate-600 dark:text-slate-300">四个分项各管一件事：</b>
+            利率 = 折现率（长久期资产最怕它涨）、信用 = 借钱贵不贵（借钱便宜=自满）、
+            指数 = 已经涨了多少（超涨=脆弱）、叙事 = 讨论热不热（过热是泡沫的必要条件）。
+          </p>
+          <p>
+            <b className="text-slate-600 dark:text-slate-300">分档：</b>
+            0–30 低（常态）· 30–50 需留意 · 50–70 偏高 · 70+ 高。四项里有两三项同时偏高位，才值得紧张。
+          </p>
+          <p>
+            <b className="text-slate-600 dark:text-slate-300">概率区间：</b>
+            以 12%/年 的危机基础率为锚、按风险分做指数调整，±5pp 是区间宽度。
+            参数是人为设定的、没做历史回测 —— 所以看量级就行，别当精确值。
+          </p>
+          <p>
+            <b className="text-slate-600 dark:text-slate-300">最该记住的一点：</b>
+            分数高不等于明天崩，分数低也不等于安全。它衡量的是「脆弱性」，
+            真正引爆还需要一个触发事件（政策、财报、某家公司暴雷）。
+          </p>
+        </div>
+      </details>
 
       {/* 观察项 + 免责 */}
       {n && (
