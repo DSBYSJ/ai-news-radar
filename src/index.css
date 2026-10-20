@@ -818,3 +818,25 @@ html:not(.dark) .glass-bar {
   background-image: none;
   border-color: #dfe4e1;
 }
+
+/* ==========================================================================
+   亮色模式：进一步"去装饰"（参考 AIHOT 的编排感）
+   —— 卡片只用发丝线，不投影；标题的色条收敛成 2px 细线。
+   暗色模式不受影响（选择器限定 html:not(.dark)）。
+   ========================================================================== */
+html:not(.dark) .card {
+  box-shadow: none;
+  border-color: #e4e9e5;
+}
+
+html:not(.dark) .card-hover:hover {
+  box-shadow: 0 1px 3px rgba(32, 42, 48, 0.05);
+  border-color: #d5ded8;
+}
+
+/* 卡片标题前的渐变色条：亮色下压细、去掉渐变（避免每张卡都抢视线） */
+html:not(.dark) .card > header span[aria-hidden='true'] {
+  width: 2px;
+  background-image: none;
+  background-color: var(--accent);
+}

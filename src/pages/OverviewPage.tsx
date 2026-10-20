@@ -224,8 +224,8 @@ export default function OverviewPage({ health, onNavigate }: Props) {
   const latestSummary = summaries[0]
 
   return (
-    <div className="flex flex-col gap-4 lg:flex-row">
-      <div className="min-w-0 flex-1 space-y-4">
+    <div className="grid gap-4 lg:grid-cols-3">
+      <div className="min-w-0 space-y-4 lg:col-span-2">
         {/* 关键指标 */}
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <Kpi
@@ -311,131 +311,136 @@ export default function OverviewPage({ health, onNavigate }: Props) {
           )}
         </Card>
 
-        {/* items-start：两张卡各按自身内容高度排布。否则左侧只有 3 条会被右侧十几行拉伸，
-            中间留出一大片空白 —— 那正是"廉价感"的直接来源。 */}
-        <div className="grid items-start gap-4 lg:grid-cols-2">
-          {/* 今日跨源事件 */}
-          <Card
-            title="最新跨源事件"
-            action={
-              <button
-                type="button"
-                onClick={() => onNavigate('trend')}
-                className="text-xs text-slate-400 transition hover:text-slate-700 dark:hover:text-slate-200"
-              >
-                看趋势 →
-              </button>
-            }
-          >
-            {todayEvents.length === 0 ? (
-              <p className="text-xs text-slate-500 dark:text-slate-400">这天还没有被 2 家以上独立源同时报道的事件。</p>
-            ) : (
-              <ul className="space-y-2">
-                {todayEvents.slice(0, 5).map((e) => (
-                  <li key={e.eventKey} className="rounded-lg border border-slate-200 p-2.5 dark:border-slate-700">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span
-                        className={`shrink-0 rounded-full px-1.5 py-0.5 text-[11px] font-medium text-white ${
-                          e.sourceCount >= 3 ? 'bg-red-600' : 'bg-slate-400'
-                        }`}
-                      >
-                        {e.sourceCount} 源
-                      </span>
-                      <span
-                        className="shrink-0 rounded-full px-1.5 py-0.5 text-[11px] text-white"
-                        style={{ backgroundColor: CATEGORY_COLORS[e.category] ?? '#9ca3af' }}
-                      >
-                        {CATEGORY_LABELS[e.category] ?? e.category}
-                      </span>
-                      <span className="ml-auto shrink-0 text-[11px] text-slate-400 dark:text-slate-500">{e.date}</span>
-                    </div>
-                    <p className="mt-1.5 break-words text-xs leading-snug text-slate-700 dark:text-slate-200">{e.title}</p>
-                    <p className="mt-1 break-words text-[11px] text-slate-400 dark:text-slate-500">
-                      {e.sources.join('、') || '（来源未知）'}
-                    </p>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Card>
-
-          {/* 突发提醒 */}
-          <Card title="突发提醒（z ≥ 2.5）">
-            {recentBursts.length === 0 ? (
-              <p className="text-xs text-slate-500 dark:text-slate-400">近 3 天没有触发突发阈值，属正常。</p>
-            ) : (
-              <ul className="divide-y divide-slate-100 dark:divide-white/[0.06]">
-                {recentBursts.slice(0, 8).map((b) => {
-                  // 红只表达"强度"，不再整行铺底色 —— 之前 11 行红块把页面拉低成告警面板
-                  const hot = Math.min(1, Math.max(0.25, (b.z - 2.5) / 6))
-                  return (
-                    <li
-                      key={`${b.date}-${b.category}`}
-                      className="flex items-center gap-2.5 py-2 text-[11.5px] leading-snug text-slate-600 transition-colors hover:bg-slate-50/70 dark:text-slate-300 dark:hover:bg-white/[0.03]"
+        {/* 今日跨源事件：整张卡 + 分隔线列表（不再每条套一张卡，视觉上更安静） */}
+        <Card
+          title="最新跨源事件"
+          action={
+            <button
+              type="button"
+              onClick={() => onNavigate('trend')}
+              className="text-xs text-slate-400 transition hover:text-slate-700 dark:hover:text-slate-200"
+            >
+              看趋势 →
+            </button>
+          }
+        >
+          {todayEvents.length === 0 ? (
+            <p className="text-xs text-slate-500 dark:text-slate-400">这天还没有被 2 家以上独立源同时报道的事件。</p>
+          ) : (
+            <ul className="divide-y divide-slate-100 dark:divide-white/[0.06]">
+              {todayEvents.slice(0, 6).map((e) => (
+                <li key={e.eventKey} className="py-2.5 first:pt-0 last:pb-0">
+                  <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+                    <span
+                      className={`num shrink-0 rounded px-1.5 py-0.5 text-[10.5px] font-semibold ${
+                        e.sourceCount >= 3
+                          ? 'bg-red-600 text-white'
+                          : 'bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300'
+                      }`}
                     >
-                      {/* 严重度色条 */}
-                      <span aria-hidden="true" className="h-6 w-[2.5px] shrink-0 rounded-full bg-red-500" style={{ opacity: hot }} />
-                      <span className="num shrink-0 text-slate-400 dark:text-slate-500">{b.date.slice(5)}</span>
-                      <span className="min-w-0 flex-1 truncate font-medium text-slate-800 dark:text-slate-100">
-                        {b.category === 'all' ? '全站' : (CATEGORY_LABELS[b.category] ?? b.category)}
-                      </span>
-                      <span className="num shrink-0 text-slate-400 dark:text-slate-500">{b.count} 条</span>
-                      <span className="num shrink-0 rounded bg-slate-100 px-1.5 py-0.5 font-semibold text-slate-600 tabular-nums dark:bg-white/[0.06] dark:text-slate-300">
-                        z {b.z}
-                      </span>
-                    </li>
-                  )
-                })}
-              </ul>
-            )}
-          </Card>
-        </div>
+                      {e.sourceCount} 源
+                    </span>
+                    <span
+                      className="shrink-0 text-[10.5px] font-medium"
+                      style={{ color: CATEGORY_COLORS[e.category] ?? '#94a3b8' }}
+                    >
+                      {CATEGORY_LABELS[e.category] ?? e.category}
+                    </span>
+                    <span className="num ml-auto shrink-0 text-[10.5px] text-slate-400 dark:text-slate-500">
+                      {e.date.slice(5)}
+                    </span>
+                  </div>
+                  <p className="mt-1 break-words text-[13px] leading-snug text-slate-800 dark:text-slate-100">
+                    {e.title}
+                  </p>
+                  <p className="mt-1 break-words text-[10.5px] text-slate-400 dark:text-slate-500">
+                    {e.sources.join('、') || '（来源未知）'}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
 
         {/* 实体热度 */}
       </div>
 
-      <aside className="w-full shrink-0 space-y-0 lg:w-[380px]">
+      <aside className="space-y-4">
+        {/* 只有助手粘性跟随：整列都 sticky 会让长内容互相顶住 */}
         <div className="lg:sticky lg:top-4">
           <AskPanel />
-          <div className="mt-4">
-          <Card
-            title="实体热度（近 7 天）"
-            action={
-              <button
-                type="button"
-                onClick={() => onNavigate('list')}
-                className="text-[11px] text-slate-400 transition hover:text-violet-700 dark:hover:text-violet-300"
-              >
-                资讯列表 →
-              </button>
-            }
-          >
-            {entities.length === 0 ? (
-              <p className="text-xs text-slate-500 dark:text-slate-400">暂无实体数据。</p>
-            ) : (
-              <div className="flex flex-wrap gap-1.5">
-                {entities.slice(0, 12).map((e) => (
-                  <span key={e.entity} className="chip max-w-full break-words !py-0.5 !text-[10.5px]">
-                    {e.entity}
-                    <span className="num ml-0.5 font-semibold text-slate-500 dark:text-slate-400">{e.count}</span>
-                  </span>
-                ))}
-              </div>
-            )}
-            {health && (
-              <div className="mt-3 border-t border-slate-100 pt-2.5 text-[10.5px] leading-relaxed text-slate-400 dark:border-white/[0.06] dark:text-slate-500">
-                <p>
-                  数据规模 {health.sources} 源 · {health.rawItems.toLocaleString('en-US')} 原始 ·{' '}
-                  {(health.aiArticles ?? health.articles).toLocaleString('en-US')} 条 AI 成品 · {health.events.toLocaleString('en-US')} 个事件
+        </div>
+
+        {/* 突发提醒 */}
+        <Card title="突发提醒（z ≥ 2.5）">
+          {recentBursts.length === 0 ? (
+            <p className="text-xs text-slate-500 dark:text-slate-400">近 3 天没有触发突发阈值，属正常。</p>
+          ) : (
+            <ul className="divide-y divide-slate-100 dark:divide-white/[0.06]">
+              {recentBursts.slice(0, 8).map((b) => {
+                // 红只表达"强度"，不再整行铺底色 —— 之前 11 行红块把页面拉低成告警面板
+                const hot = Math.min(1, Math.max(0.25, (b.z - 2.5) / 6))
+                return (
+                  <li
+                    key={`${b.date}-${b.category}`}
+                    className="flex items-center gap-2.5 py-2 text-[11.5px] leading-snug text-slate-600 transition-colors hover:bg-slate-50/70 dark:text-slate-300 dark:hover:bg-white/[0.03]"
+                  >
+                    {/* 严重度色条 */}
+                    <span aria-hidden="true" className="h-6 w-[2.5px] shrink-0 rounded-full bg-red-500" style={{ opacity: hot }} />
+                    <span className="num shrink-0 text-slate-400 dark:text-slate-500">{b.date.slice(5)}</span>
+                    <span className="min-w-0 flex-1 truncate font-medium text-slate-800 dark:text-slate-100">
+                      {b.category === 'all' ? '全站' : (CATEGORY_LABELS[b.category] ?? b.category)}
+                    </span>
+                    <span className="num shrink-0 text-slate-400 dark:text-slate-500">{b.count} 条</span>
+                    <span className="num shrink-0 rounded bg-slate-100 px-1.5 py-0.5 font-semibold text-slate-600 tabular-nums dark:bg-white/[0.06] dark:text-slate-300">
+                      z {b.z}
+                    </span>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </Card>
+
+        <Card
+          title="实体热度（近 7 天）"
+          action={
+            <button
+              type="button"
+              onClick={() => onNavigate('list')}
+              className="text-[11px] text-slate-400 transition hover:text-violet-700 dark:hover:text-violet-300"
+            >
+              资讯列表 →
+            </button>
+          }
+        >
+          {entities.length === 0 ? (
+            <p className="text-xs text-slate-500 dark:text-slate-400">暂无实体数据。</p>
+          ) : (
+            <div className="flex flex-wrap gap-1.5">
+              {entities.slice(0, 12).map((e) => (
+                <span key={e.entity} className="chip max-w-full break-words !py-0.5 !text-[10.5px]">
+                  {e.entity}
+                  <span className="num ml-0.5 font-semibold text-slate-500 dark:text-slate-400">{e.count}</span>
+                </span>
+              ))}
+            </div>
+          )}
+          {health && (
+            <div className="mt-3 border-t border-slate-100 pt-2.5 text-[10.5px] leading-relaxed text-slate-400 dark:border-white/[0.06] dark:text-slate-500">
+              <p>
+                数据规模 {health.sources} 源 · {health.rawItems.toLocaleString('en-US')} 原始 ·{' '}
+                {(health.aiArticles ?? health.articles).toLocaleString('en-US')} 条 AI 成品 ·{' '}
+                {health.events.toLocaleString('en-US')} 个事件
+              </p>
+              {health.collectAt && (
+                <p className="mt-0.5">
+                  定时 采集 {health.collectAt.split(',').join(' / ')} · 简报 {health.summaryAt || '23:00'}
                 </p>
-                {health.collectAt && (
-                  <p className="mt-0.5">定时 采集 {health.collectAt.split(',').join(' / ')} · 简报 {health.summaryAt || '23:00'}</p>
-                )}
-              </div>
-            )}
-          </Card>
-        </div>
-        </div>
+              )}
+            </div>
+          )}
+        </Card>
       </aside>
     </div>
   )
