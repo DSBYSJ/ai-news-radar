@@ -70,10 +70,10 @@ function SourceLine({ item }: { item: HotItem }) {
 }
 
 /** 大卡（NO.01 用完整版，右侧 NO.02/03 用 compact） */
-function HotCard({ item, compact = false }: { item: HotItem; compact?: boolean }) {
+function HotCard({ item, compact = false, fill = false }: { item: HotItem; compact?: boolean; fill?: boolean }) {
   const summary = item.topArticle?.summary || item.topArticle?.tldr || ''
   return (
-    <article className={`card card-accent relative flex flex-col overflow-hidden ${compact ? 'p-3.5' : 'p-4'}`}>
+    <article className={`card card-accent relative flex flex-col overflow-hidden ${compact ? 'p-3.5' : 'p-4'} ${fill ? 'h-full' : ''}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <span className="num text-[11px] font-bold tracking-tight text-[var(--hot)]">
@@ -87,7 +87,7 @@ function HotCard({ item, compact = false }: { item: HotItem; compact?: boolean }
       <div className={compact ? '' : 'mt-1 flex flex-1 gap-4'}>
         <div className="min-w-0 flex-1">
           <h3
-            className={`font-semibold leading-snug text-slate-900 dark:text-white ${compact ? 'mt-1.5 text-[13.5px]' : 'text-[17px]'}`}
+            className={`font-semibold leading-snug text-slate-900 dark:text-white ${compact ? 'mt-1.5 text-[13.5px]' : 'text-[19px]'}`}
           >
             <a href={item.topArticle?.url ?? '#'} target="_blank" rel="noopener noreferrer" className="hover:underline">
               {item.title}
@@ -96,7 +96,7 @@ function HotCard({ item, compact = false }: { item: HotItem; compact?: boolean }
 
           {summary && (
             <p
-              className={`mt-1.5 leading-relaxed text-slate-600 dark:text-slate-300 ${compact ? 'line-clamp-2 text-[11px]' : 'line-clamp-3 text-xs'}`}
+              className={`mt-1.5 leading-relaxed text-slate-600 dark:text-slate-300 ${compact ? 'line-clamp-2 text-[11px]' : 'line-clamp-4 text-[13px]'}`}
             >
               {summary}
             </p>
@@ -147,7 +147,7 @@ function HotCard({ item, compact = false }: { item: HotItem; compact?: boolean }
         </div>
       ) : (
         <div className="mt-2 flex items-end justify-end">
-          <Sparkline hourly={item.hourly} className="h-7 w-28 opacity-90" />
+          <Sparkline hourly={item.hourly} className="h-8 w-40 opacity-90" />
         </div>
       )}
     </article>
@@ -211,11 +211,11 @@ export default function HotPage() {
       </header>
 
       {loading && (
-        <div className="grid gap-3 lg:grid-cols-3">
-          <div className="card h-56 animate-pulse lg:col-span-2" />
-          <div className="space-y-3">
-            <div className="card h-24 animate-pulse" />
-            <div className="card h-24 animate-pulse" />
+        <div className="space-y-3">
+          <div className="card h-44 animate-pulse" />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="card h-28 animate-pulse" />
+            <div className="card h-28 animate-pulse" />
           </div>
         </div>
       )}
@@ -230,17 +230,15 @@ export default function HotPage() {
         </p>
       )}
 
-      {/* NO.01 大卡 + 右侧 NO.02/03 */}
-      {first && (
-        <div className="grid gap-3 lg:grid-cols-3">
-          <div className="lg:col-span-2">
-            <HotCard item={first} />
-          </div>
-          <div className="space-y-3">
-            {side.map((item) => (
-              <HotCard key={item.eventKeys[0] ?? item.title} item={item} compact />
-            ))}
-          </div>
+      {/* NO.01 头条：整宽（内容偏短时，三栏布局会在左侧留下大片空白） */}
+      {first && <HotCard item={first} />}
+
+      {/* NO.02 / NO.03 并排 */}
+      {side.length > 0 && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {side.map((item) => (
+            <HotCard key={item.eventKeys[0] ?? item.title} item={item} compact fill />
+          ))}
         </div>
       )}
 
