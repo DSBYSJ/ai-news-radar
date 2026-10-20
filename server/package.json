@@ -1,6 +1,6 @@
 {
   "name": "ai-news-server",
-  "version": "0.18.0",
+  "version": "0.19.0",
   "private": true,
   "description": "AI 资讯趋势雷达 · 后端（采集 / 存储 / 趋势统计）",
   "type": "module",
@@ -22,6 +22,7 @@
     "prune": "node src/tools/prune.ts",
     "backfill:content": "node src/tools/backfill-content.ts",
     "clean:content": "node src/tools/clean-content.ts",
+    "clean:relevance": "node src/tools/clean-relevance.ts",
     "typecheck": "tsc --noEmit",
     "test": "node --test \"test/**/*.test.ts\"",
     "bump:patch": "npm version patch --no-git-tag-version"

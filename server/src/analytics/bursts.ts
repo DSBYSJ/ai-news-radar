@@ -62,7 +62,7 @@ export async function rebuildBursts(
   const rows = db
     .prepare(
       `SELECT date(published_at) AS d, category AS c, COUNT(*) AS n
-       FROM articles WHERE published_at >= ? AND published_at < ?
+       FROM articles WHERE ai_relevant = 1 AND published_at >= ? AND published_at < ?
        GROUP BY d, c`,
     )
     .all(startIso, endIso) as unknown as { d: string; c: string; n: number }[]

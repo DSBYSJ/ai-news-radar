@@ -5,6 +5,7 @@ import { chat } from './deepseek.ts'
 import { normalizeEntity } from './entities.ts'
 import { classifyByRules } from './heuristic.ts'
 import { applySourceWeight } from './scoring.ts'
+import { judgeRelevance } from './relevance.ts'
 import { parseStage1, parseStage2, type Stage1Result } from './parse.ts'
 import { buildStage1Prompt, buildStage2Prompt } from './prompts.ts'
 
@@ -94,8 +95,8 @@ export async function runProcessing(opts: ProcessOptions = {}): Promise<ProcessS
 
   const insertArticle = db.prepare(
     `INSERT OR IGNORE INTO articles
-       (raw_id, url, title, tldr, summary, category, entities, score, score_parts, event_key, published_at, created_at)
-     VALUES (?, ?, ?, NULL, ?, ?, NULL, ?, ?, NULL, ?, ?)`,
+       (raw_id, url, title, tldr, summary, category, entities, score, score_parts, event_key, published_at, created_at, ai_relevant)
+     VALUES (?, ?, ?, NULL, ?, ?, NULL, ?, ?, NULL, ?, ?, ?)`,
   )
   const insertMention = db.prepare('INSERT OR IGNORE INTO mentions (article_id, entity) VALUES (?, ?)')
   const updateDeep = db.prepare('UPDATE articles SET tldr = ?, summary = ?, entities = ? WHERE id = ?')
@@ -143,12 +144,18 @@ export async function runProcessing(opts: ProcessOptions = {}): Promise<ProcessS
       const mode = hit ? 'ai' : 'heuristic'
       // 信源权重统一在这里生效：官方一手 +5，聚合 -5，媒体 0
       const weighted = applySourceWeight(picked.score, row.weight)
+      // AI 相关性：模型给了就用模型的（语义更准），没给则用关键词兜底
+      const keyword = judgeRelevance(row.title, row.summary ?? '')
+      const aiRelevant = hit?.ai ?? keyword.relevant
       const scoreParts = JSON.stringify({
         mode,
         reason: picked.reason ?? '',
         sourceWeight: row.weight,
         baseScore: weighted.baseScore,
         weightBonus: weighted.bonus,
+        aiRelevant,
+        aiBy: hit?.ai === undefined ? 'keyword' : 'model',
+        aiHits: keyword.hits,
       })
 
       const res = insertArticle.run(
@@ -161,6 +168,7 @@ export async function runProcessing(opts: ProcessOptions = {}): Promise<ProcessS
         scoreParts,
         row.published_at,
         now,
+        aiRelevant ? 1 : 0,
       )
       if (Number(res.changes) > 0) classified += 1
     }

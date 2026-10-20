@@ -13,7 +13,13 @@ function setup(): DatabaseSync {
   return db
 }
 
-function addArticle(db: DatabaseSync, date: string, category = 'model_release', entities: string | null = null): void {
+function addArticle(
+  db: DatabaseSync,
+  date: string,
+  category = 'model_release',
+  entities: string | null = null,
+  eventKey: string | null = null,
+): void {
   const rawId = Number(
     db
       .prepare(
@@ -24,8 +30,8 @@ function addArticle(db: DatabaseSync, date: string, category = 'model_release', 
   )
   db.prepare(
     `INSERT INTO articles (raw_id, url, title, tldr, summary, category, entities, score, score_parts, sentiment, event_key, published_at, created_at)
-     VALUES (?, 'https://x/a', '标题', NULL, '摘要', ?, ?, 70, NULL, NULL, NULL, ?, ?)`,
-  ).run(rawId, category, entities, `${date}T08:00:00.000Z`, `${date}T08:00:00.000Z`)
+     VALUES (?, 'https://x/a', '标题', NULL, '摘要', ?, ?, 70, NULL, NULL, ?, ?, ?)`,
+  ).run(rawId, category, entities, eventKey, `${date}T08:00:00.000Z`, `${date}T08:00:00.000Z`)
 }
 
 test('weekStart：周一为一周之始，周日回退 6 天', () => {
@@ -44,7 +50,7 @@ test('periodReport：汇总条数 / 环比 / 分类 / 跨源事件 / 实体 / �
   const db = setup()
   // 本周（10-19 ~ 10-25）3 条；上周（10-12 ~ 10-18）1 条
   addArticle(db, '2026-10-19', 'model_release', '["OpenAI"]')
-  addArticle(db, '2026-10-20', 'model_release', '["OpenAI","Gemini"]')
+  addArticle(db, '2026-10-20', 'model_release', '["OpenAI","Gemini"]', 'e1')
   addArticle(db, '2026-10-21', 'policy', null)
   addArticle(db, '2026-10-14', 'funding')
 

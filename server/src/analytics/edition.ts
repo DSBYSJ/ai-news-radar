@@ -93,7 +93,7 @@ export function dailyEdition(db: DatabaseSync, date: string): Edition {
          JOIN sources s ON s.id = r.source_id
          LEFT JOIN event_clusters ec
                 ON ec.event_id = a.event_key AND ec.publish_date = date(a.published_at)
-        WHERE date(a.published_at) = ?
+        WHERE date(a.published_at) = ? AND a.ai_relevant = 1
         ORDER BY COALESCE(a.score, 0) DESC, a.published_at DESC`,
     )
     .all(date) as unknown as Row[]
@@ -119,7 +119,11 @@ export function dailyEdition(db: DatabaseSync, date: string): Edition {
   const crossSource = Number(
     (
       db
-        .prepare('SELECT COUNT(*) AS n FROM event_clusters WHERE publish_date = ? AND source_count >= 2')
+        .prepare(
+        `SELECT COUNT(*) AS n FROM event_clusters ec
+          WHERE ec.publish_date = ? AND ec.source_count >= 2
+            AND EXISTS (SELECT 1 FROM articles a WHERE a.event_key = ec.event_id AND a.ai_relevant = 1)`,
+      )
         .get(date) as { n: number }
     ).n,
   )

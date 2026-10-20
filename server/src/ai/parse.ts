@@ -5,6 +5,8 @@ export interface Stage1Result {
   id: number
   category: Category
   score: number
+  /** 模型判定的 AI 相关性；未给出时为 undefined，由关键词兜底 */
+  ai?: boolean
   reason?: string
 }
 
@@ -91,6 +93,7 @@ export function parseStage1(raw: string, validIds: number[]): Stage1Result[] | n
       id,
       category: isCategory(row.category) ? row.category : 'other',
       score: toScore(row.score),
+      ai: typeof row.ai === 'boolean' ? row.ai : undefined,
       reason: typeof row.reason === 'string' ? row.reason.slice(0, 200) : undefined,
     })
   }

@@ -28,6 +28,10 @@ function migrate(conn: DatabaseSync): void {
   if (!rawColumns.some((c) => c.name === 'content')) {
     conn.exec('ALTER TABLE raw_items ADD COLUMN content TEXT')
   }
+  // v0.19.0：AI 相关性（非 AI 内容不进榜单/日报/列表）
+  if (!columns.some((c) => c.name === 'ai_relevant')) {
+    conn.exec('ALTER TABLE articles ADD COLUMN ai_relevant INTEGER DEFAULT 1')
+  }
   // v0.17.0：连续失败计数，用于退避（失败源不再每轮空等 20s 超时）
   const srcColumns = conn.prepare('PRAGMA table_info(sources)').all() as unknown as { name: string }[]
   if (!srcColumns.some((c) => c.name === 'fail_streak')) {

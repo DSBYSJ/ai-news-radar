@@ -107,7 +107,7 @@ export function periodReport(
 
   const countArticles = (a: string, b: string): number =>
     Number(
-      (db.prepare('SELECT COUNT(*) AS n FROM articles WHERE date(published_at) BETWEEN ? AND ?').get(a, b) as { n: number }).n,
+      (db.prepare('SELECT COUNT(*) AS n FROM articles WHERE ai_relevant = 1 AND date(published_at) BETWEEN ? AND ?').get(a, b) as { n: number }).n,
     )
 
   const articles = countArticles(start, partial ? nowIso : end)
@@ -127,7 +127,9 @@ export function periodReport(
     (
       db
         .prepare(
-          'SELECT COUNT(*) AS n FROM event_clusters WHERE publish_date BETWEEN ? AND ? AND source_count >= 2',
+          `SELECT COUNT(*) AS n FROM event_clusters ec
+                 WHERE ec.publish_date BETWEEN ? AND ? AND ec.source_count >= 2
+                   AND EXISTS (SELECT 1 FROM articles a WHERE a.event_key = ec.event_id AND a.ai_relevant = 1)`,
         )
         .get(start, end) as { n: number }
     ).n,
@@ -149,7 +151,7 @@ export function periodReport(
   )
 
   const catRows = db
-    .prepare('SELECT category, COUNT(*) AS n FROM articles WHERE date(published_at) BETWEEN ? AND ? GROUP BY category')
+    .prepare('SELECT category, COUNT(*) AS n FROM articles WHERE ai_relevant = 1 AND date(published_at) BETWEEN ? AND ? GROUP BY category')
     .all(start, end) as unknown as { category: string; n: number }[]
   const catMap = new Map(catRows.map((r) => [r.category, Number(r.n)]))
   const categories = (CATEGORIES as readonly Category[])
@@ -169,6 +171,7 @@ export function periodReport(
                 category, publish_date AS date
            FROM event_clusters
           WHERE publish_date BETWEEN ? AND ? AND source_count >= 2
+            AND EXISTS (SELECT 1 FROM articles a WHERE a.event_key = event_clusters.event_id AND a.ai_relevant = 1)
           ORDER BY source_count DESC, article_count DESC LIMIT 5`,
       )
       .all(start, end) as unknown as { title: string; sourceCount: number; articleCount: number; category: string; date: string }[]
@@ -182,7 +185,7 @@ export function periodReport(
 
   // 实体聚合：entities 是 JSON 数组，交给 JS 数（SQLite 的 JSON1 不一定可用）
   const entityRows = db
-    .prepare('SELECT entities FROM articles WHERE date(published_at) BETWEEN ? AND ? AND entities IS NOT NULL')
+    .prepare('SELECT entities FROM articles WHERE ai_relevant = 1 AND date(published_at) BETWEEN ? AND ? AND entities IS NOT NULL')
     .all(start, end) as unknown as { entities: string }[]
   const entityCount = new Map<string, number>()
   for (const row of entityRows) {

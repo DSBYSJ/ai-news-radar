@@ -24,6 +24,12 @@ export function buildStage1Prompt(items: Stage1Input[]): string {
 【分类枚举】（只能选其中之一，不得自创）
 ${CATEGORIES.join(' | ')}
 
+【相关性】ai 为 true/false：这条是否与 AI 有关。
+  true  ：AI 模型/算法/产品/服务，AI 芯片与算力（GPU/显卡/HBM/数据中心/智算），AI 公司的重要动作
+  false ：纯消费电子（手机/耳机/相机/平板/家电）、纯汽车/游戏/影视、与 AI 无关的资本八卦、纯营销稿
+  注意：手机发布会如果只是硬件参数 → false；如果重点是端侧 AI 能力/模型 → true。
+  英伟达/AMD 等 GPU 与算力消息 → true。
+
 【打分标准】score 为 0~100 整数，评估"一个忙碌的 AI 工程师错过它会不会后悔"：
   90-100  范式级事件（重大模型发布、行业级政策落地）
   70-89   重要更新（主流工具大版本、知名机构重要论文）
@@ -34,9 +40,9 @@ ${CATEGORIES.join(' | ')}
 ${list}
 
 【输出】只输出 JSON 对象，不要任何解释或 Markdown 代码块，格式严格为：
-{"results":[{"id":1,"category":"model_release","score":92,"reason":"..."}, ...]}
+{"results":[{"id":1,"category":"model_release","score":92,"ai":true,"reason":"..."}, ...]}
 说明：id 就是上面条目的编号（1、2、3…），必须覆盖全部 ${items.length} 条；
-category 只能取上面枚举里的值；score 是 0~100 的整数。`
+category 只能取上面枚举里的值；score 是 0~100 的整数；ai 必须是布尔值，不要漏。`
 }
 
 export interface Stage2Input {

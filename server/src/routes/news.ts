@@ -78,8 +78,10 @@ export async function newsRoutes(app: FastifyInstance): Promise<void> {
     const offset = Math.max(num(q.offset, 0), 0)
     const minScore = num(q.minScore, 0)
 
+    // 默认只看 AI 相关；includeOfftopic=1 时包含被剔除的非 AI 内容（便于排查）
     const where: string[] = ['a.published_at >= ?']
     const params: (string | number)[] = [cutoff(days)]
+    if (q.includeOfftopic !== '1') where.push('a.ai_relevant = 1')
 
     if (q.category) {
       where.push('a.category = ?')

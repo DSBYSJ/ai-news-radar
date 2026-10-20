@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS articles (
   score        INTEGER,              -- 重要性 0~100
   score_parts  TEXT,                 -- JSON 明细（可解释性，便于调参）
   sentiment    TEXT,                 -- positive / neutral / negative（情感判定，可空）
+  ai_relevant  INTEGER DEFAULT 1,    -- 是否与 AI 相关（0 的非 AI 内容不进榜单/日报/列表）
   event_key    TEXT,                 -- 事件聚类键（第 4 层用）
   published_at TEXT NOT NULL,
   created_at   TEXT NOT NULL

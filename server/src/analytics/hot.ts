@@ -80,7 +80,7 @@ export function hotRanking(db: DatabaseSync, opts: { hours?: number; limit?: num
          FROM articles a
          JOIN raw_items r ON r.id = a.raw_id
          JOIN sources s ON s.id = r.source_id
-        WHERE a.event_key IS NOT NULL AND a.published_at >= ?
+        WHERE a.event_key IS NOT NULL AND a.ai_relevant = 1 AND a.published_at >= ?
         ORDER BY a.published_at DESC`,
     )
     .all(cutoff) as unknown as ArticleRow[]
@@ -184,7 +184,7 @@ export function hotRanking(db: DatabaseSync, opts: { hours?: number; limit?: num
   const relatedStmt = db.prepare(
     `SELECT a.id, a.title, a.url, s.name AS sourceName
        FROM articles a JOIN raw_items r ON r.id = a.raw_id JOIN sources s ON s.id = r.source_id
-      WHERE a.event_key = ? AND a.id != ?
+      WHERE a.event_key = ? AND a.id != ? AND a.ai_relevant = 1
       ORDER BY COALESCE(a.score, 0) DESC, a.published_at DESC LIMIT 3`,
   )
   for (const it of top.slice(0, 3)) {
