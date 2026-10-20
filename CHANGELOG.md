@@ -2,6 +2,23 @@
 
 版本号唯一来源：各 `package.json`。发布前照「升版本 → 写 changelog → 跑验证 → 推送部署」四步走。
 
+## 0.22.1（2026-10-21）
+
+**修「所有页面下滑都卡」：移动端关掉液态玻璃折射与全部重绘源**
+
+- 上一版只关了 `backdrop-blur` 工具类，漏了**真正的元凶**：
+  - `liquidGlass.ts` 给元素挂 `backdrop-filter: url(#feDisplacementMap)` —— **SVG 位移滤镜**，
+    滚动时每个元素重绘都要重算位移贴图；而且每次 DOM 变化都对 body 全量 `getBoundingClientRect()`（强制重排）
+  - `.glass` 变体自带 8–10px 模糊（不是工具类，选择器匹配不到）
+  - `body::before/::after` 是 **position:fixed + inset:-10% + 60s 无限动画 + will-change** 的全屏层
+  - `background-attachment: fixed` —— 滚动时背景每帧重绘
+- 修法：
+  - **JS**：`matchMedia('(max-width:820px), (hover:none)')` 命中时**直接 return**，根本不生成折射滤镜、不挂 MutationObserver
+  - **CSS**（移动端，压在最末尾）：`body::before/after` 隐藏、`background-attachment: scroll`、
+    所有 `.glass/.card/.seg-item/.chip/input/.status-bar` 的 `backdrop-filter: none`、
+    内联 `backdrop-filter`/`filter: url` 覆盖、`will-change: auto`、卡片 `contain: layout paint`
+- 重新打包 APK（`www/index.html` 启动页底色跟随系统主题）
+
 ## 0.22.0（2026-10-21）
 
 **安卓端性能优化（核心是首屏 404KB → 35KB）**

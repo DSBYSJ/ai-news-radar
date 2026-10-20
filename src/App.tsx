@@ -73,9 +73,17 @@ export default function App() {
   // 液态玻璃折射：按元素尺寸生成 SVG 位移贴图并挂到 backdrop-filter 上。
   // 只在深色模式生效（亮色模式保持原样）；内容变化 / 窗口尺寸变化后重扫。
   useEffect(() => {
-    // 深色与亮色都做液态玻璃（两端玻璃的底色与参数不同，见 index.css / liquidGlass.ts）。
-    // 切换主题时先清掉上一轮内联样式，避免上一模式的滤镜/参数残留。
+    // 切换主题时先清掉上一轮内联样式，避免上一模式的滤镜/参数残留
     resetRefraction()
+
+    /*
+     * 触屏 / 窄屏（安卓 WebView）**完全不做液态玻璃折射**：
+     * 折射靠 backdrop-filter: url(#feDisplacementMap)，滚动时每个元素重绘都要重算位移贴图，
+     * 而且每次 DOM 变化都要对 body 全量 getBoundingClientRect（强制重排）。
+     * 这是"所有页面下滑都卡"的主因 —— 移动端退回实底，视觉损失可忽略。
+     */
+    if (window.matchMedia('(max-width: 820px), (hover: none)').matches) return
+
     let raf = 0
     const run = () => {
       cancelAnimationFrame(raf)

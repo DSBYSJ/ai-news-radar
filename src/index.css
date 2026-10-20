@@ -907,3 +907,67 @@ html.theme-switching .seg {
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1) !important;
   }
 }
+
+
+/* ==========================================================================
+   移动端滚动性能模式（安卓 WebView）—— 压在最后，覆盖上面所有玻璃/动画规则
+   滚动卡顿的根源都在这里：全屏动态背景层、background-attachment: fixed、
+   backdrop-filter（含 .glass 与 SVG 折射）、will-change、以及卡片的重阴影。
+   ========================================================================== */
+@media (max-width: 820px), (hover: none) {
+  /* 1) 干掉全屏动态背景层（60s 无限动画 + fixed + will-change = 每帧重绘） */
+  html body::before,
+  html body::after {
+    display: none !important;
+    content: none !important;
+    animation: none !important;
+  }
+
+  /* 2) 背景不吸附：fixed 背景在滚动时每帧重绘 */
+  html,
+  body {
+    background-attachment: scroll !important;
+  }
+
+  body {
+    animation: none !important;
+  }
+
+  /* 3) 所有模糊/折射一律关掉（工具类 + .glass + 表单 + 选中态） */
+  [class*='backdrop-blur'],
+  .glass,
+  .glass-bar,
+  .card,
+  .seg,
+  .seg-item,
+  .chip,
+  .status-bar,
+  .dark input,
+  .dark select,
+  .dark textarea {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+
+  /* 内联挂上去的折射滤镜（liquidGlass 会写 filter/backdrop-filter 内联样式） */
+  [style*='backdrop-filter'],
+  [style*='-webkit-backdrop-filter'] {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+
+  [style*='filter: url'] {
+    filter: none !important;
+  }
+
+  /* 4) 不再为合成层预留 */
+  * {
+    will-change: auto !important;
+  }
+
+  /* 5) 卡片限制重排/重绘范围：长列表滚动时只影响自身 */
+  .card {
+    contain: layout paint;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1) !important;
+  }
+}
