@@ -5,6 +5,7 @@ import { widgetSnapshot } from '../analytics/widget.ts'
 import { dailyEdition } from '../analytics/edition.ts'
 import { periodReport } from '../analytics/period.ts'
 import { hotRanking } from '../analytics/hot.ts'
+import { riskReport } from '../risk/index.ts'
 import { CATEGORY_LABELS, type Category } from '../ai/categories.ts'
 import { runProcessing } from '../ai/pipeline.ts'
 import { askQuestion } from '../ai/ask.ts'
@@ -305,6 +306,15 @@ export async function newsRoutes(app: FastifyInstance): Promise<void> {
       updatedAt: new Date().toISOString(),
       items: hotRanking(getDb(), { hours: num(q.hours, 48), limit: num(q.limit, 10) }),
     }
+  })
+
+  /**
+   * 独立模块：AI 估值与金融危机风险（叙事泡沫指数 + 可选危机风险分）
+   * 与现有功能解耦：只读 articles 表，不改任何现有数据；宏观数据缺失时不输出概率。
+   */
+  app.get('/api/news/risk', async (req) => {
+    const q = req.query as Query
+    return riskReport(getDb(), { days: num(q.days, 30) })
   })
 
   /** 结构化日报：头条 + 分类分区 + 快讯（简报页按版面渲染） */

@@ -362,3 +362,58 @@ export interface OverviewResponse {
   entities: { days: number; items: EntityItem[] }
   sentiment: SentimentResponse
 }
+
+// ---------- AI 估值与危机风险（独立模块） ----------
+export interface RiskFactor {
+  key: string
+  label: string
+  value: number | null
+  score: number | null
+  weight: number
+  note: string
+}
+
+export interface NarrativeReport {
+  windowDays: number
+  articles: number
+  classified: number
+  nfi: number | null
+  band: 'calm' | 'warm' | 'hot' | 'unknown'
+  factors: RiskFactor[]
+  observations: { key: string; label: string; value: string }[]
+  latestDate: string | null
+}
+
+export interface MacroPoint {
+  key: string
+  label: string
+  value: number
+  asOf: string
+  yearAgo: number | null
+  avg200: number | null
+  source: string
+}
+
+export interface MacroSnapshot {
+  available: boolean
+  missing: string[]
+  series: Record<string, MacroPoint>
+  notes: string[]
+  fetchedAt: string
+}
+
+export interface CrisisAssessment {
+  score: number
+  level: 'low' | 'guarded' | 'elevated' | 'high'
+  probability12m: { low: number; high: number; note: string } | null
+  factors: RiskFactor[]
+}
+
+export interface RiskReport {
+  generatedAt: string
+  windowDays: number
+  narrative: NarrativeReport
+  macro: MacroSnapshot
+  crisis: CrisisAssessment | null
+  disclaimer: string
+}

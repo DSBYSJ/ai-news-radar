@@ -36,6 +36,9 @@ export const config = {
     timeoutMs: Number(process.env.DEEPSEEK_TIMEOUT_MS ?? 20_000),
   },
   aiEnabled: Boolean(process.env.DEEPSEEK_API_KEY),
+
+  /** FRED API Key（可选）：配了才算「危机风险分」，没配只出叙事指数 */
+  fredApiKey: process.env.FRED_API_KEY ?? '',
   minScoreForDeep: Number(process.env.AI_MIN_SCORE_FOR_DEEP ?? 60),
 
   // 定时调度（分钟；0 = 关闭，本地开发默认关闭）

@@ -13,6 +13,7 @@ import type {
   Health,
   HotResponse,
   OverviewResponse,
+  RiskReport,
   PeriodReport,
   SentimentResponse,
   SourceItem,
@@ -66,6 +67,8 @@ export const api = {
   hot: (limit = 10, hours = 48) => get<HotResponse>('/hot', { limit, hours }),
   /** 概览首屏：1 次请求代替 health/velocity/cross/summaries/entities/sentiment 六个 */
   overview: () => get<OverviewResponse>('/overview'),
+  /** 独立模块：AI 估值与危机风险（叙事指数 + 可选危机分） */
+  risk: (days = 30) => get<RiskReport>('/risk', { days }),
   volume: (days: number) => get<{ days: number; points: DailyPoint[] }>('/trend/volume', { days }),
   category: (days: number) => get<{ days: number; points: CategoryRatioPoint[] }>('/trend/category', { days }),
   velocity: (days: number) => get<VelocityResponse>('/trend/velocity', { days }),
