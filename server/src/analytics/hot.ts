@@ -31,6 +31,10 @@ export interface HotItem {
   isNew: boolean
   firstSeen: string
   lastSeen: string
+  /** 近 24 小时每小时的文章数（旧 → 新），给迷你走势图用 */
+  hourly: number[]
+  /** 同一事件的其它报道（最多 3 条，用于大卡的「相关报道」） */
+  related: { id: number; title: string; url: string; sourceName: string }[]
   /** 代表条目（用于站内阅读/原文/摘要） */
   topArticle: { id: number; title: string; url: string; sourceName: string; publishedAt: string; tldr: string | null; summary: string | null } | null
 }
@@ -107,6 +111,13 @@ export function hotRanking(db: DatabaseSync, opts: { hours?: number; limit?: num
   const countArticles = db.prepare(
     'SELECT COUNT(*) AS n FROM articles WHERE event_key = ? AND published_at >= ? AND published_at < ?',
   )
+  const timesOf = db.prepare('SELECT published_at FROM articles WHERE event_key = ? AND published_at >= ? ORDER BY published_at')
+  const relatedOf = db.prepare(
+    `SELECT a.id, a.title, a.url, s.name AS sourceName
+       FROM articles a JOIN raw_items r ON r.id = a.raw_id JOIN sources s ON s.id = r.source_id
+      WHERE a.event_key = ? AND a.id != ?
+      ORDER BY COALESCE(a.score, 0) DESC, a.published_at DESC LIMIT 3`,
+  )
   const topOf = db.prepare(
     `SELECT a.id, a.title, a.url, a.published_at AS publishedAt, s.name AS sourceName, a.tldr, a.summary
        FROM articles a JOIN raw_items r ON r.id = a.raw_id JOIN sources s ON s.id = r.source_id
@@ -134,8 +145,19 @@ export function hotRanking(db: DatabaseSync, opts: { hours?: number; limit?: num
       const row = topOf.get(k) as HotItem['topArticle'] | undefined
       if (row && (!topArticle || (row.publishedAt ?? '') > (topArticle.publishedAt ?? ''))) topArticle = row
     }
+    // 近 24 小时逐小时计数（24 个桶，最旧在前）
+    const hourly = new Array<number>(24).fill(0)
+    const dayCut = new Date(now - 24 * HOUR_MS).toISOString()
+    for (const k of g.keys) {
+      for (const row of timesOf.all(k, dayCut) as unknown as { published_at: string }[]) {
+        const idx = Math.floor((now - Date.parse(row.published_at)) / HOUR_MS)
+        if (idx >= 0 && idx < 24) hourly[23 - idx] += 1
+      }
+    }
+
     items.push({
       rank: 0,
+      hourly,
       title: g.title,
       category: g.category,
       eventKeys: g.keys,
@@ -148,9 +170,25 @@ export function hotRanking(db: DatabaseSync, opts: { hours?: number; limit?: num
       firstSeen: g.firstSeen,
       lastSeen: g.lastSeen,
       topArticle: topArticle ?? null,
+      related: [],
     })
   }
 
   items.sort((a, b) => b.hot - a.hot || b.sources - a.sources)
-  return items.slice(0, limit).map((it, i) => ({ ...it, rank: i + 1 }))
+  const top = items.slice(0, limit).map((it, i) => ({ ...it, rank: i + 1 }))
+
+  // 只给前 3 名补「相关报道」（大卡里展示），避免为 10 条都查一遍
+  for (const it of top.slice(0, 3)) {
+    if (!it.topArticle) continue
+    const rows = relatedOf.all(it.eventKeys[0], it.topArticle.id) as unknown as {
+      id: number
+      title: string
+      url: string
+      sourceName: string
+    }[]
+    it.related = rows
+      .filter((r) => r.title !== it.topArticle?.title)
+      .map((r) => ({ id: Number(r.id), title: r.title, url: r.url, sourceName: r.sourceName }))
+  }
+  return top
 }

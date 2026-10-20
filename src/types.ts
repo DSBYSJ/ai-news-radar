@@ -321,6 +321,10 @@ export interface HotItem {
   isNew: boolean
   firstSeen: string
   lastSeen: string
+  /** 近 24 小时逐小时新增（旧→新，24 个桶） */
+  hourly: number[]
+  /** 同一事件的其它报道（仅前 3 名有，用于大卡） */
+  related: { id: number; title: string; url: string; sourceName: string }[]
   topArticle: {
     id: number
     title: string

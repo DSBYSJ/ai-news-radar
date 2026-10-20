@@ -84,5 +84,8 @@ test('hotRanking：标记新事件与动量（近 6 小时 vs 前 6 小时）', 
   assert.equal(rising.recent, 2, '近 6 小时 2 篇')
   assert.equal(rising.deltaPct, 100, '近 6 小时 2 篇 vs 前 6 小时 1 篇 → +100%')
   assert.ok(rising.topArticle?.url.startsWith('https://x/'), '应带代表条目用于阅读')
+  assert.equal(rising.hourly.length, 24, '走势图固定 24 个桶')
+  assert.ok(rising.hourly.some((n) => n > 0), '近 24 小时应有计数')
+  assert.ok(Array.isArray(rising.related), '大卡需要相关报道数组')
   db.close()
 })
