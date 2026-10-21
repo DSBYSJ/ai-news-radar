@@ -181,6 +181,22 @@ CREATE TABLE IF NOT EXISTS macro_history (
 );
 
 -- 风险分数日快照（回溯视图的数据源）
+-- 美股 AI 产业链公司年度基本面（v0.36.0，来源 SEC XBRL，免费无 key）
+-- 只存原始事实（营收/净利/权益/股本），不存比率 —— 比率随口径变化，应由读取时计算
+CREATE TABLE IF NOT EXISTS company_fundamentals (
+  symbol       TEXT NOT NULL,
+  fiscal_end   TEXT NOT NULL,        -- 财年末 YYYY-MM-DD
+  revenue      REAL,
+  net_income   REAL,
+  equity       REAL,
+  eps_diluted  REAL,
+  shares       REAL,
+  revenue_tag  TEXT,                 -- 用了哪个 us-gaap 标签（各公司不一致，留痕便于核对）
+  filed_at     TEXT,                 -- 首次申报日
+  updated_at   TEXT NOT NULL,
+  PRIMARY KEY (symbol, fiscal_end)
+);
+
 -- AIHOT 外部基准对照的每日快照（v0.34.0）：只存统计与样本，不存对方正文
 CREATE TABLE IF NOT EXISTS aihot_benchmark (
   date               TEXT PRIMARY KEY,   -- 北京时间日期

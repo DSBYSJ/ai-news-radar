@@ -20,6 +20,7 @@ test('schema.sql：可在空库上建出全部表（含 v0.24.0 新增 3 张）'
       'articles',
       'burst_detection',
       'collect_log',
+      'company_fundamentals',
       'daily_summaries',
       'entity_aliases',
       'entity_mapping',
