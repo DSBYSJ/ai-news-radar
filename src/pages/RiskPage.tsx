@@ -10,7 +10,7 @@ import HistoryLine from '../components/risk/HistoryLine.tsx'
 import ScatterMatrix from '../components/risk/ScatterMatrix.tsx'
 import RiskTicker from '../components/risk/RiskTicker.tsx'
 import CountUp from '../components/risk/CountUp.tsx'
-import { bandOf, DISASTER_MARKS, RISK_LABEL } from '../components/risk/riskColors.ts'
+import { bandOf, DISASTER_MARKS, RISK_LABEL, semanticColor } from '../components/risk/riskColors.ts'
 
 /**
  * 风险看板（v0.27.0 展示层重构）
@@ -77,7 +77,14 @@ export default function RiskPage() {
   const macroCards = useMemo<MacroCardData[]>(() => {
     if (!report) return []
     const s = report.macro.series
-    const mk = (key: string, label: string, display: string, spark: number[], raw: number): MacroCardData => ({
+    const mk = (
+      key: string,
+      label: string,
+      display: string,
+      spark: number[],
+      raw: number,
+      colorOverride?: string,
+    ): MacroCardData => ({
       key,
       label,
       display,
@@ -85,6 +92,7 @@ export default function RiskPage() {
       yearAgo: s[key]?.yearAgo ?? null,
       spark,
       raw,
+      colorOverride,
     })
     return [
       mk('rates10y', '10Y 美债', `${s.rates10y?.value.toFixed(2) ?? '—'}%`, s.rates10y?.history.slice(-30) ?? [], s.rates10y?.value ?? 0),
@@ -96,6 +104,8 @@ export default function RiskPage() {
         report.macro.inversion === null ? '—' : report.macro.inversion ? '倒挂' : '正常',
         s.rates2y?.history.slice(-30) ?? [],
         s.rates2y?.value ?? 0,
+        // 语义型指标：正常=绿、倒挂=红（不按分位着色）
+        semanticColor(report.macro.inversion !== true),
       ),
     ]
   }, [report])
@@ -113,15 +123,17 @@ export default function RiskPage() {
   const macroSeries = report?.macro.series[drillKey ?? '']
 
   return (
-    <div className="space-y-4">
+    <div className="risk-page space-y-4">
       <header className="flex flex-wrap items-end justify-between gap-2">
         <div className="min-w-0">
           <p className="flex items-center gap-1.5 text-[10px] font-medium tracking-[0.14em] text-[var(--accent)]">
             <span className="inline-block h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
             SONAR RISK TERMINAL
           </p>
-          <h2 className="mt-1.5 text-[21px] font-semibold tracking-tight text-slate-100">AI 估值与危机风险</h2>
-          <p className="mt-0.5 text-[11.5px] text-slate-500">
+          <h2 className="mt-1.5 text-[21px] font-semibold tracking-tight text-slate-900 dark:text-slate-100">
+            AI 估值与危机风险
+          </h2>
+          <p className="mt-0.5 text-[11.5px] text-slate-500 dark:text-slate-400">
             叙事泡沫指数（NFI）用站内新闻；危机风险分（CRS）须接利率 / 信用利差 / 指数
           </p>
         </div>

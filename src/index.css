@@ -1019,3 +1019,74 @@ html.theme-switching .seg {
 .risk-panel:hover {
   border-color: rgba(148, 163, 184, 0.18);
 }
+
+/* ==========================================================================
+   亮色终端风适配（v0.27.2）：风险看板的面板/文字在浅色下要看得清
+   —— 新组件原本按暗色写的 text-slate-* / fill-slate-*，亮色下对比度不足。
+   ========================================================================== */
+html:not(.dark) .risk-panel {
+  background: linear-gradient(180deg, #ffffff, #fbfcfd);
+  border-color: #e2e8f0;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+}
+html:not(.dark) .risk-panel:hover {
+  border-color: #cbd5e1;
+}
+
+html:not(.dark) .risk-panel .text-slate-100,
+html:not(.dark) .risk-panel .text-slate-200,
+html:not(.dark) .risk-panel .text-slate-300 {
+  color: #0f172a;
+}
+html:not(.dark) .risk-panel .text-slate-400,
+html:not(.dark) .risk-panel .text-slate-500,
+html:not(.dark) .risk-panel .text-slate-600 {
+  color: #475569;
+}
+html:not(.dark) .risk-panel .fill-slate-100,
+html:not(.dark) .risk-panel .fill-slate-200,
+html:not(.dark) .risk-panel .fill-slate-300 {
+  fill: #0f172a;
+}
+html:not(.dark) .risk-panel .fill-slate-400,
+html:not(.dark) .risk-panel .fill-slate-500,
+html:not(.dark) .risk-panel .fill-slate-600 {
+  fill: #475569;
+}
+
+/* 下钻抽屉同理 */
+html:not(.dark) .risk-drawer {
+  background: #ffffff;
+  border-left-color: #e2e8f0;
+}
+html:not(.dark) .risk-drawer .text-slate-100,
+html:not(.dark) .risk-drawer .text-slate-200,
+html:not(.dark) .risk-drawer .text-slate-300 {
+  color: #0f172a;
+}
+html:not(.dark) .risk-drawer .text-slate-400,
+html:not(.dark) .risk-drawer .text-slate-500,
+html:not(.dark) .risk-drawer .text-slate-600 {
+  color: #475569;
+}
+html:not(.dark) .risk-drawer .fill-slate-400,
+html:not(.dark) .risk-drawer .fill-slate-500 {
+  fill: #475569;
+}
+html:not(.dark) .risk-drawer .stroke-white\/\[0\.06\],
+html:not(.dark) .risk-drawer .border-white\/10 {
+  border-color: #e2e8f0 !important;
+}
+
+/* 页面级标题（在面板外）亮色可读 */
+html:not(.dark) .risk-page .text-slate-100,
+html:not(.dark) .risk-page .text-slate-200 {
+  color: #0f172a;
+}
+html:not(.dark) .risk-page .text-slate-400,
+html:not(.dark) .risk-page .text-slate-500 {
+  color: #475569;
+}
+html:not(.dark) .risk-page .border-white\/\[0\.06\] {
+  border-color: #e2e8f0;
+}

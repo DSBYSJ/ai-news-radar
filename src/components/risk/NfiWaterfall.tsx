@@ -46,11 +46,15 @@ export default function NfiWaterfall({ factors, total, height = 210, onFactorHov
   const [hover, setHover] = useState<string | null>(null)
   const items = factors.map((f) => ({ ...f, kind: 'item' as const }))
 
+  /*
+   * 柱子贴底（高度 = 该因子贡献），不悬空；
+   * 累加语义用「阶梯虚线」保留：从上一根柱顶连到下一根柱顶。
+   */
   let running = 0
   const bars = items.map((f) => {
     const from = running
     running += f.contribution
-    return { ...f, from, to: running }
+    return { ...f, from, to: running, height: f.contribution }
   })
   const maxV = Math.max(10, ...bars.map((b) => Math.max(b.from, b.to)), total ?? 0)
 
@@ -67,8 +71,9 @@ export default function NfiWaterfall({ factors, total, height = 210, onFactorHov
 
         {bars.map((b, i) => {
           const x = PAD_L + slot * i + (slot - barW) / 2
-          const y = yOf(b.to)
-          const h = Math.max(2, yOf(b.from) - yOf(b.to))
+          const baseline = PAD_T + innerH
+          const y = yOf(b.height) // 贴底：顶端 = 贡献值高度
+          const h = Math.max(2, baseline - y)
           const isExtreme = b.score !== null && b.score >= 95
           const fill = colorOf(b.score)
           const isHover = hover === b.key
@@ -84,8 +89,6 @@ export default function NfiWaterfall({ factors, total, height = 210, onFactorHov
                 onFactorHover?.(null)
               }}
             >
-              {/* 透明底柱（占位，保证间距稳定） */}
-              <rect x={x} y={PAD_T} width={barW} height={innerH} fill="transparent" />
               <rect
                 x={x}
                 y={y}
@@ -97,6 +100,18 @@ export default function NfiWaterfall({ factors, total, height = 210, onFactorHov
                 className={isExtreme ? 'risk-breath' : ''}
                 style={{ filter: `drop-shadow(0 0 6px ${fill}55)` }}
               />
+              {/* 阶梯虚线：保留"累加"语义（柱顶 → 下一根柱顶） */}
+              {i < bars.length - 1 && (
+                <line
+                  x1={x + barW}
+                  y1={yOf(b.to)}
+                  x2={PAD_L + slot * (i + 1) + (slot - barW) / 2}
+                  y2={yOf(b.to)}
+                  stroke="rgba(148,163,184,0.55)"
+                  strokeWidth="1"
+                  strokeDasharray="3 2"
+                />
+              )}
               <text
                 x={x + barW / 2}
                 y={y - 5}

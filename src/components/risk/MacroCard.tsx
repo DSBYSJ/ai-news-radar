@@ -41,6 +41,8 @@ export interface MacroCardData {
   display: string
   /** 历史分位 0~1 */
   percentile: number | null
+  /** 语义型指标覆盖色（如收益率曲线：正常=绿/倒挂=红），优先于分位色 */
+  colorOverride?: string
   /** 一年前值（用于变化） */
   yearAgo: number | null
   yearAgoDisplay?: string
@@ -51,7 +53,8 @@ export interface MacroCardData {
 }
 
 export default function MacroCard({ data, onDrill }: { data: MacroCardData; onDrill: () => void }) {
-  const color = percentileColor(data.percentile)
+  // 语义型指标（收益率曲线）用覆盖色：正常=绿/倒挂=红；其余按历史分位着色
+  const color = data.colorOverride ?? percentileColor(data.percentile)
   const change =
     data.yearAgo && data.yearAgo !== 0 ? ((data.raw - data.yearAgo) / Math.abs(data.yearAgo)) * 100 : null
 

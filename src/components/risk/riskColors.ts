@@ -32,13 +32,27 @@ export const RISK_LABEL: Record<RiskBand, string> = {
   critical: '高危',
 }
 
-/** 分位数 → 颜色（宏观卡片用：>80% 分位红、<20% 冷） */
+/** 常态绿（宏观指标"正常"用绿色，异常才用红） */
+export const HEALTHY = '#22c55e'
+
+/**
+ * 分位数 → 颜色（宏观卡片用）
+ *
+ * 原则：**正常用绿、异常才用红**，避免满屏告警色。
+ *   < 75% 分位 → 绿（常态）
+ *   75–95%    → 橙（关注）
+ *   ≥ 95%     → 红（异常，才配红）
+ */
 export function percentileColor(p: number | null | undefined): string {
-  if (p === null || p === undefined || !Number.isFinite(p)) return RISK_COLOR.calm
-  if (p >= 0.8) return RISK_COLOR.critical
-  if (p >= 0.5) return RISK_COLOR.warn
-  if (p >= 0.2) return RISK_COLOR.attention
-  return RISK_COLOR.calm
+  if (p === null || p === undefined || !Number.isFinite(p)) return HEALTHY
+  if (p >= 0.95) return RISK_COLOR.critical
+  if (p >= 0.75) return RISK_COLOR.warn
+  return HEALTHY
+}
+
+/** 语义型指标（如收益率曲线）：正常=绿、倒挂=红 */
+export function semanticColor(ok: boolean): string {
+  return ok ? HEALTHY : RISK_COLOR.critical
 }
 
 export function colorOf(score: number | null | undefined): string {

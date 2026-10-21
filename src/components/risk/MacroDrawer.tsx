@@ -65,7 +65,7 @@ export default function MacroDrawer({ open, onClose, data, transmission }: Props
   return (
     <div className="fixed inset-0 z-[90] flex justify-end bg-slate-950/60" onClick={onClose}>
       <aside
-        className="flex h-full w-full max-w-[520px] flex-col overflow-y-auto border-l border-white/10 bg-[#0d1117] p-5"
+        className="risk-drawer flex h-full w-full max-w-[520px] flex-col overflow-y-auto border-l border-white/10 bg-[#0d1117] p-5"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-label={`${data.label} 下钻`}

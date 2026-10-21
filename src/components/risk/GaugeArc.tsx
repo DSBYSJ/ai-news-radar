@@ -122,20 +122,25 @@ export default function GaugeArc({
           )
         })}
 
-        {/* 指针 */}
+        {/* 指针：只画外半段（起点在 R_IN*0.55），不穿过中心数字区 */}
         {v !== null && (
           <g>
-            <line
-              x1={CX}
-              y1={CY}
-              x2={needle.x}
-              y2={needle.y}
-              stroke={color}
-              strokeWidth="3"
-              strokeLinecap="round"
-              style={{ filter: glow }}
-            />
-            <circle cx={CX} cy={CY} r="4.2" fill="#0d1117" stroke={color} strokeWidth="2" />
+            {(() => {
+              const tail = polar(R_IN * 0.55, needleDeg)
+              return (
+                <line
+                  x1={tail.x}
+                  y1={tail.y}
+                  x2={needle.x}
+                  y2={needle.y}
+                  stroke={color}
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                  style={{ filter: glow }}
+                />
+              )
+            })()}
+            <circle cx={needle.x} cy={needle.y} r="3.2" fill={color} />
           </g>
         )}
       </svg>
