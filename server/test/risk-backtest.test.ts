@@ -6,9 +6,13 @@ import { DatabaseSync } from 'node:sqlite'
 import {
   aucOf,
   buildSamples,
+  chooseThreshold,
+  episodesOf,
   evaluateEvent,
   forwardMaxDrawdown,
   forwardMaxRise,
+  movingBlockBootstrap,
+  purgeTrain,
   runBacktest,
   type Sample,
 } from '../src/risk/backtest.ts'
@@ -48,7 +52,7 @@ test('aucOf：完全分开 = 1，完全反向 = 0，全并列 = 0.5', () => {
   assert.equal(aucOf([], [1]), 0.5, '空样本退回 0.5，不报错')
 })
 
-test('evaluateEvent：命中率/误报率/精确率按定义计算', () => {
+test('evaluateEvent：FPR/FDR 按定义计算，且分母不同', () => {
   const mk = (date: string, crs: number, y: 0 | 1 | null): Sample => ({
     date,
     features: { crs, overheat: 0, stress: 0, fragility: 0, oas: null, oasPct: null, drawdown: null, rates: null },
@@ -62,14 +66,14 @@ test('evaluateEvent：命中率/误报率/精确率按定义计算', () => {
     mk('2020-05-01', 80, 1),
     mk('2020-06-01', 40, 0),
   ]
-  const m = evaluateEvent(samples, 'drawdown20', { threshold: 60 })
+  const m = evaluateEvent(samples, 'drawdown20', 60)
   assert.equal(m.samples, 6)
   assert.equal(m.positives, 3)
   assert.equal(m.baseRate, 0.5)
-  assert.equal(m.atThreshold.hitRate, 1, '3 个正样本全部告警')
-  assert.equal(m.atThreshold.falseAlarmRate, 0, '3 个负样本都没告警')
-  assert.equal(m.atThreshold.precision, 1)
+  assert.equal(m.fpr, 0, '3 个负样本都没告警')
+  assert.equal(m.fdr, 0, '告警全部命中')
   assert.equal(m.auc, 1, '正样本分数都高于负样本')
+  assert.equal(m.direction, 'correct')
 })
 
 /* ------------------------------ point-in-time ------------------------------ */
@@ -121,5 +125,84 @@ test('runBacktest：数据不足时给出空报告而不是崩溃', () => {
   const r = runBacktest(db)
   assert.equal(r.dataRange.from, '—')
   assert.ok(r.caveats.length > 0, '必须附带局限说明')
+  db.close()
+})
+
+/* ================================================================== */
+/* v0.29.0 回测协议：purging / 告警合并 / 阈值规则 / 方向核查            */
+/* ================================================================== */
+
+test('purgeTrain：训练集末尾 12 个月必须剔除（否则阈值会看到测试期结果）', () => {
+  const rows = ['2013-06-01', '2013-12-01', '2014-06-01', '2014-12-01'].map((d) => ({ date: d }))
+  const kept = purgeTrain(rows, '2015-01-01')
+  assert.deepEqual(kept.map((r) => r.date), ['2013-06-01', '2013-12-01'], '2014 年的样本标签会跨进测试期，必须剔除')
+})
+
+test('episodesOf：连续告警合并为一次，冷却期内的新告警也算同一次', () => {
+  const rows = [
+    { date: '2020-01-01', score: 80 },
+    { date: '2020-02-01', score: 90 },
+    { date: '2020-03-01', score: 20 }, // 断一个月
+    { date: '2020-04-01', score: 85 }, // 距上次告警 2 个月 < 冷却 6 个月 → 仍算同一次
+    { date: '2020-12-01', score: 70 }, // 隔了 8 个月 → 新的一次
+  ]
+  const eps = episodesOf(rows, 60, 6)
+  assert.equal(eps.length, 2, `应合并成 2 次，实际 ${eps.length}`)
+  assert.equal(eps[0].start, '2020-01-01')
+  assert.equal(eps[0].end, '2020-04-01')
+  assert.equal(eps[1].start, '2020-12-01')
+})
+
+test('chooseThreshold：在误报预算内选阈值，预算越紧阈值越高', () => {
+  const mk = (date: string, crs: number, y: 0 | 1): Sample => ({
+    date,
+    features: { crs, overheat: 0, stress: 0, fragility: 0, oas: null, oasPct: null, drawdown: null, rates: null },
+    labels: { drawdown20: y, credit_widen_1pp: null, systemic: null },
+  })
+  // 低分区全是负样本，高分区正负混杂
+  const rows = [
+    mk('2020-01-01', 20, 0),
+    mk('2020-02-01', 30, 0),
+    mk('2020-03-01', 40, 0),
+    mk('2020-04-01', 50, 0),
+    mk('2020-05-01', 60, 1),
+    mk('2020-06-01', 70, 1),
+    mk('2020-07-01', 80, 1),
+  ]
+  const tight = chooseThreshold(rows, 'drawdown20', { maxAlertsPerYear: 0, years: 1 })
+  const loose = chooseThreshold(rows, 'drawdown20', { maxAlertsPerYear: 5, years: 1 })
+  assert.ok(tight.value >= loose.value, `预算越紧阈值不应更低：tight=${tight.value} loose=${loose.value}`)
+  assert.match(tight.rule, /误报/)
+})
+
+test('aucOf：秩和实现与逐对比较结果一致（含并列）', () => {
+  const pos = [3, 5, 5, 9]
+  const neg = [1, 5, 7]
+  let wins = 0
+  for (const p of pos) for (const n of neg) wins += p > n ? 1 : p === n ? 0.5 : 0
+  assert.ok(Math.abs(aucOf(pos, neg) - wins / (pos.length * neg.length)) < 1e-12)
+})
+
+test('movingBlockBootstrap：区块过长时如实返回无区间，不硬凑', () => {
+  const mk = (i: number): Sample => ({
+    date: `2020-${String((i % 12) + 1).padStart(2, '0')}-01`,
+    features: { crs: 50 + i, overheat: 0, stress: 0, fragility: 0, oas: null, oasPct: null, drawdown: null, rates: null },
+    labels: { drawdown20: i % 2 === 0 ? 1 : 0, credit_widen_1pp: null, systemic: null },
+  })
+  const rows = Array.from({ length: 10 }, (_, i) => mk(i))
+  const r = movingBlockBootstrap(rows, 'drawdown20', 36, 50)
+  assert.equal(r.lo, null, '样本 10 个、区块 36 时不该给出区间')
+  assert.equal(r.valid, 0)
+})
+
+test('runBacktest：泄漏检查全部通过，且两个切分都输出', () => {
+  const db = setup()
+  seedSeries(db)
+  const r = runBacktest(db)
+  assert.ok(r.splits.main && r.splits.aux, '主实验与辅助实验都要有')
+  for (const c of r.leakChecks) {
+    assert.ok(c.ok, `泄漏检查未通过：${c.name} —— ${c.detail}`)
+  }
+  assert.match(r.positioning, /不含 NFI/, '必须标明回测不包含 NFI')
   db.close()
 })

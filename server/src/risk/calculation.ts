@@ -212,6 +212,16 @@ export interface RiskParams {
     /** 尖峰锐度 */
     sharpness: number
   }
+  /**
+   * 利率分项内部配比（v0.29.0 新增，默认 0.5 / 0.25 / 0.25，和为 1）。
+   * 只为了让「逐因子消融实验」能单独关掉某一项，默认值与旧行为完全一致。
+   */
+  ratesMix: { level: number; change: number; step: number }
+  /**
+   * 信用分项三个来源的开关（v0.29.0 新增，默认全开）。
+   * 关掉后该项不参与 max()，用于检验「自满项」是否真的带来增量信息。
+   */
+  creditUse: { stress: boolean; widening: boolean; complacency: boolean }
   /** 动态权重：触发后宏观项权重放大倍数 */
   dynamic: {
     /** 纳指回撤超过此值触发 */
@@ -244,6 +254,8 @@ export const DEFAULT_PARAMS: RiskParams = {
   acceleration: { threshold: 0.35, sharpness: 6, cap: 3 },
   crs: { nfi: 40, rates: 20, credit: 20, index: 20 },
   steps: { oas: 4.5, rates: 5.0, sharpness: 2.2 },
+  ratesMix: { level: 0.5, change: 0.25, step: 0.25 },
+  creditUse: { stress: true, widening: true, complacency: true },
   dynamic: { drawdown: 0.1, boost: 1.4, band: 0.02 },
   divergence: { optimisticSentiment: 80, downDays: 3, surgeRatio: 2.5, fundingDropRatio: 0.5 },
   probability: { base: 0.12, scale: 28, band: 0.05 },
@@ -503,7 +515,12 @@ function creditRisk(
   const change = m.yearAgo === null ? 0 : m.value - m.yearAgo
   const widening = scaleLinear(change, 0, 2)
   const complacency = scaleLinear(3.0 - m.value, 0, 0.9)
-  const score = Math.round(Math.max(stress, widening, complacency))
+  // 三个来源可单独关闭（消融实验用）；默认全开时与旧行为一致
+  const use = params.creditUse ?? { stress: true, widening: true, complacency: true }
+  const enabled = [use.stress ? stress : null, use.widening ? widening : null, use.complacency ? complacency : null]
+    .filter((x): x is number => x !== null)
+  const score = enabled.length > 0 ? Math.round(Math.max(...enabled)) : 0
+  const off = [!use.stress && '承压', !use.widening && '走阔', !use.complacency && '自满'].filter(Boolean)
   return {
     score,
     stress: Math.round(stress),
@@ -513,7 +530,8 @@ function creditRisk(
       `OAS ${m.value.toFixed(2)}%` +
       (m.yearAgo === null ? '' : `（一年 ${change >= 0 ? '+' : ''}${change.toFixed(2)}pp）`) +
       `；>${params.steps.oas}% 阶跃跳升、一年走阔 >2pp、自满档 OAS<3%，三者取大` +
-      `（承压 ${Math.round(stress)} / 走阔 ${Math.round(widening)} / 自满 ${Math.round(complacency)}）`,
+      `（承压 ${Math.round(stress)} / 走阔 ${Math.round(widening)} / 自满 ${Math.round(complacency)}）` +
+      (off.length > 0 ? `；本次已关闭：${off.join('、')}` : ''),
   }
 }
 
@@ -562,7 +580,12 @@ function ratesRisk(
   const changeScore = scaleLinear(change, 0, 1.5)
   const step = Math.round(stepResponse(m.value, params.steps.rates, params.steps.sharpness))
   const inversionPenalty = inversion === true ? 18 : 0
-  const score = Math.round(clamp(0.5 * levelScore + 0.25 * changeScore + 0.25 * step + inversionPenalty, 0, 100))
+  // 内部配比可调（消融实验用）；默认 0.5/0.25/0.25、和为 1，与旧行为一致
+  const mix = params.ratesMix ?? { level: 0.5, change: 0.25, step: 0.25 }
+  const mixSum = mix.level + mix.change + mix.step
+  const weighted =
+    mixSum > 0 ? (mix.level * levelScore + mix.change * changeScore + mix.step * step) / mixSum : 0
+  const score = Math.round(clamp(weighted + inversionPenalty, 0, 100))
   return {
     score,
     percentile: p,

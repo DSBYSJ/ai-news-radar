@@ -202,11 +202,9 @@ export default function RiskPage() {
                     label="CRS"
                     bandLabel={report.crisis ? RISK_LABEL[bandOf(report.crisis.score)] : '未计算'}
                     marks={DISASTER_MARKS}
-                    probability={
-                      report.crisis?.probability12m
-                        ? { low: report.crisis.probability12m.low, high: report.crisis.probability12m.high }
-                        : null
-                    }
+                    /* v0.29.0：主看板不再显示"12 个月概率区间"。
+                       概率公式未经校准，即使标注"非预测"，一个 8%–18% 的区间仍会被当成概率读。
+                       等有了回测校准证据再放回来。 */
                   />
                 </section>
               </div>

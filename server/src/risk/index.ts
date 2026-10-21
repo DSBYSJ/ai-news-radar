@@ -85,8 +85,10 @@ export interface RiskReport {
 const DISCLAIMER =
   '本模块分两级：叙事泡沫指数（NFI）只用站内新闻，衡量「讨论有多热」；' +
   '危机风险分（CRS）必须接入利率、信用利差、指数三类宏观数据才计算。' +
-  'NFI 不是估值模型（新闻里没有估值倍数），CRS 的概率区间是基于历史基础率的启发式，' +
-  '既不是预测也不构成任何投资建议。'
+  'NFI 不是估值模型（新闻里没有估值倍数）。' +
+  'CRS 的历史回测（不含 NFI）显示两个时间切分结论不一致（回撤 AUC 0.60 vs 0.42），' +
+  '且独立危机事件只有 3 个 —— 因此 CRS 目前定位为「可解释的宏观压力描述」，' +
+  '不是已验证的危机预警模型，也不输出预测概率。'
 
 /** 把宏观快照转成引擎需要的输入 */
 function macroInput(point: MacroPoint | undefined, key: string, label: string) {
@@ -317,9 +319,11 @@ export async function riskReport(
       },
       {
         key: 'probability',
-        title: '12 个月情景参考值',
+        title: '12 个月情景参考值（已从主看板移除）',
         formula: `p = clamp(${params.probability.base} × e^((CRS−50)/${params.probability.scale}), 3%, 60%)，上下各 ±${(params.probability.band * 100).toFixed(0)}pp`,
-        detail: '⚠️ 启发式情景映射，不是预测概率：参数人工设定、未经回测校准，且只覆盖美国市场。',
+        detail:
+          '⚠️ 该公式未经任何校准：即使标注"非预测"，一个 8%–18% 的区间仍会被当成概率读，' +
+          '因此 v0.29.0 起不再在主看板展示。等具备独立样本与概率校准证据后再放回。',
       },
     ],
   }

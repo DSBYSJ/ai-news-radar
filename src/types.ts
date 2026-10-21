@@ -430,49 +430,107 @@ export interface SubIndex {
   note: string
 }
 
-/** 数据质量与可信度（v0.28.0）：区分"风险真的高"与"数据不足" */
+/** 数据质量（v0.29.0）：状态标签 + 明确门槛，不再输出"可信度 XX 分" */
+export type QualityStatus = 'sufficient' | 'partial' | 'insufficient' | 'stale'
+
+export interface QualityDimension {
+  key: string
+  label: string
+  value: string
+  status: QualityStatus
+  rule: string
+}
+
 export interface RiskQuality {
-  score: number
-  level: 'high' | 'medium' | 'low'
-  news: {
-    articles: number
-    independentSources: number
-    sentimentCoverage: number
-    entityCoverage: number
-    minSamples: number
-    ok: boolean
-  }
+  status: QualityStatus
+  headline: string
+  dimensions: QualityDimension[]
   macro: {
-    series: { key: string; label: string; asOf: string | null; rows: number; from: string | null; to: string | null; ok: boolean }[]
+    series: {
+      key: string
+      label: string
+      asOf: string | null
+      rows: number
+      from: string | null
+      to: string | null
+      ok: boolean
+      proxy?: string
+    }[]
     staleDays: number | null
     missing: string[]
-    ok: boolean
   }
   unavailable: string[]
   notes: string[]
 }
 
-/** 回测指标（后端 BacktestReport 的子集） */
-export interface BacktestMetrics {
+/** 回测：事件级指标（v0.29.0） */
+export interface BacktestEventDetail {
+  label: string
+  date: string
+  hit: boolean
+  leadDays: number | null
+  maxScoreInWindow: number | null
+}
+
+export interface BacktestEventMetrics {
   event: string
   label: string
   samples: number
   positives: number
   baseRate: number
   auc: number
-  baselines: { name: string; auc: number }[]
-  atThreshold: { threshold: number; hitRate: number; falseAlarmRate: number; precision: number; alertsPerYear: number }
+  aucInverted: number
+  direction: 'correct' | 'inverted' | 'flat'
+  fpr: number
+  fdr: number
+  alertsPerYear: number
+  eventRecall: number
+  eventsTotal: number
+  eventsHit: number
+  eventDetail: BacktestEventDetail[]
   medianLeadDays: number | null
   effectiveSamples: number
 }
 
+export interface BacktestBootstrap {
+  blockLength: number
+  lo: number | null
+  hi: number | null
+  valid: number
+  requested: number
+}
+
+export interface BacktestAblation {
+  name: string
+  change: string
+  testAuc: number
+  eventRecall: number
+  alertsPerYear: number
+  deltaAuc: number
+}
+
+export interface BacktestSplit {
+  name: string
+  trainFrom: string
+  trainTo: string
+  testFrom: string
+  testTo: string
+  purgeCutoff: string
+  trainSamples: number
+  testSamples: number
+  threshold: { value: number; rule: string; maxAlertsPerYear: number }
+  events: Record<string, BacktestEventMetrics>
+  bootstrap: Record<string, BacktestBootstrap[]>
+  ablation: BacktestAblation[]
+}
+
 export interface RiskBacktest {
   generatedAt: string
+  positioning: string
   dataRange: { from: string; to: string }
-  trainWindow: { from: string; to: string }
-  testWindow: { from: string; to: string }
   sampling: string
-  events: Record<string, { train: BacktestMetrics; test: BacktestMetrics }>
+  splits: { main: BacktestSplit; aux: BacktestSplit }
+  leakChecks: { name: string; ok: boolean; detail: string }[]
   caveats: string[]
   seriesCoverage: { series: string; rows: number; from: string; to: string }[]
 }

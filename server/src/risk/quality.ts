@@ -4,14 +4,31 @@ import { seriesCoverage } from './macroHistory.ts'
 import type { NarrativeInputs } from './narrative.ts'
 
 /**
- * 风险数据质量 / 可信度（v0.28.0 新增）
+ * 风险数据质量（v0.29.0 按外部评审意见重写）
  *
- * 解决的问题：页面上的「风险分 58」可能是"真的偏高"，也可能是"样本太少算出来的噪声"。
- * 两者长得一模一样，用户无法区分。这里把**数据够不够算**独立成一组可解释指标，
- * 明确回答：哪些项真的算出来了、哪些因为缺数据没算。
+ * 旧版做法：把样本量/信源数/覆盖率/滞后加权成一个「可信度 72/100」。
+ * 评审指出这是伪精确 —— 一个 0~100 的数字看起来像统计验证过的结论，
+ * 实际上权重是拍脑袋定的，而且掩盖了"到底哪一项不够"。
  *
- * 注意：可信度**不是**风险分的另一种说法，它只衡量"这组输入支不支持这个结论"。
+ * 新版做法：**状态标签 + 明确的计算门槛**，不再输出综合分。
+ *   sufficient 数据充分 / partial 部分数据 / insufficient 样本不足 / stale 数据过期
+ * 每个维度各自给状态与阈值，用户能直接看到是哪一环不满足。
+ *
+ * 另外：独立信源数 ≠ 文章数。同一事件被 10 家转载不是 10 个独立信号，
+ * 所以信源维度单独计算。
  */
+
+export type QualityStatus = 'sufficient' | 'partial' | 'insufficient' | 'stale'
+
+export interface QualityDimension {
+  key: string
+  label: string
+  /** 展示值（已格式化） */
+  value: string
+  status: QualityStatus
+  /** 判定门槛，写在界面上便于核对 */
+  rule: string
+}
 
 export interface QualitySeries {
   key: string
@@ -21,39 +38,47 @@ export interface QualitySeries {
   from: string | null
   to: string | null
   ok: boolean
+  /** 是否为代理序列（如用 BAA10Y 代表信用利差），界面必须标出来 */
+  proxy?: string
 }
 
 export interface RiskQuality {
-  /** 0~100 综合可信度 */
-  score: number
-  level: 'high' | 'medium' | 'low'
-  news: {
-    articles: number
-    /** 窗口内独立信源数 */
-    independentSources: number
-    /** 情感判定覆盖率 0~1 */
-    sentimentCoverage: number
-    /** 实体抽取覆盖率 0~1 */
-    entityCoverage: number
-    minSamples: number
-    ok: boolean
-  }
+  /** 最差的那个维度决定整体状态 */
+  status: QualityStatus
+  headline: string
+  dimensions: QualityDimension[]
   macro: {
     series: QualitySeries[]
-    /** 最新宏观数据距今天数 */
     staleDays: number | null
     missing: string[]
-    ok: boolean
   }
   /** 因为缺数据而没参与计算的项（"没算" ≠ "0 分"） */
   unavailable: string[]
   notes: string[]
 }
 
-const MIN_SAMPLES = 20
+const STATUS_LABEL: Record<QualityStatus, string> = {
+  sufficient: '数据充分',
+  partial: '部分数据',
+  insufficient: '样本不足',
+  stale: '数据过期',
+}
 
-function clamp01(x: number): number {
-  return Math.max(0, Math.min(1, x))
+const STATUS_RANK: Record<QualityStatus, number> = {
+  sufficient: 0,
+  partial: 1,
+  stale: 2,
+  insufficient: 3,
+}
+
+function worst(list: QualityStatus[]): QualityStatus {
+  return list.reduce<QualityStatus>((acc, s) => (STATUS_RANK[s] > STATUS_RANK[acc] ? s : acc), 'sufficient')
+}
+
+function grade(value: number, okAt: number, partialAt: number): QualityStatus {
+  if (value >= okAt) return 'sufficient'
+  if (value >= partialAt) return 'partial'
+  return 'insufficient'
 }
 
 export function assessQuality(
@@ -84,6 +109,9 @@ export function assessQuality(
   const sentimentCoverage = inputs.articles > 0 ? inputs.classified / inputs.articles : 0
 
   const coverage = new Map(seriesCoverage(db).map((c) => [c.series, c]))
+  const PROXY_LABEL: Record<string, string> = {
+    creditSpreadLong: '代理序列：Baa 级企业债利差，仅用于长周期回测，不等同于高收益 OAS',
+  }
   const series: QualitySeries[] = Object.entries(macro.series).map(([key, p]) => {
     const c = coverage.get(key)
     return {
@@ -94,9 +122,9 @@ export function assessQuality(
       from: c?.from ?? null,
       to: c?.to ?? null,
       ok: true,
+      proxy: PROXY_LABEL[key],
     }
   })
-  // 配了但没拉到的序列也列出来（明确"缺"而不是静默消失）
   for (const key of ['rates10y', 'rates2y', 'creditSpread', 'nasdaq']) {
     if (series.some((s) => s.key === key)) continue
     const c = coverage.get(key)
@@ -108,48 +136,83 @@ export function assessQuality(
   const staleDays = latestMacro ? Math.round((now - Date.parse(latestMacro)) / 86_400_000) : null
 
   const unavailable: string[] = []
-  if (inputs.articles < MIN_SAMPLES) unavailable.push(`新闻样本不足（${inputs.articles} < ${MIN_SAMPLES} 条），NFI 不计算`)
+  if (inputs.articles < 20) unavailable.push(`新闻样本不足（${inputs.articles} < 20 条），NFI 不计算`)
   if (inputs.classified === 0) unavailable.push('情感判定尚未回填，情绪偏正度不参与加权')
   if (inputs.concentration === null) unavailable.push('实体抽取为空，叙事集中度不参与加权')
   if (inputs.acceleration === null) unavailable.push('基期样本不足，热度加速度不参与加权')
   if (!macro.available) unavailable.push('宏观数据全部缺失，CRS 不计算')
   for (const m of macro.missing) unavailable.push(`宏观序列缺失：${m}`)
-  if (series.some((s) => s.key === 'creditSpread' && s.rows < 250)) {
-    unavailable.push('信用利差历史不足 1 年，其分位数参考意义有限')
+
+  const macroOk = series.filter((s) => s.ok).length
+  const creditRows = series.find((s) => s.key === 'creditSpread')?.rows ?? 0
+  if (creditRows > 0 && creditRows < 1250) {
+    unavailable.push(`高收益债 OAS 历史仅 ${creditRows} 行（约 3 年），其"长期分位"实际只有 3 年参考意义`)
   }
 
-  // 四个维度各自 0~1
-  const newsScore = clamp01(inputs.articles / 100)
-  const sourceScore = clamp01(independentSources / 5)
-  const sentimentScore = clamp01(sentimentCoverage / 0.8)
-  const macroOkCount = series.filter((s) => s.ok).length
-  const freshness = staleDays === null ? 0 : clamp01(1 - Math.max(0, staleDays - 2) / 10)
-  const macroScore = clamp01((macroOkCount / 4) * 0.6 + freshness * 0.4)
+  const dimensions: QualityDimension[] = [
+    {
+      key: 'news',
+      label: '新闻样本',
+      value: `${inputs.articles} 条 / ${days} 天`,
+      status: grade(inputs.articles, 100, 20),
+      rule: '≥100 充分，20–99 部分，<20 不足（不足则不计算 NFI）',
+    },
+    {
+      key: 'sources',
+      label: '独立信源',
+      value: `${independentSources} 个`,
+      status: grade(independentSources, 5, 3),
+      rule: '≥5 充分，3–4 部分，<3 不足（转载不等于独立信号）',
+    },
+    {
+      key: 'sentiment',
+      label: '情感覆盖',
+      value: `${(sentimentCoverage * 100).toFixed(0)}%`,
+      status: grade(sentimentCoverage, 0.8, 0.5),
+      rule: '≥80% 充分，50–79% 部分，<50% 不足（不足时情绪分项代表性有限）',
+    },
+    {
+      key: 'entities',
+      label: '实体覆盖',
+      value: `${(entityCoverage * 100).toFixed(0)}%`,
+      status: grade(entityCoverage, 0.7, 0.4),
+      rule: '≥70% 充分，40–69% 部分，<40% 不足（影响叙事集中度）',
+    },
+    {
+      key: 'macro',
+      label: '宏观完整度',
+      value: `${macroOk}/4 序列`,
+      status: macroOk >= 4 ? 'sufficient' : macroOk >= 3 ? 'partial' : 'insufficient',
+      rule: '4 项齐全才输出完整 CRS；缺 2 项以上视为不可用',
+    },
+    {
+      key: 'freshness',
+      label: '数据新鲜度',
+      value: staleDays === null ? '无数据' : `滞后 ${staleDays} 天`,
+      status: staleDays === null ? 'insufficient' : staleDays <= 2 ? 'sufficient' : staleDays <= 7 ? 'partial' : 'stale',
+      rule: '≤2 天充分，3–7 天部分，>7 天标记过期',
+    },
+  ]
 
-  const score = Math.round(100 * (0.3 * newsScore + 0.2 * sourceScore + 0.2 * sentimentScore + 0.3 * macroScore))
-  const level: RiskQuality['level'] = score >= 80 ? 'high' : score >= 55 ? 'medium' : 'low'
+  const status = worst(dimensions.map((d) => d.status))
+  const bad = dimensions.filter((d) => d.status !== 'sufficient').map((d) => d.label)
 
   const notes: string[] = []
-  if (staleDays !== null && staleDays > 5) notes.push(`宏观数据已滞后 ${staleDays} 天，结论可能过时`)
-  if (independentSources < 3) notes.push(`窗口内仅 ${independentSources} 个独立信源，叙事类指标易受单源影响`)
-  if (sentimentCoverage < 0.5 && inputs.articles > 0) {
-    notes.push(`情感覆盖率 ${(sentimentCoverage * 100).toFixed(0)}%，情绪分项代表性有限`)
-  }
-  if (level === 'low') notes.push('整体可信度偏低：请把结论当作"方向提示"，不要当作精确读数')
+  if (status === 'stale') notes.push('宏观数据已过期，页面上的分数可能不代表当前状态')
+  if (independentSources < 3) notes.push('独立信源过少，叙事类指标容易受单一来源影响')
+  if (unavailable.length > 0) notes.push(`有 ${unavailable.length} 项未参与计算，详见下方清单`)
 
   return {
-    score,
-    level,
-    news: {
-      articles: inputs.articles,
-      independentSources,
-      sentimentCoverage: Number(sentimentCoverage.toFixed(3)),
-      entityCoverage: Number(entityCoverage.toFixed(3)),
-      minSamples: MIN_SAMPLES,
-      ok: inputs.articles >= MIN_SAMPLES,
-    },
-    macro: { series, staleDays, missing: macro.missing, ok: macroOkCount >= 3 && (staleDays ?? 99) <= 7 },
+    status,
+    headline:
+      status === 'sufficient'
+        ? '数据充分：各维度均达标，分数可正常解读'
+        : `${STATUS_LABEL[status]}：${bad.join('、')} 未达门槛，解读时请降低确定性`,
+    dimensions,
+    macro: { series, staleDays, missing: macro.missing },
     unavailable,
     notes,
   }
 }
+
+export { STATUS_LABEL }
