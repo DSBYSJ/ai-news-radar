@@ -78,6 +78,22 @@ const TABS: [Tab, string][] = [
   ['summary', '简报'],
 ]
 
+/**
+ * 编译期保险：每个 Tab 必须在这里登记一次。
+ * 新增页签却忘了加渲染分支时，下面的对象会因为缺 key 而**编译失败** ——
+ * 比运行期兜底可靠（曾经点「估值」静默显示「简报」）。
+ */
+const TAB_RENDERED: Record<Tab, true> = {
+  overview: true,
+  hot: true,
+  list: true,
+  trend: true,
+  risk: true,
+  market: true,
+  settings: true,
+  summary: true,
+}
+
 /** 从 location.hash 读初始页签（支持直接分享 /news/#trend 这种链接） */
 function tabFromHash(): Tab {
   const h = window.location.hash.replace(/^#/, '')
@@ -404,10 +420,20 @@ export default function App() {
           <TrendPage />
         ) : tab === 'risk' ? (
           <RiskPage />
+        ) : tab === 'market' ? (
+          <MarketPage />
         ) : tab === 'settings' ? (
           <SettingsPage />
-        ) : (
+        ) : tab === 'summary' ? (
           <SummaryPage />
+        ) : (
+          /*
+           * 兜底不再是 SummaryPage。
+           * 之前这里是 `<SummaryPage />`，导致新增页签如果忘了加分支，会**静默渲染成简报** ——
+           * 用户看到"点了估值却显示简报"，排查起来像灵异事件。
+           * 现在未知页签显式返回 null，宁可空白也不冒充别的页面。
+           */
+          <p className="p-6 text-[12px] text-slate-400">未知页签：{tab}</p>
         )}
       </div>
 
