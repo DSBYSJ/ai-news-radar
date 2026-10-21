@@ -179,7 +179,8 @@ export default function GaugeArc({
             />
           </div>
           <span className="num mt-1 text-[9.5px] text-slate-500 dark:text-slate-500">
-            未来 12 个月概率 {probability.low}%–{probability.high}%
+            12 个月情景参考 {probability.low}%–{probability.high}%
+            <span className="ml-1 text-slate-600">（非预测概率）</span>
           </span>
         </div>
       )}

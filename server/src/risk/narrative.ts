@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite'
-import { fomoCoefficient } from './calculation.ts'
+import { fomoCoefficient, type FomoLike } from './calculation.ts'
 
 /**
  * 叙事泡沫指数（Narrative Froth Index, NFI）
@@ -269,8 +269,8 @@ export interface NarrativeInputs {
   concentration: number | null
   /** 热度加速度：7 日均线的环比变化率（1 = 不变） */
   acceleration: number | null
-  /** FOMO 系数（感叹号 + 追高词） */
-  fomo: { score: number; hits: string[]; exclaimDensity: number }
+  /** FOMO 系数（逐篇聚合：覆盖率 × 强度） */
+  fomo: FomoLike
   latestDate: string | null
 }
 

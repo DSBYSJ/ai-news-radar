@@ -74,43 +74,107 @@ export function clamp(x: number, lo: number, hi: number): number {
 
 // ============================ FOMO 系数 ============================
 
-/** FOMO 词表：出现即代表"追高情绪" */
+/** FOMO 词表：出现即代表"追高情绪"。中英双语 —— 语料里英文源占比过半，
+ *  只做中文词表会让英文 FOMO 完全漏检。 */
 const FOMO_WORDS = [
+  // 中文
   '暴涨', '翻倍', '踏空', '狂飙', '疯抢', '售罄', '秒杀', '史诗级', '炸裂', '碾压',
-  'all in', 'fomo', '错过就没了', '最后上车', '一票难求', '涨停', '涨停潮', '入场',
+  '错过就没了', '最后上车', '一票难求', '涨停', '涨停潮', '抢筹', '爆买', '上车',
+  // 英文
+  'skyrocket', 'moonshot', 'to the moon', 'sold out', 'sell-out', 'frenzy',
+  'euphoria', 'must-buy', "can't miss", 'cannot miss', 'last chance',
+  'parabolic', 'melt up', 'all in', 'all-in', 'fomo', '10x', 'sold-out',
 ]
 /** 感叹号是 FOMO 的经典信号（营销腔） */
 const EXCLAIM_RE = /[!！]/g
 
-export interface FomoResult {
-  /** 0~100 */
+/** 单篇最多计 4 个词（88 分），避免一篇文章堆词直接把整窗拉满 */
+const MAX_WORDS_PER_ARTICLE = 4
+/** 感叹号密度封顶分 */
+const MAX_EXCLAIM_SCORE = 30
+
+/**
+ * FOMO 的宽松输入形态：`breadth/depth/articles` 是 v0.28.0 新增的，
+ * 老调用方（测试、外部构造）只给 score/hits/exclaimDensity 也必须能用。
+ */
+export type FomoLike = {
   score: number
   hits: string[]
-  /** 感叹号密度（每百字符） */
   exclaimDensity: number
+  breadth?: number
+  depth?: number
+  articles?: number
+}
+
+export interface FomoResult extends FomoLike {
+  /** 覆盖率：含至少一个追高词的文章占比 0~1 */
+  breadth: number
+  /** 强度：命中文章的平均单篇分 0~100 */
+  depth: number
+  /** 参与统计的文章数 */
+  articles: number
 }
 
 /**
- * FOMO 系数：情绪的"热度放大器"，与基础情绪偏正度相乘/叠加。
- * 组成：命中 FOMO 词（每词 22 分）+ 感叹号密度（每百字符 1 个记 6 分，上限 30）
+ * FOMO 系数 v2：**逐篇打分再聚合**，而不是把全窗口拼成一段文本。
+ *
+ * 为什么改（v0.28.0）：
+ *   旧实现把窗口内所有标题+摘要 join 成一大段，然后**每个词只计一次**。
+ *   结果只要 5 个不同的追高词在任意两篇文章里出现过，就拿到 5×22=110 → 封顶 100，
+ *   与「多少比例的报道在喊单」完全脱钩 —— 采集量一变，分数就失真。
+ *
+ * 新口径 = 覆盖率 × 强度：
+ *   score = 100 × breadth × (0.4 + 0.6 × depth/100)
+ *   - breadth = 含追高词的文章占比（"有多少人在喊"）
+ *   - depth   = 命中文章的平均单篇分（"喊得多用力"）
+ *   → 只有"全站都在喊 + 喊得凶"才接近 100；零星几篇再夸张也压不到满分。
  */
 export function fomoCoefficient(texts: string[]): FomoResult {
-  const joined = texts.join('\n')
-  const hits: string[] = []
-  let wordScore = 0
-  for (const w of FOMO_WORDS) {
-    if (joined.toLowerCase().includes(w)) {
-      hits.push(w)
-      wordScore += 22
-    }
+  const total = texts.length
+  if (total === 0) {
+    return { score: 0, hits: [], exclaimDensity: 0, breadth: 0, depth: 0, articles: 0 }
   }
-  const exclaims = (joined.match(EXCLAIM_RE) ?? []).length
-  const density = joined.length > 0 ? (exclaims / joined.length) * 100 : 0
-  const exclaimScore = Math.min(30, density * 6)
+
+  const hitWords = new Set<string>()
+  let hitArticles = 0
+  let depthSum = 0
+  let totalExclaims = 0
+  let totalChars = 0
+
+  for (const text of texts) {
+    const lower = text.toLowerCase()
+    totalChars += text.length
+    const exclaims = (text.match(EXCLAIM_RE) ?? []).length
+    totalExclaims += exclaims
+
+    const words: string[] = []
+    for (const w of FOMO_WORDS) {
+      if (lower.includes(w)) {
+        words.push(w)
+        hitWords.add(w)
+      }
+    }
+    if (words.length === 0) continue
+
+    hitArticles += 1
+    const wordScore = Math.min(MAX_WORDS_PER_ARTICLE, words.length) * 22
+    const density = text.length > 0 ? (exclaims / text.length) * 100 : 0
+    const exclaimScore = Math.min(MAX_EXCLAIM_SCORE, density * 6)
+    depthSum += clamp(wordScore + exclaimScore, 0, 100)
+  }
+
+  const breadth = hitArticles / total
+  const depth = hitArticles > 0 ? depthSum / hitArticles : 0
+  const score = Math.round(clamp(100 * breadth * (0.4 + (0.6 * depth) / 100), 0, 100))
+  const exclaimDensity = totalChars > 0 ? (totalExclaims / totalChars) * 100 : 0
+
   return {
-    score: Math.round(clamp(wordScore + exclaimScore, 0, 100)),
-    hits: hits.slice(0, 8),
-    exclaimDensity: Number(density.toFixed(2)),
+    score,
+    hits: [...hitWords].slice(0, 8),
+    exclaimDensity: Number(exclaimDensity.toFixed(2)),
+    breadth: Number(breadth.toFixed(3)),
+    depth: Math.round(depth),
+    articles: total,
   }
 }
 
@@ -126,7 +190,12 @@ export interface RiskParams {
     fomo: number
   }
   /** 热度加速度的阶跃阈值与陡度（7 日均线的斜率突变） */
-  acceleration: { threshold: number; sharpness: number }
+  acceleration: {
+    threshold: number
+    sharpness: number
+    /** 超过此倍数视为「采集面变了」（加源/回填），不参与加权（默认 3） */
+    cap: number
+  }
   /** CRS 基础权重（合计 100） */
   crs: {
     nfi: number
@@ -149,6 +218,11 @@ export interface RiskParams {
     drawdown: number
     /** 动态放大倍数 */
     boost: number
+    /**
+     * 平滑带宽（默认 ±2pp）：在 [drawdown-band, drawdown+band] 内用 smoothstep 渐变，
+     * 避免 9.9% → 10.1% 的机械跳变（实测该处总分曾一次跳 4~6 分）。
+     */
+    band: number
   }
   /** 背离检测阈值 */
   divergence: {
@@ -167,10 +241,10 @@ export interface RiskParams {
 
 export const DEFAULT_PARAMS: RiskParams = {
   nfi: { money: 22, sentiment: 22, concentration: 18, acceleration: 18, fomo: 20 },
-  acceleration: { threshold: 0.35, sharpness: 6 },
+  acceleration: { threshold: 0.35, sharpness: 6, cap: 3 },
   crs: { nfi: 40, rates: 20, credit: 20, index: 20 },
   steps: { oas: 4.5, rates: 5.0, sharpness: 2.2 },
-  dynamic: { drawdown: 0.1, boost: 1.4 },
+  dynamic: { drawdown: 0.1, boost: 1.4, band: 0.02 },
   divergence: { optimisticSentiment: 80, downDays: 3, surgeRatio: 2.5, fundingDropRatio: 0.5 },
   probability: { base: 0.12, scale: 28, band: 0.05 },
 }
@@ -190,7 +264,7 @@ export interface NfiResult {
   score: number | null
   band: 'calm' | 'warm' | 'hot' | 'unknown'
   factors: NfiFactor[]
-  fomo: FomoResult
+  fomo: FomoLike
 }
 
 export interface NfiInput {
@@ -204,7 +278,7 @@ export interface NfiInput {
   concentration: number | null
   /** 7 日均线斜率突变（7日均线的环比变化率） */
   acceleration: number | null
-  fomo: FomoResult
+  fomo: FomoLike
   /** 赛道锚点（预留：估值倍数/资金净流入，目前没有真实数据 → null） */
   anchors?: { label: string; value: number | null; score: number | null }[]
 }
@@ -212,6 +286,34 @@ export interface NfiInput {
 function scaleLinear(value: number, lo: number, hi: number): number {
   if (!Number.isFinite(value) || hi <= lo) return 0
   return Math.round(clamp((value - lo) / (hi - lo), 0, 1) * 100)
+}
+
+/**
+ * 热度加速度评分（v0.28.0 修复）
+ *
+ * 旧实现（v0.26.0）：
+ *   accel <= 1 ? scaleLinear(accel, 1, 1.35) : stepResponse(accel, 1.35, 6)
+ *   两个缺陷：
+ *   1. accel <= 1 分支里，scaleLinear 的上界就是 1.35 —— 该分支永远只能算出 0，是死代码
+ *   2. 1 < accel < 1.35 走 stepResponse，低于阈值直接返回 0
+ *   实际效果：1.35 倍以下恒为 0，到 1.35 处硬跳，与文档描述的"线性过渡到阶跃"不符。
+ *   线上实测过加速度 13.2 倍（加源导致）直接给 100 分，把 NFI 整体抬高。
+ *
+ * 新实现：三段连续
+ *   accel <= 1          → 0（没加速）
+ *   1 < accel <= 1+thr  → 线性 0 → 50
+ *   accel > 1+thr       → 50 + 阶跃响应/2 → 渐近 100
+ * 两侧在 1+thr 处都等于 50，不会断层。
+ * accel > cap（默认 3 倍）→ null（不参与加权）：那是"采集面变了"，不是热度变化。
+ */
+export function accelerationScore(accel: number | null, params: RiskParams): number | null {
+  if (accel === null || !Number.isFinite(accel)) return null
+  const cap = params.acceleration.cap ?? 3
+  if (accel > cap) return null
+  if (accel <= 1) return 0
+  const knee = 1 + params.acceleration.threshold
+  if (accel <= knee) return Math.round(((accel - 1) / (knee - 1)) * 50)
+  return Math.round(50 + stepResponse(accel, knee, params.acceleration.sharpness) / 2)
 }
 
 /**
@@ -255,21 +357,18 @@ export function computeNfi(input: NfiInput, params: RiskParams): NfiResult {
       key: 'acceleration',
       label: '热度加速度',
       value: input.acceleration === null ? null : round(input.acceleration, 2),
-      // 非线性：超过阈值后按阶跃响应跳升（而不是线性）
-      score:
-        input.acceleration === null
-          ? null
-          : input.acceleration <= 1
-            ? scaleLinear(input.acceleration, 1, 1 + params.acceleration.threshold)
-            : stepResponse(input.acceleration, 1 + params.acceleration.threshold, params.acceleration.sharpness),
+      // 三段连续：0 → 线性爬坡 → 阶跃渐近（详见 accelerationScore 注释）
+      score: accelerationScore(input.acceleration, params),
       weight: w.acceleration,
       note:
         input.acceleration === null
-          ? '基期样本不足（<5 条/天）或语料规模突变，本项不参与加权'
-          : `7 日均线的环比变化 = ${input.acceleration.toFixed(2)}；超过 ${(1 + params.acceleration.threshold).toFixed(2)} 后按阶跃跳升（权重 ${w.acceleration}%）` +
-            (input.acceleration > 3
-              ? '　⚠️ 超过 3 倍通常意味着「采集面变了」（加源/回填），不一定是热度变化'
-              : ''),
+          ? '基期样本不足（<5 条/天），本项不参与加权'
+          : input.acceleration > (params.acceleration.cap ?? 3)
+            ? `7 日均线环比 ${input.acceleration.toFixed(2)} 倍，超过 ${params.acceleration.cap ?? 3} 倍上限，` +
+              '通常意味着「采集面变了」（加源/回填）而非热度变化 —— 本项不参与加权'
+            : `7 日均线环比 ${input.acceleration.toFixed(2)} 倍；1.00 以下 0 分，` +
+              `1.00~${(1 + params.acceleration.threshold).toFixed(2)} 线性升至 50 分，` +
+              `超过后按阶跃渐近 100（权重 ${w.acceleration}%）`,
     },
     {
       key: 'fomo',
@@ -277,7 +376,14 @@ export function computeNfi(input: NfiInput, params: RiskParams): NfiResult {
       value: input.fomo.score,
       score: input.fomo.score,
       weight: w.fomo,
-      note: `追高词 ${input.fomo.hits.length} 个 + 感叹号密度 ${input.fomo.exclaimDensity}/百字 → ${input.fomo.score} 分（权重 ${w.fomo}%）`,
+      note:
+        (input.fomo.breadth !== undefined && input.fomo.articles
+          ? `覆盖率 ${(input.fomo.breadth * 100).toFixed(1)}%（${Math.round(input.fomo.breadth * input.fomo.articles)}/${input.fomo.articles} 篇含追高词）` +
+            ` × 强度 ${input.fomo.depth ?? 0}`
+          : '仅传入综合分，无覆盖率明细') +
+        ` → ${input.fomo.score} 分` +
+        (input.fomo.hits.length > 0 ? `；命中：${input.fomo.hits.join('、')}` : '') +
+        `（权重 ${w.fomo}%）`,
     },
   ]
 
@@ -337,9 +443,29 @@ export interface CrsResult {
   factors: CrsFactor[]
   /** 瀑布图数据：基础分 + 各项贡献 + 合计 */
   waterfall: { label: string; value: number; kind: 'base' | 'item' | 'total' }[]
-  probability12m: { low: number; high: number; note: string } | null
+  probability12m: { low: number; high: number; note: string; label: string; scope: string } | null
   /** 动态权重是否被触发（回撤 / 倒挂） */
   dynamicTriggered: { drawdown: boolean; inversion: boolean } | null
+  /**
+   * 三条诊断子指数（v0.28.0 新增，**不参与总分**）：
+   * 同样是 60 分，"涨太快要回调"和"已经出事了"是完全不同的处境。
+   */
+  subIndices: {
+    overheat: SubIndex
+    stress: SubIndex
+    fragility: SubIndex
+  }
+}
+
+export interface SubIndex {
+  /** 0~100 */
+  score: number
+  label: string
+  /** 一句话说明这个子指数在回答什么问题 */
+  question: string
+  /** 组成它的信号（含各自原始分与内部权重） */
+  parts: { label: string; score: number; weight: number }[]
+  note: string
 }
 
 export interface MacroSeriesInput {
@@ -363,10 +489,15 @@ export interface CrsInput {
   index: MacroSeriesInput | null
   /** 收益率曲线是否倒挂（10Y < 2Y），没数据则 null */
   inversion: boolean | null
+  /** 叙事集中度 0~1（前 5 实体占比），用于「潜在脆弱」子指数；无数据为 null */
+  concentration?: number | null
 }
 
 /** 信用风险：绝对水平（高=已承压）与"过窄=自满"两头都算，取大者 */
-function creditRisk(m: MacroSeriesInput, params: RiskParams): { score: number; note: string } {
+function creditRisk(
+  m: MacroSeriesInput,
+  params: RiskParams,
+): { score: number; note: string; stress: number; widening: number; complacency: number } {
   // 三种风险来源，都算：绝对水平已承压 / 利差走阔（正在出事） / 利差极窄（自满）
   const stress = stepResponse(m.value, params.steps.oas, params.steps.sharpness)
   const change = m.yearAgo === null ? 0 : m.value - m.yearAgo
@@ -375,6 +506,9 @@ function creditRisk(m: MacroSeriesInput, params: RiskParams): { score: number; n
   const score = Math.round(Math.max(stress, widening, complacency))
   return {
     score,
+    stress: Math.round(stress),
+    widening: Math.round(widening),
+    complacency: Math.round(complacency),
     note:
       `OAS ${m.value.toFixed(2)}%` +
       (m.yearAgo === null ? '' : `（一年 ${change >= 0 ? '+' : ''}${change.toFixed(2)}pp）`) +
@@ -384,7 +518,9 @@ function creditRisk(m: MacroSeriesInput, params: RiskParams): { score: number; n
 }
 
 /** 指数风险：超涨 + 回撤 两头都算 */
-function indexRisk(m: MacroSeriesInput): { score: number; note: string; drawdown: number | null } {
+function indexRisk(
+  m: MacroSeriesInput,
+): { score: number; note: string; drawdown: number | null; overext: number; runup: number; ddScore: number } {
   const overext = m.avg200 ? scaleLinear(m.value / m.avg200 - 1, 0.02, 0.25) : 0
   const runup = m.yearAgo ? scaleLinear(m.value / m.yearAgo - 1, 0.1, 0.6) : 0
   const drawdown = m.high52w ? m.value / m.high52w - 1 : null
@@ -393,6 +529,9 @@ function indexRisk(m: MacroSeriesInput): { score: number; note: string; drawdown
   return {
     score,
     drawdown,
+    overext,
+    runup,
+    ddScore,
     note:
       `指数 ${m.value.toFixed(0)}` +
       (m.avg200 ? `，较 200 日均值 ${((m.value / m.avg200 - 1) * 100).toFixed(1)}%` : '') +
@@ -402,22 +541,39 @@ function indexRisk(m: MacroSeriesInput): { score: number; note: string; drawdown
 }
 
 /** 利率风险：水平分位数 + 一年上行 + 倒挂惩罚 */
-function ratesRisk(m: MacroSeriesInput, inversion: boolean | null, params: RiskParams): { score: number; note: string; percentile: number | null; z: number | null } {
+function ratesRisk(
+  m: MacroSeriesInput,
+  inversion: boolean | null,
+  params: RiskParams,
+): {
+  score: number
+  note: string
+  percentile: number | null
+  z: number | null
+  levelScore: number
+  changeScore: number
+  step: number
+  inversionPenalty: number
+} {
   const p = percentileRank(m.value, m.history)
   const z = zScore(m.value, m.history)
   const change = m.yearAgo === null ? 0 : m.value - m.yearAgo
   const levelScore = p === null ? scaleLinear(m.value, 3.5, 5.5) : Math.round(p * 100)
   const changeScore = scaleLinear(change, 0, 1.5)
-  const step = stepResponse(m.value, params.steps.rates, params.steps.sharpness)
+  const step = Math.round(stepResponse(m.value, params.steps.rates, params.steps.sharpness))
   const inversionPenalty = inversion === true ? 18 : 0
   const score = Math.round(clamp(0.5 * levelScore + 0.25 * changeScore + 0.25 * step + inversionPenalty, 0, 100))
   return {
     score,
     percentile: p,
     z,
+    levelScore,
+    changeScore,
+    step,
+    inversionPenalty,
     note:
       `10Y ${m.value.toFixed(2)}%` +
-      (p === null ? '' : `（历史分位 ${(p * 100).toFixed(0)}%，z=${z?.toFixed(2) ?? '—'}）`) +
+      (p === null ? '（历史样本不足，改用绝对水平刻度）' : `（历史分位 ${(p * 100).toFixed(0)}%，z=${z?.toFixed(2) ?? '—'}）`) +
       `；>${params.steps.rates}% 阶跃跳升` +
       (inversion === true ? '，**收益率曲线倒挂** +18' : ''),
   }
@@ -445,8 +601,13 @@ export function computeCrs(input: CrsInput, params: RiskParams): CrsResult {
     })
   }
 
+  let ratesCalc: ReturnType<typeof ratesRisk> | null = null
+  let creditCalc: ReturnType<typeof creditRisk> | null = null
+  let indexCalc: ReturnType<typeof indexRisk> | null = null
+
   if (input.rates) {
     const r = ratesRisk(input.rates, input.inversion, params)
+    ratesCalc = r
     raw.push({
       key: 'rates',
       label: '利率压力',
@@ -460,6 +621,7 @@ export function computeCrs(input: CrsInput, params: RiskParams): CrsResult {
   }
   if (input.credit) {
     const c = creditRisk(input.credit, params)
+    creditCalc = c
     raw.push({
       key: 'credit',
       label: '信用环境',
@@ -474,6 +636,7 @@ export function computeCrs(input: CrsInput, params: RiskParams): CrsResult {
   let drawdown: number | null = null
   if (input.index) {
     const i = indexRisk(input.index)
+    indexCalc = i
     drawdown = i.drawdown
     raw.push({
       key: 'index',
@@ -487,11 +650,25 @@ export function computeCrs(input: CrsInput, params: RiskParams): CrsResult {
     })
   }
 
-  // 动态权重：回撤 > 阈值 或 收益率倒挂 → 宏观项权重放大
-  const ddTriggered = drawdown !== null && drawdown < -params.dynamic.drawdown
+  /*
+   * 动态权重（v0.28.0 改平滑）：回撤 > 阈值 或 收益率倒挂 → 宏观项权重放大。
+   *
+   * 旧实现是硬开关：回撤 9.9% → ×1，10.1% → ×1.4，总分一次跳 4~6 分，
+   * 而真实市场环境并没有在 0.2pp 里发生同等变化。现在在阈值两侧 ±band 内
+   * 用 smoothstep 渐变：跨过阈值那一刻只加一半权重，越深越接近满额。
+   * 倒挂是二值信号（曲线不会"部分倒挂"），保持硬触发。
+   */
+  const ddDepth = drawdown === null ? 0 : -drawdown
+  const band = Math.max(0, params.dynamic.band ?? 0.02)
+  const ddT = band <= 0
+    ? (ddDepth > params.dynamic.drawdown ? 1 : 0)
+    : clamp((ddDepth - (params.dynamic.drawdown - band)) / (2 * band), 0, 1)
+  const smooth = ddT * ddT * (3 - 2 * ddT)
+  const ddTriggered = drawdown !== null && ddDepth > params.dynamic.drawdown
   const invTriggered = input.inversion === true
   const dynamicTriggered = { drawdown: ddTriggered, inversion: invTriggered }
-  const boost = ddTriggered || invTriggered ? params.dynamic.boost : 1
+  const ddBoost = 1 + (params.dynamic.boost - 1) * smooth
+  const boost = invTriggered ? Math.max(ddBoost, params.dynamic.boost) : ddBoost
 
   const weights = raw.map((f) => {
     if (f.key === 'narrative') return f.weight
@@ -510,7 +687,7 @@ export function computeCrs(input: CrsInput, params: RiskParams): CrsResult {
       score: f.score,
       weight: Number(normWeight.toFixed(1)),
       contribution: Number(((f.score * normWeight) / 100).toFixed(1)),
-      note: f.note + (boost > 1 && f.key !== 'narrative' ? `（动态权重 ×${boost}）` : ''),
+      note: f.note + (boost > 1.001 && f.key !== 'narrative' ? `（动态权重 ×${boost.toFixed(2)}）` : ''),
     }
   })
 
@@ -542,20 +719,97 @@ export function computeCrs(input: CrsInput, params: RiskParams): CrsResult {
     { label: '合计', value: finalScore, kind: 'total' as const },
   ]
 
+  /*
+   * 三条诊断子指数（v0.28.0）：把「同样是 60 分」拆成不同处境。
+   * 只用于解释，**不参与总分**，所以不会让历史曲线漂移。
+   */
+  const concentrationScore =
+    input.concentration === undefined || input.concentration === null
+      ? null
+      : scaleLinear(input.concentration, 0.08, 0.4)
+
+  const subIndices = {
+    overheat: buildSubIndex(
+      '市场过热',
+      '涨得太快了吗？',
+      [
+        { label: '叙事热度（NFI）', score: input.nfi, weight: 50 },
+        { label: '指数偏离 200 日均值', score: indexCalc?.overext ?? null, weight: 30 },
+        { label: '指数一年涨幅', score: indexCalc?.runup ?? null, weight: 20 },
+      ],
+      '价格上涨 + 叙事升温同步出现时最高；它描述的是"回调风险在积累"，不代表已经出事。',
+    ),
+    stress: buildSubIndex(
+      '当前压力',
+      '已经出事了么？',
+      [
+        { label: '信用利差绝对水平', score: creditCalc?.stress ?? null, weight: 30 },
+        { label: '信用利差走阔', score: creditCalc?.widening ?? null, weight: 20 },
+        { label: '利率压力', score: ratesCalc?.score ?? null, weight: 25 },
+        { label: '指数回撤', score: indexCalc?.ddScore ?? null, weight: 25 },
+      ],
+      '只看"已经发生的压力"：利差高位、利率冲击、实际回撤。这条高，说明风险正在兑现。',
+    ),
+    fragility: buildSubIndex(
+      '潜在脆弱',
+      '看起来很好但很脆么？',
+      [
+        { label: '利差过窄（自满）', score: creditCalc?.complacency ?? null, weight: 50 },
+        { label: '叙事集中度', score: concentrationScore, weight: 30 },
+        { label: '收益率曲线倒挂', score: input.inversion === null ? null : input.inversion ? 100 : 0, weight: 20 },
+      ],
+      '低利差、高度集中的叙事、曲线倒挂 —— 都是"表面上没事"的脆弱性来源，是最容易被忽略的一类。',
+    ),
+  }
+
   const p = params.probability
   const center = clamp(p.base * Math.exp((finalScore - 50) / p.scale), 0.03, 0.6)
+  // 上限：中心值封顶 60% + 带宽 5pp = 65%（旧代码写 0.75，与文档的 75% 一起是错的）
+  const HIGH_CAP = 0.65
 
   return {
     score: finalScore,
     level: finalLevel,
     factors,
     waterfall,
+    subIndices,
     probability12m: {
       low: Math.round(Math.max(0.02, center - p.band) * 100),
-      high: Math.round(Math.min(0.75, center + p.band) * 100),
-      note: `以 ${(p.base * 100).toFixed(0)}%/年 基础率为锚、按风险分指数调整（scale=${p.scale}）±${(p.band * 100).toFixed(0)}pp；参数人为设定，非回测拟合，仅供量级参考${crossNote}`,
+      high: Math.round(Math.min(HIGH_CAP, center + p.band) * 100),
+      label: '12 个月情景参考值',
+      scope: '美国市场（10Y/2Y 美债、高收益债 OAS、纳斯达克）',
+      note:
+        `以 ${(p.base * 100).toFixed(0)}%/年 基础率为锚、按风险分指数调整（scale=${p.scale}）±${(p.band * 100).toFixed(0)}pp。` +
+        `**这是启发式情景映射，不是预测概率**：参数为人工设定、未经历史回测校准，` +
+        `且只覆盖美国市场，不能外推为"全球金融危机概率"${crossNote}`,
     },
     dynamicTriggered,
+  }
+}
+
+/** 子指数：内部信号加权平均；缺项的按剩余权重归一（与 NFI 同一套规矩） */
+function buildSubIndex(
+  label: string,
+  question: string,
+  defs: { label: string; score: number | null; weight: number }[],
+  note: string,
+): SubIndex {
+  const effective = defs.filter((d) => d.score !== null && d.weight > 0)
+  const weightSum = effective.reduce((s, d) => s + d.weight, 0)
+  const score =
+    weightSum === 0
+      ? 0
+      : Math.round(effective.reduce((s, d) => s + (d.score as number) * d.weight, 0) / weightSum)
+  return {
+    score,
+    label,
+    question,
+    note,
+    parts: effective.map((d) => ({
+      label: d.label,
+      score: Math.round(d.score as number),
+      weight: Math.round((d.weight / weightSum) * 100),
+    })),
   }
 }
 

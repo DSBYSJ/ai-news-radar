@@ -108,9 +108,9 @@ test('riskReport：接入宏观数据后才计算风险分与概率区间', asyn
     fetchedAt: new Date(NOW).toISOString(),
     notes: [],
     series: {
-      rates10y: { key: 'rates10y', label: '10Y', value: 4.8, asOf: '2026-10-20', yearAgo: 3.9, avg200: null, high52w: null, history: [3.9, 4.8], source: 'test' },
-      creditSpread: { key: 'creditSpread', label: 'OAS', value: 2.6, asOf: '2026-10-20', yearAgo: 3.4, avg200: null, high52w: null, history: [3.4, 2.6], source: 'test' },
-      nasdaq: { key: 'nasdaq', label: 'NDX', value: 26000, asOf: '2026-10-20', yearAgo: 18000, avg200: 22000, high52w: 27000, history: [18000, 26000], source: 'test' },
+      rates10y: { key: 'rates10y', label: '10Y', value: 4.8, asOf: '2026-10-20', yearAgo: 3.9, avg200: null, high52w: null, history: [3.9, 4.8], dates: ['2025-10-20', '2026-10-20'], source: 'test' },
+      creditSpread: { key: 'creditSpread', label: 'OAS', value: 2.6, asOf: '2026-10-20', yearAgo: 3.4, avg200: null, high52w: null, history: [3.4, 2.6], dates: ['2025-10-20', '2026-10-20'], source: 'test' },
+      nasdaq: { key: 'nasdaq', label: 'NDX', value: 26000, asOf: '2026-10-20', yearAgo: 18000, avg200: 22000, high52w: 27000, history: [18000, 26000], dates: ['2025-10-20', '2026-10-20'], source: 'test' },
     },
   }
   const r = await riskReport(db, { now: NOW, macro })
@@ -118,7 +118,7 @@ test('riskReport：接入宏观数据后才计算风险分与概率区间', asyn
   assert.ok(r.crisis!.score > 40, `风险分应偏高，实际 ${r.crisis!.score}`)
   assert.ok(r.crisis!.probability12m)
   const p = r.crisis!.probability12m!
-  assert.ok(p.low < p.high && p.high <= 75)
+  assert.ok(p.low < p.high && p.high <= 65, `概率上限应 ≤65%（旧实现 75%），实际 ${p.high}`)
   assert.ok(r.crisis!.factors.some((f) => f.key === 'narrative'))
   db.close()
 })

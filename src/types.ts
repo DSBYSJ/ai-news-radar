@@ -415,9 +415,66 @@ export interface MacroSnapshot {
 export interface CrisisAssessment {
   score: number
   level: 'low' | 'guarded' | 'elevated' | 'high'
-  probability12m: { low: number; high: number; note: string } | null
+  /** 情景参考区间（不是预测概率） */
+  probability12m: { low: number; high: number; note: string; label?: string; scope?: string } | null
   /** v2 因子：带分位数、Z-Score 与贡献分（瀑布图用） */
   factors: RiskFactorV2[]
+}
+
+/** 诊断子指数（v0.28.0）：不参与总分，只解释"是哪一种风险" */
+export interface SubIndex {
+  score: number
+  label: string
+  question: string
+  parts: { label: string; score: number; weight: number }[]
+  note: string
+}
+
+/** 数据质量与可信度（v0.28.0）：区分"风险真的高"与"数据不足" */
+export interface RiskQuality {
+  score: number
+  level: 'high' | 'medium' | 'low'
+  news: {
+    articles: number
+    independentSources: number
+    sentimentCoverage: number
+    entityCoverage: number
+    minSamples: number
+    ok: boolean
+  }
+  macro: {
+    series: { key: string; label: string; asOf: string | null; rows: number; from: string | null; to: string | null; ok: boolean }[]
+    staleDays: number | null
+    missing: string[]
+    ok: boolean
+  }
+  unavailable: string[]
+  notes: string[]
+}
+
+/** 回测指标（后端 BacktestReport 的子集） */
+export interface BacktestMetrics {
+  event: string
+  label: string
+  samples: number
+  positives: number
+  baseRate: number
+  auc: number
+  baselines: { name: string; auc: number }[]
+  atThreshold: { threshold: number; hitRate: number; falseAlarmRate: number; precision: number; alertsPerYear: number }
+  medianLeadDays: number | null
+  effectiveSamples: number
+}
+
+export interface RiskBacktest {
+  generatedAt: string
+  dataRange: { from: string; to: string }
+  trainWindow: { from: string; to: string }
+  testWindow: { from: string; to: string }
+  sampling: string
+  events: Record<string, { train: BacktestMetrics; test: BacktestMetrics }>
+  caveats: string[]
+  seriesCoverage: { series: string; rows: number; from: string; to: string }[]
 }
 
 export interface RiskReport {
@@ -432,6 +489,10 @@ export interface RiskReport {
   nfi: NfiResult | null
   /** 瀑布图归因 */
   waterfall: { label: string; value: number; kind: 'base' | 'item' | 'total' }[] | null
+  /** 三条诊断子指数（过热 / 当前压力 / 潜在脆弱），不参与总分 */
+  subIndices?: { overheat: SubIndex; stress: SubIndex; fragility: SubIndex } | null
+  /** 数据质量与可信度 */
+  quality?: RiskQuality
   /** 背离预警 */
   divergences: Divergence[]
   /** 宏观背景下最脆弱的实体 */
@@ -467,7 +528,7 @@ export interface NfiResult {
   score: number | null
   band: 'calm' | 'warm' | 'hot' | 'unknown'
   factors: NfiFactor[]
-  fomo: { score: number; hits: string[]; exclaimDensity: number }
+  fomo: { score: number; hits: string[]; exclaimDensity: number; breadth?: number; depth?: number; articles?: number }
 }
 
 export interface Divergence {

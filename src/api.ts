@@ -14,6 +14,7 @@ import type {
   HotResponse,
   OverviewResponse,
   RiskReport,
+  RiskBacktest,
   RiskParams,
   RiskHistoryPoint,
   AliasRule,
@@ -112,6 +113,8 @@ export const api = {
 
   /** 独立模块：AI 估值与危机风险（叙事指数 + 可选危机分） */
   risk: (days = 30) => get<RiskReport>('/risk', { days }),
+  /** 历史回测：模型有没有区分能力（只读宏观历史，不联网） */
+  riskBacktest: () => get<RiskBacktest>('/risk/backtest'),
   volume: (days: number) => get<{ days: number; points: DailyPoint[] }>('/trend/volume', { days }),
   category: (days: number) => get<{ days: number; points: CategoryRatioPoint[] }>('/trend/category', { days }),
   velocity: (days: number, category?: string) => get<VelocityResponse>('/trend/velocity', { days, category }),

@@ -9,6 +9,7 @@ import { riskReport } from '../risk/index.ts'
 import { DEFAULT_PARAMS } from '../risk/calculation.ts'
 import { loadParams, mergeParams, resetParams, saveParams, validateParams } from '../risk/params.ts'
 import { runBackfill } from '../risk/backfill.ts'
+import { runBacktest } from '../risk/backtest.ts'
 import { deleteAlias, listAliases, listMapping, upsertAlias } from '../entities/alias.ts'
 import { realign } from '../entities/realign.ts'
 import { entityDailySeries } from '../analytics/trend.ts'
@@ -572,6 +573,20 @@ export async function newsRoutes(app: FastifyInstance): Promise<void> {
       return { date: r.date, nfi: r.nfi, crs: r.crs, factors }
     })
     return { days, items }
+  })
+
+  /**
+   * 历史回测：模型到底有没有区分能力（v0.28.0）
+   *
+   * 只读 macro_history，不联网，70 个月末样本约 100ms 内算完；结果缓存 10 分钟。
+   * 返回结构见 `src/risk/backtest.ts` 的 BacktestReport。
+   */
+  let backtestCache: { at: number; data: unknown } | null = null
+  app.get('/api/news/risk/backtest', async () => {
+    if (backtestCache && Date.now() - backtestCache.at < 10 * 60_000) return backtestCache.data
+    const data = runBacktest(getDb())
+    backtestCache = { at: Date.now(), data }
+    return data
   })
 
   /**

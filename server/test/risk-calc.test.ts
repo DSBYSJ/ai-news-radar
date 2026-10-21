@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
+  accelerationScore,
   computeCrs,
   computeNfi,
   detectDivergences,
@@ -296,4 +297,93 @@ test('computeNfi：窗口内条目太少时返回 null 而不是 0（"没数据"
     DEFAULT_PARAMS,
   )
   assert.equal(enough.score, 0, '样本够时才返回实测值')
+})
+
+/* ================================================================== */
+/* v0.28.0 修复回归：加速度分段 / FOMO 饱和 / 动态权重跳变 / 概率口径    */
+/* ================================================================== */
+
+test('accelerationScore：三段连续，1.35 以下不再恒为 0（旧实现死分支回归）', () => {
+  const p = DEFAULT_PARAMS
+  const knee = 1 + p.acceleration.threshold // 1.35
+
+  assert.equal(accelerationScore(1, p), 0, '不增长 = 0 分')
+  assert.equal(accelerationScore(0.8, p), 0, '下降 = 0 分')
+
+  const mid = accelerationScore(1.2, p) as number
+  assert.ok(mid > 0 && mid < 50, `1.2 倍应落在 0~50 之间（旧实现为 0），实际 ${mid}`)
+
+  assert.equal(accelerationScore(knee, p), 50, '拐点处恰好 50')
+  // 连续性：跨过拐点的无穷小邻域内不得跳变（旧实现是从 0 直接跳到阶跃值）
+  const left = accelerationScore(knee - 0.001, p) as number
+  const right = accelerationScore(knee + 0.001, p) as number
+  assert.ok(Math.abs(right - left) <= 1, `拐点两侧应连续（不跳变），实际 ${left} → ${right}`)
+
+  assert.ok((accelerationScore(2, p) as number) > 90, '2 倍应接近满分')
+  assert.equal(accelerationScore(3.01, p), null, '超过 cap 视为采集面变化，不参与加权')
+})
+
+test('accelerationScore：在 [1, cap] 区间单调不减', () => {
+  let prev = -1
+  for (let a = 1; a <= 3; a += 0.05) {
+    const s = accelerationScore(a, DEFAULT_PARAMS) as number
+    assert.ok(s >= prev, `加速度 ${a.toFixed(2)} 处出现回落：${prev} → ${s}`)
+    prev = s
+  }
+})
+
+test('fomoCoefficient：零星几篇喊单不再把整窗拉满（旧实现 5 个词即 100 分）', () => {
+  const quiet = Array.from({ length: 100 }, (_, i) => `第 ${i} 篇：公司发布新模型，接口更新。`)
+  const twoHot = [...quiet]
+  twoHot[0] = '史诗级暴涨！翻倍！踏空！狂飙！疯抢！'
+  twoHot[1] = '售罄！秒杀！涨停潮！'
+
+  const base = fomoCoefficient(quiet)
+  const sparse = fomoCoefficient(twoHot)
+  assert.equal(base.score, 0)
+  assert.ok(sparse.score <= 10, `100 篇里 2 篇喊单应是个位数分，实际 ${sparse.score}`)
+  assert.ok(sparse.breadth > 0 && sparse.breadth < 0.05, `覆盖率应约 2%，实际 ${sparse.breadth}`)
+
+  const allHot = fomoCoefficient(Array.from({ length: 20 }, () => '史诗级暴涨！翻倍！踏空！狂飙！疯抢！'))
+  assert.ok(allHot.score >= 90, `全站都在喊才应接近满分，实际 ${allHot.score}`)
+})
+
+test('fomoCoefficient：英文追高词同样命中（语料英文源过半）', () => {
+  const r = fomoCoefficient(['Nvidia stock to the moon! parabolic! sold out!'])
+  assert.ok(r.score > 0, '英文 FOMO 不应漏检')
+  assert.ok(r.hits.some((h) => /moon|parabolic|sold out/i.test(h)), `命中词：${r.hits.join(',')}`)
+})
+
+test('computeCrs：回撤跨过 10% 阈值不再机械跳变（边界敏感性）', () => {
+  const rates = macro('rates', 4.5, Array.from({ length: 100 }, (_, i) => 3 + (i % 20) / 10), { yearAgo: 4.2 })
+  const credit = macro('credit', 3.2, Array.from({ length: 100 }, (_, i) => 3 + (i % 10) / 10), { yearAgo: 3.4 })
+  const idxAt = (high52w: number) => macro('index', 100, Array.from({ length: 100 }, (_, i) => 80 + i * 0.2), { avg200: 95, yearAgo: 80, high52w })
+
+  // 回撤 9.9% vs 10.1%
+  const a = computeCrs({ nfi: 50, rates, credit, index: idxAt(111.0), inversion: false }, DEFAULT_PARAMS)
+  const b = computeCrs({ nfi: 50, rates, credit, index: idxAt(111.2), inversion: false }, DEFAULT_PARAMS)
+  const jump = Math.abs(b.score - a.score)
+  assert.ok(jump <= 2, `10% 阈值两侧总分不应跳变，实际跳了 ${jump} 分（${a.score} → ${b.score}）`)
+})
+
+test('computeCrs：子指数能区分「涨太快」与「已出事」', () => {
+  const hotIndex = macro('index', 130, Array.from({ length: 100 }, (_, i) => 80 + i * 0.3), { avg200: 100, yearAgo: 85, high52w: 132 })
+  const overheat = computeCrs({ nfi: 80, rates: null, credit: null, index: hotIndex, inversion: false }, DEFAULT_PARAMS)
+
+  const crashIndex = macro('index', 70, Array.from({ length: 100 }, (_, i) => 120 - i * 0.2), { avg200: 110, yearAgo: 120, high52w: 130 })
+  const stressed = computeCrs({ nfi: 20, rates: null, credit: null, index: crashIndex, inversion: false }, DEFAULT_PARAMS)
+
+  assert.ok(overheat.subIndices.overheat.score > overheat.subIndices.stress.score, '过热场景：过热子指数应更高')
+  assert.ok(stressed.subIndices.stress.score > stressed.subIndices.overheat.score, '回撤场景：当前压力子指数应更高')
+})
+
+test('computeCrs：概率区间上限不超过 65%（旧实现写成 75%）', () => {
+  const rates = macro('rates', 6.5, Array.from({ length: 100 }, (_, i) => 2 + i * 0.04), { yearAgo: 3 })
+  const credit = macro('credit', 7.5, Array.from({ length: 100 }, (_, i) => 2 + i * 0.05), { yearAgo: 3 })
+  const index = macro('index', 60, Array.from({ length: 100 }, (_, i) => 120 - i * 0.5), { avg200: 120, yearAgo: 140, high52w: 160 })
+  const r = computeCrs({ nfi: 100, rates, credit, index, inversion: true }, DEFAULT_PARAMS)
+  const p = r.probability12m!
+  assert.ok(p.high <= 65, `上限应 ≤65%，实际 ${p.high}%`)
+  assert.ok(p.high - p.low <= 10, `区间宽度应约为 2×band，实际 ${p.high - p.low}`)
+  assert.match(p.note, /不是预测概率/, '必须明确标注非预测')
 })

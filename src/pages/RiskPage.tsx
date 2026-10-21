@@ -10,7 +10,9 @@ import HistoryLine from '../components/risk/HistoryLine.tsx'
 import ScatterMatrix from '../components/risk/ScatterMatrix.tsx'
 import RiskTicker from '../components/risk/RiskTicker.tsx'
 import CountUp from '../components/risk/CountUp.tsx'
+import { BacktestCard, QualityBar, SubIndexRow } from '../components/risk/RiskTrust.tsx'
 import { bandOf, DISASTER_MARKS, RISK_LABEL, semanticColor } from '../components/risk/riskColors.ts'
+import type { RiskBacktest } from '../types.ts'
 
 /**
  * 风险看板（v0.27.0 展示层重构）
@@ -52,15 +54,22 @@ export default function RiskPage() {
   const [error, setError] = useState<string | null>(null)
   const [hoverFactor, setHoverFactor] = useState<string | null>(null)
   const [drillKey, setDrillKey] = useState<string | null>(null)
+  const [backtest, setBacktest] = useState<RiskBacktest | null>(null)
 
   useEffect(() => {
     let alive = true
     setLoading(true)
-    void Promise.all([api.risk(days), api.riskHistoryDetailed(365)])
-      .then(([r, h]) => {
+    void Promise.all([
+      api.risk(days),
+      api.riskHistoryDetailed(365),
+      // 回测失败不该拖垮整页（老数据可能还没回填真实日期）
+      api.riskBacktest().catch(() => null),
+    ])
+      .then(([r, h, bt]) => {
         if (!alive) return
         setReport(r)
         setHistory((h.items ?? []) as HistoryPoint[])
+        setBacktest(bt)
         setError(null)
       })
       .catch((e) => {
@@ -166,6 +175,8 @@ export default function RiskPage() {
             ))}
           </div>
 
+          {report.quality && <QualityBar quality={report.quality} />}
+
           <div className="grid gap-4 lg:grid-cols-3">
             {/* 左侧主区 */}
             <div className="space-y-4 lg:col-span-2">
@@ -199,6 +210,8 @@ export default function RiskPage() {
                   />
                 </section>
               </div>
+
+              {report.subIndices && <SubIndexRow subIndices={report.subIndices} />}
 
               <section className="risk-panel rounded-2xl p-4">
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -290,6 +303,8 @@ export default function RiskPage() {
               </div>
             </section>
           )}
+
+          {backtest && <BacktestCard data={backtest} />}
 
           <p className="border-t border-white/[0.06] pt-2.5 text-[10px] leading-relaxed text-slate-500">
             {report.disclaimer}

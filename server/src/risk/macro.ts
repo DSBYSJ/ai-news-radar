@@ -31,6 +31,12 @@ export interface MacroPoint {
   high52w: number | null
   /** 历史序列（分位数 / Z-Score 用；由长历史 CSV 取得） */
   history: number[]
+  /**
+   * 与 history 一一对应的真实观测日期（v0.28.0 新增）。
+   * 早期版本没有这个字段，回填 macro_history 时按「末尾日期倒推一天」伪造日期，
+   * 把 20 年数据压进了 13.7 年 —— 那批历史日期不可信，必须靠这个字段重写。
+   */
+  dates: string[]
   source: string
 }
 
@@ -127,6 +133,14 @@ const SPECS: SeriesSpec[] = [
   { key: 'rates10y', label: '10 年期美债收益率', id: 'DGS10', needAvg200: false },
   { key: 'rates2y', label: '2 年期美债收益率', id: 'DGS2', needAvg200: false },
   { key: 'creditSpread', label: '高收益债信用利差（OAS）', id: 'BAMLH0A0HYM2', needAvg200: false },
+  /*
+   * 长历史信用利差（Baa 级企业债 − 10Y），v0.28.0 新增。
+   * 为什么要它：FRED 的 fredgraph.csv 对 BAMLH0A0HYM2（高收益 OAS）**只返回约 3 年**，
+   * 无论 cosd 怎么设都是 793 行 —— 3 年样本做不了跨周期回测。
+   * BAA10Y 能给到 2013 年起的完整日序列，因此专门用于历史回测与长周期分位。
+   * 注意：两者**水平不可比**（HY OAS 通常 3~8%，Baa-10Y 约 1.4~3.5%），不能混用阈值。
+   */
+  { key: 'creditSpreadLong', label: 'Baa 级企业债利差（长历史）', id: 'BAA10Y', needAvg200: false },
   { key: 'nasdaq', label: '纳斯达克综合指数', id: 'NASDAQCOM', needAvg200: true },
 ]
 
@@ -192,6 +206,7 @@ export async function loadMacro(apiKey: string | undefined, opts: { force?: bool
           ? Math.max(...window52w.map((o) => o.value))
           : null,
       history: obs.map((o) => o.value),
+      dates: obs.map((o) => o.date),
       source: `${r.spec.id} · ${r.via}`,
     }
   }

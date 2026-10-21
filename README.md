@@ -23,10 +23,11 @@
 | P4 | 全局检索（Ctrl+K）/ 日报导出 Markdown / 趋势导出 CSV | ✅ 完成（v0.24.0） |
 | P4 | 实体别名合并 + 异步重算 + 底表映射 | ✅ 完成（v0.24.0，不改源数据） |
 | P4 | 多实体对比 / 图表联动 / 事件时间线 / 判定依据溯源 / 划词高亮批注 | ✅ 完成（v0.25.0） |
+| P5 | 风险算法核查 + 历史回测 + 数据可信度面板 + 三类风险子指数 | ✅ 完成（v0.28.0，回测结论：暂无预警能力，如实标注） |
 | P4 | 采集健康度看板 + AI 处理状态监控 | ✅ 完成（v0.24.0） |
 | P4 | 安卓 WebView 壳（ Capacitor ）+ 桌面小组件（2×2 / 4×2 / 4×4） | ✅ 完成 |
 
-> 实测数据：18 个源（含 6 个中文源）/ 2,000+ 条成品 / 1,738 个归一化实体 / 全站 112 项测试通过
+> 实测数据：18 个源（含 6 个中文源）/ 3,738 条成品 / 1,773 个归一化实体 / 144 项后端测试 + 12 项前端测试通过
 
 ## 本地跑起来
 
@@ -66,6 +67,8 @@ docs/                  内部设计文档（不进版本控制）
 | server | `npm run process` | AI 加工（可加 `--days=30 --limit=200 --no-ai`） |
 | server | `npm run pipeline` | 采集 → 加工 → 事件聚类 → 昨日简报 一条龙 |
 | server | `npm run summary` | 生成每日简报（`--date=YYYY-MM-DD` / `--backfill=14` 补历史） |
+| server | `npm run risk:backfill -- --days=180 --apply` | 回算风险日快照（写入真实宏观日期） |
+| server | `npm run risk:backtest` | **历史回测**：检验风险分有没有区分能力（`--json` 出完整结果） |
 | server | `npm test` / `npm run typecheck` | 后端测试 / 类型检查 |
 | 根 | `npm run dev` / `npm run build` | 前端开发 / 构建 |
 | 根 | `npm test` | 前端测试（vitest，串行） |

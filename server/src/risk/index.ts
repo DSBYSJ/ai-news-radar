@@ -3,6 +3,7 @@ import { config } from '../config.ts'
 import { loadMacro, type MacroSnapshot, type MacroPoint } from './macro.ts'
 import { narrativeFroth, narrativeInputs, type NarrativeReport } from './narrative.ts'
 import { loadParams } from './params.ts'
+import { assessQuality, type RiskQuality } from './quality.ts'
 import {
   computeCrs,
   computeNfi,
@@ -26,8 +27,11 @@ export interface CrisisAssessment {
   /** 0~100；越大越危险 */
   score: number
   level: 'low' | 'guarded' | 'elevated' | 'high'
-  /** 未来 12 个月的危机概率区间（百分比）；无法可靠估计时为 null */
-  probability12m: { low: number; high: number; note: string } | null
+  /**
+   * 未来 12 个月的**情景参考区间**（百分比）。
+   * ⚠️ 不是预测概率：参数人工设定、未经回测校准，且只覆盖美国市场。
+   */
+  probability12m: CrsResult['probability12m']
   factors: CrsFactor[]
 }
 
@@ -62,6 +66,10 @@ export interface RiskReport {
   nfi: NfiResult | null
   /** 瀑布图归因（基础分 → 各项贡献 → 合计） */
   waterfall: CrsResult['waterfall'] | null
+  /** 三条诊断子指数（过热 / 当前压力 / 潜在脆弱），不参与总分 */
+  subIndices: CrsResult['subIndices'] | null
+  /** 数据质量与可信度：区分「风险真的高」与「数据不足」 */
+  quality: RiskQuality
   /** 背离预警 */
   divergences: Divergence[]
   /** 宏观背景下最脆弱的实体（CRS ≥ 50 时才有意义） */
@@ -210,7 +218,10 @@ export async function riskReport(
   const index = macroInput(macro.series.nasdaq, 'index', '纳斯达克综合指数')
   const crs: CrsResult | null =
     macro.available && (rates || credit || index)
-      ? computeCrs({ nfi: nfi.score, rates, credit, index, inversion: macro.inversion }, params)
+      ? computeCrs(
+          { nfi: nfi.score, rates, credit, index, inversion: macro.inversion, concentration: inputs.concentration },
+          params,
+        )
       : null
 
   // ---------- 背离检测 ----------
@@ -257,6 +268,8 @@ export async function riskReport(
     ? { score: crs.score, level: crs.level, probability12m: crs.probability12m, factors: crs.factors }
     : null
 
+  const quality = assessQuality(db, { days: narrative.windowDays, now, inputs, macro })
+
   return {
     generatedAt: new Date().toISOString(),
     windowDays: narrative.windowDays,
@@ -266,6 +279,8 @@ export async function riskReport(
     nfi,
     disclaimer: DISCLAIMER,
     waterfall: crs?.waterfall ?? null,
+    subIndices: crs?.subIndices ?? null,
+    quality,
     divergences,
     vulnerableEntities: vulnerable,
     params,
@@ -274,19 +289,37 @@ export async function riskReport(
         key: 'nfi',
         title: 'NFI 叙事泡沫指数（v2）',
         formula: `Σ(分项得分 × 权重) / Σ权重，权重：融资 ${params.nfi.money}% / 情绪 ${params.nfi.sentiment}% / 集中度 ${params.nfi.concentration}% / 加速度 ${params.nfi.acceleration}% / FOMO ${params.nfi.fomo}%`,
-        detail: `加速度超过 ${(1 + params.acceleration.threshold).toFixed(2)} 倍后按阶跃跳升（sharpness=${params.acceleration.sharpness}）；FOMO = 追高词命中 + 感叹号密度`,
+        detail:
+          `加速度：1.00 以下 0 分，1.00~${(1 + params.acceleration.threshold).toFixed(2)} 线性升至 50，之后按阶跃渐近 100；` +
+          `超过 ${params.acceleration.cap ?? 3} 倍视为采集面变化，不参与加权。` +
+          'FOMO：逐篇打分后按「覆盖率 × 强度」聚合，不再把整窗拼成一段文本。',
       },
       {
         key: 'crs',
         title: 'CRS 危机风险分（v2）',
         formula: `基础权重 NFI ${params.crs.nfi}% / 利率 ${params.crs.rates}% / 信用 ${params.crs.credit}% / 指数 ${params.crs.index}%，再加交叉项（利率×信用）最多 +8 分`,
-        detail: `宏观指标用 20 年历史分位数化；OAS > ${params.steps.oas}% 阶跃跳升；纳指回撤 > ${(params.dynamic.drawdown * 100).toFixed(0)}% 或收益率倒挂时宏观权重 ×${params.dynamic.boost}`,
+        detail:
+          `宏观指标用历史分位数化（point-in-time，只用当天及以前的观测）；OAS > ${params.steps.oas}% 阶跃跳升；` +
+          `纳指回撤跨过 ${(params.dynamic.drawdown * 100).toFixed(0)}% 时宏观权重平滑升至 ×${params.dynamic.boost}（±${((params.dynamic.band ?? 0.02) * 100).toFixed(0)}pp 过渡带）；倒挂为二值触发。`,
+      },
+      {
+        key: 'subIndices',
+        title: '三条诊断子指数（不参与总分）',
+        formula: '过热 = NFI×50% + 指数偏离 200 日均值×30% + 一年涨幅×20%；当前压力 = 利差水平×30% + 利差走阔×20% + 利率压力×25% + 指数回撤×25%；潜在脆弱 = 利差过窄×50% + 叙事集中度×30% + 曲线倒挂×20%',
+        detail: '同样是 60 分，可能是"涨得太快要回调"，也可能是"已经出事了"——子指数负责说清是哪一种。',
       },
       {
         key: 'fomo',
         title: 'FOMO 系数',
-        formula: '命中追高词（暴涨/翻倍/踏空/狂飙/疯抢/涨停…）每个 22 分 + 感叹号密度每百字 6 分（上限 30），封顶 100',
-        detail: `本次命中：${inputs.fomo.hits.join('、') || '无'}；感叹号密度 ${inputs.fomo.exclaimDensity}/百字`,
+        formula: 'score = 100 × 覆盖率 × (0.4 + 0.6 × 强度/100)；单篇最多计 4 个追高词（88 分）+ 感叹号密度（上限 30）',
+        detail: `本次：覆盖率 ${((inputs.fomo.breadth ?? 0) * 100).toFixed(1)}%、强度 ${inputs.fomo.depth ?? 0}、` +
+          `命中 ${inputs.fomo.hits.join('、') || '无'}；感叹号密度 ${inputs.fomo.exclaimDensity}/百字`,
+      },
+      {
+        key: 'probability',
+        title: '12 个月情景参考值',
+        formula: `p = clamp(${params.probability.base} × e^((CRS−50)/${params.probability.scale}), 3%, 60%)，上下各 ±${(params.probability.band * 100).toFixed(0)}pp`,
+        detail: '⚠️ 启发式情景映射，不是预测概率：参数人工设定、未经回测校准，且只覆盖美国市场。',
       },
     ],
   }
