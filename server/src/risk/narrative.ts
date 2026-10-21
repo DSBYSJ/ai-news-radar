@@ -86,14 +86,15 @@ export function narrativeFroth(db: DatabaseSync, opts: { days?: number; now?: nu
   const now = opts.now ?? Date.now()
   const cutoff = new Date(now - days * 86_400_000).toISOString().slice(0, 10)
 
+  const upper = new Date(now).toISOString().slice(0, 10)
   const rows = db
     .prepare(
       `SELECT a.title, a.summary, a.category, a.entities, a.sentiment, a.published_at
          FROM articles a
-        WHERE a.ai_relevant = 1 AND date(a.published_at) >= ?
+        WHERE a.ai_relevant = 1 AND date(a.published_at) >= ? AND date(a.published_at) <= ?
         ORDER BY a.published_at DESC`,
     )
-    .all(cutoff) as unknown as Row[]
+    .all(cutoff, upper) as unknown as Row[]
 
   const total = rows.length
   const latestDate = total > 0 ? rows[0].published_at.slice(0, 10) : null
@@ -278,13 +279,16 @@ export function narrativeInputs(db: DatabaseSync, opts: { days?: number; now?: n
   const now = opts.now ?? Date.now()
   const cutoff = new Date(now - days * 86_400_000).toISOString().slice(0, 10)
 
+  // ⚠️ 必须同时限定上下界：只写 `>= cutoff` 会把"窗口起点到今天"的全量条目都算进来，
+  // 回算历史日期时会算出恒定值（实测 5 月 1 日那天被算进了 2226 条 = 全库）。
+  const upper = new Date(now).toISOString().slice(0, 10)
   const rows = db
     .prepare(
       `SELECT a.title, a.summary, a.category, a.entities, a.sentiment, a.published_at
          FROM articles a
-        WHERE a.ai_relevant = 1 AND date(a.published_at) >= ?`,
+        WHERE a.ai_relevant = 1 AND date(a.published_at) >= ? AND date(a.published_at) <= ?`,
     )
-    .all(cutoff) as unknown as {
+    .all(cutoff, upper) as unknown as {
     title: string
     summary: string | null
     category: string

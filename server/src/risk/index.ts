@@ -192,6 +192,7 @@ export async function riskReport(
   // ---------- NFI v2 ----------
   const nfi = computeNfi(
     {
+      articles: inputs.articles,
       moneyShare: inputs.moneyShare,
       sentimentSkew: inputs.sentimentSkew,
       concentration: inputs.concentration,

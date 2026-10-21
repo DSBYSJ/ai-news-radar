@@ -194,6 +194,8 @@ export interface NfiResult {
 }
 
 export interface NfiInput {
+  /** 窗口内条目总数（<20 视为样本不足，NFI 返回 null 而不是 0） */
+  articles?: number
   /** 融资/上市类占比 0~1 */
   moneyShare: number
   /** 情绪偏正 -1~1 */
@@ -293,14 +295,20 @@ export function computeNfi(input: NfiInput, params: RiskParams): NfiResult {
 
   const effective = factors.filter((f) => f.score !== null && f.weight > 0)
   const weightSum = effective.reduce((s, f) => s + f.weight, 0)
+  /*
+   * 样本门槛：窗口内条目太少时返回 null 而不是 0 ——
+   * "没数据" ≠ "测量为冷静"，填 0 会把回溯曲线画成一条假的低线。
+   */
+  const MIN_SAMPLES = 20
+  const sampleTooSmall = input.articles !== undefined && input.articles < MIN_SAMPLES
   const score =
-    weightSum > 0
-      ? Math.round(effective.reduce((s, f) => s + (f.score as number) * f.weight, 0) / weightSum)
-      : null
+    sampleTooSmall || weightSum === 0
+      ? null
+      : Math.round(effective.reduce((s, f) => s + (f.score as number) * f.weight, 0) / weightSum)
 
   return {
     score,
-    band: score === null ? 'unknown' : score >= 65 ? 'hot' : score >= 38 ? 'warm' : 'calm',
+    band: sampleTooSmall ? 'unknown' : score === null ? 'unknown' : score >= 65 ? 'hot' : score >= 38 ? 'warm' : 'calm',
     factors,
     fomo: input.fomo,
   }

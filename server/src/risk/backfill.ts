@@ -96,6 +96,7 @@ export function backfillRisk(
       const inputs = narrativeInputs(db, { days: 30, now: dayEnd })
       const nfi = computeNfi(
         {
+          articles: inputs.articles,
           moneyShare: inputs.moneyShare,
           sentimentSkew: inputs.sentimentSkew,
           concentration: inputs.concentration,

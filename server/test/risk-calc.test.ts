@@ -229,3 +229,71 @@ test('detectDivergences：条件不满足时不误报', () => {
   })
   assert.equal(out.length, 0, `不应触发任何背离，实际 ${JSON.stringify(out)}`)
 })
+
+/* ------------------------------ 窗口边界回归 ------------------------------ */
+
+test('narrativeInputs：必须按 now 截断窗口（不能把"到今天"的条目算进历史日期）', async () => {
+  const { readFileSync } = await import('node:fs')
+  const { DatabaseSync } = await import('node:sqlite')
+  const { narrativeInputs } = await import('../src/risk/narrative.ts')
+
+  const db = new DatabaseSync(':memory:')
+  db.exec(readFileSync(new URL('../src/schema.sql', import.meta.url), 'utf8'))
+  db.prepare("INSERT INTO sources (id, name, url, kind, weight) VALUES ('s1','源','u','rss',2)").run()
+
+  const addAt = (id: number, at: string, title: string): void => {
+    const rawId = Number(
+      db
+        .prepare(
+          `INSERT INTO raw_items (source_id, guid, url, url_norm, title, summary, published_at, fingerprint, fetched_at)
+           VALUES ('s1', ?, ?, ?, ?, '', ?, ?, ?)`,
+        )
+        .run(`g${id}`, `https://x/${id}`, `https://x/${id}`, title, at, `f${id}`, at).lastInsertRowid,
+    )
+    db.prepare(
+      `INSERT INTO articles (raw_id, url, title, tldr, summary, category, entities, score, score_parts, sentiment, event_key, published_at, created_at, ai_relevant)
+       VALUES (?, ?, ?, NULL, '', 'other', NULL, 60, NULL, 'positive', NULL, ?, ?, 1)`,
+    ).run(rawId, `https://x/${id}`, title, at, at)
+  }
+  // 4 月 1 条、10 月 5 条
+  addAt(1, '2026-04-10T10:00:00Z', '四月的新闻')
+  for (let i = 2; i <= 6; i++) addAt(i, `2026-10-${10 + i}T10:00:00Z`, `十月的新闻 ${i}`)
+
+  // 以 4 月底为"今天"：窗口内只有 4 月那条
+  const april = narrativeInputs(db, { days: 30, now: Date.parse('2026-04-30T12:00:00Z') })
+  assert.equal(april.articles, 1, `4 月底的 30 天窗口只能看到 1 条，实际 ${april.articles}`)
+
+  // 以 10 月底为"今天"：能看到 10 月的 5 条（4 月的超出窗口）
+  const oct = narrativeInputs(db, { days: 30, now: Date.parse('2026-10-31T12:00:00Z') })
+  assert.equal(oct.articles, 5, `10 月底的 30 天窗口只能看到 5 条，实际 ${oct.articles}`)
+  db.close()
+})
+
+test('computeNfi：窗口内条目太少时返回 null 而不是 0（"没数据"≠"冷静"）', () => {
+  const r = computeNfi(
+    {
+      articles: 5,
+      moneyShare: 0,
+      sentimentSkew: null,
+      concentration: null,
+      acceleration: null,
+      fomo: { score: 0, hits: [], exclaimDensity: 0 },
+    },
+    DEFAULT_PARAMS,
+  )
+  assert.equal(r.score, null, '5 条样本应返回 null')
+  assert.equal(r.band, 'unknown')
+
+  const enough = computeNfi(
+    {
+      articles: 50,
+      moneyShare: 0,
+      sentimentSkew: null,
+      concentration: null,
+      acceleration: null,
+      fomo: { score: 0, hits: [], exclaimDensity: 0 },
+    },
+    DEFAULT_PARAMS,
+  )
+  assert.equal(enough.score, 0, '样本够时才返回实测值')
+})

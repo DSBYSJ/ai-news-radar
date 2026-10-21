@@ -70,10 +70,13 @@ export default function RiskHistoryChart({ days = 180 }: { days?: number }) {
       .filter(Boolean)
       .join(' ')
 
-  const inRange = EVENTS.filter((e) => {
-    const idx = points.findIndex((p) => p.date >= e.date)
-    return idx >= 0
-  })
+  // ⚠️ 事件必须落在数据窗口内才画：早先用 findIndex(p => p.date >= e.date)，
+  // 窗口起点之前的事件会全部返回 0 → 三个标签叠在左上角还被裁掉。
+  const firstDate = points[0].date
+  const lastDate = points[points.length - 1].date
+  const inRange = EVENTS.map((e) => ({ ...e, idx: points.findIndex((p) => p.date >= e.date) })).filter(
+    (e) => e.idx >= 0 && e.date >= firstDate && e.date <= lastDate,
+  )
 
   return (
     <div>
@@ -100,25 +103,43 @@ export default function RiskHistoryChart({ days = 180 }: { days?: number }) {
           </g>
         ))}
 
-        {/* 事件标注 */}
-        {inRange.map((e) => {
-          const i = points.findIndex((p) => p.date >= e.date)
-          if (i < 0) return null
-          const x = xOf(i)
+        {/* 事件标注：标签上下错开、水平夹在画布内，避免重叠与被裁切 */}
+        {inRange.map((e, k) => {
+          const x = xOf(e.idx)
+          const labelY = PAD_T + 10 + (k % 3) * 12
+          const label = e.label
+          // 靠右时改用右对齐，防止文字出界
+          const nearRight = x > W - PAD_R - 80
           return (
             <g key={e.date}>
-              <line x1={x} y1={PAD_T} x2={x} y2={PAD_T + innerH} className="stroke-[var(--hot)]" strokeWidth="1" strokeDasharray="3 3" opacity="0.6" />
+              <line
+                x1={x}
+                y1={PAD_T}
+                x2={x}
+                y2={PAD_T + innerH}
+                className="stroke-[var(--hot)]"
+                strokeWidth="1"
+                strokeDasharray="3 3"
+                opacity="0.6"
+              />
               <text
-                x={x + 3}
-                y={PAD_T + 10}
+                x={nearRight ? x - 3 : x + 3}
+                y={labelY}
+                textAnchor={nearRight ? 'end' : 'start'}
                 className="fill-[var(--hot)]"
                 style={{ fontSize: 9 }}
               >
-                {e.label}
+                {label}
               </text>
             </g>
           )
         })}
+
+        {inRange.length === 0 && (
+          <text x={W - PAD_R} y={PAD_T + 10} textAnchor="end" className="fill-slate-400 dark:fill-slate-500" style={{ fontSize: 9 }}>
+            窗口内没有已知事件可标注
+          </text>
+        )}
 
         <path d={path('nfi')} fill="none" className="stroke-[var(--accent)]" strokeWidth="1.8" />
         <path d={path('crs')} fill="none" className="stroke-[var(--hot)]" strokeWidth="1.8" strokeDasharray="4 2" />
