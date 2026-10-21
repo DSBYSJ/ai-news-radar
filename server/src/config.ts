@@ -57,6 +57,8 @@ export const config = {
   summaryAt: process.env.SUMMARY_AT ?? '23:00',
   /** 每日 AIHOT 外部基准对照（北京时间）；设在简报之后，含当天全部加工结果 */
   aihotBenchmarkAt: process.env.AIHOT_BENCHMARK_AT ?? '23:40',
+  /** 每日联动观察结算（北京时间）；美股收盘后、次日早上数据齐全时跑 */
+  linkageSettleAt: process.env.LINKAGE_SETTLE_AT ?? '08:10',
 
   // 鉴权：与骑行看板共享 cd_session Cookie（未配置 JWT_SECRET 时不拦截，方便本地开发）
   jwtSecret: process.env.JWT_SECRET ?? '',

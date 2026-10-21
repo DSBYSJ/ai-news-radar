@@ -12,7 +12,7 @@ import { runBackfill } from '../risk/backfill.ts'
 import { runBacktest } from '../risk/backtest.ts'
 import { benchmarkTrend } from '../aihot/benchmark.ts'
 import { buildMarketOverview } from '../market/overview.ts'
-import { buildLinkage } from '../market/linkage.ts'
+import { computeStats, listSnapshots, type LinkageStats } from '../market/linkageObs.ts'
 import { deleteAlias, listAliases, listMapping, upsertAlias } from '../entities/alias.ts'
 import { realign } from '../entities/realign.ts'
 import { entityDailySeries } from '../analytics/trend.ts'
@@ -614,11 +614,22 @@ export async function newsRoutes(app: FastifyInstance): Promise<void> {
    */
   app.get('/api/news/market/linkage', async (req) => {
     const q = req.query as Query
-    return buildLinkage(getDb(), {
-      minSources: Math.max(2, Math.min(10, num(q.minSources, 2))),
-      horizon: Math.max(1, Math.min(20, num(q.horizon, 5))),
-      windowDays: Math.max(7, Math.min(365, num(q.days, 60))),
-    })
+    const db = getDb()
+    const today = new Date(Date.now() + 8 * 3_600_000).toISOString().slice(0, 10)
+    const asOf = typeof q.asOf === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(q.asOf) ? q.asOf : today
+
+    const stats: LinkageStats = computeStats(db, { asOf })
+    const observations = db
+      .prepare(
+        `SELECT event_id AS eventId, event_date AS eventDate, entity_raw AS entity, entity_class AS entityClass,
+                symbol, mapping_method AS mappingMethod, mapping_version AS mappingVersion,
+                algo_version AS algoVersion, first_seen_at AS firstSeenAt, sources, mentions,
+                t0_excess AS t0Excess, t5_excess AS t5Excess, status, status_reason AS statusReason, revision
+           FROM linkage_observations WHERE event_date <= ? ORDER BY event_date DESC, sources DESC LIMIT 80`,
+      )
+      .all(asOf)
+
+    return { asOf, stats, observations, snapshots: listSnapshots(db, 14) }
   })
 
   /**

@@ -4,6 +4,7 @@ import { config } from './config.ts'
 import { runFullPipeline } from './jobs.ts'
 import { getDb } from './db.ts'
 import { runBenchmark, saveBenchmark } from './aihot/benchmark.ts'
+import { recordObservations, settleObservations, writeSnapshot } from './market/linkageObs.ts'
 
 const DAY_MS = 86_400_000
 /** 北京时间相对 UTC 的偏移（无夏令时，恒定 +8） */
@@ -74,6 +75,7 @@ export function startScheduler(app: FastifyInstance): void {
 
   startDailySummary(app)
   startAihotBenchmark(app)
+  startLinkageSettle(app)
 }
 
 /** 解析 "07:00,10:00" → 当天分钟数数组（去重、升序、忽略非法项）；空串表示不启用 */
@@ -223,5 +225,49 @@ function startAihotBenchmark(app: FastifyInstance): void {
     }, delay)
   }
 
+  scheduleNext()
+}
+
+
+/**
+ * 每日联动观察结算（v0.43.0）
+ *
+ * 顺序：记录（幂等）→ 结算（能算的算，没成熟保持 pending）→ 写快照。
+ * 幂等：重复运行不会重复插事件、也不会覆盖首次记录的事实。
+ */
+function startLinkageSettle(app: FastifyInstance): void {
+  const spec = config.linkageSettleAt.trim().toLowerCase()
+  if (!spec || spec === 'off' || spec === 'false') {
+    app.log.info('联动结算定时未开启（LINKAGE_SETTLE_AT=off）')
+    return
+  }
+  const m = spec.match(/^(\d{1,2}):(\d{2})$/)
+  const hour = m ? Math.min(23, Math.max(0, Number(m[1]))) : 8
+  const minute = m ? Math.min(59, Math.max(0, Number(m[2]))) : 10
+
+  const scheduleNext = (): void => {
+    const delay = msUntilNextLocal(Date.now(), hour, minute)
+    app.log.info(
+      `联动结算定时：${new Date(Date.now() + delay).toISOString()}（北京时间 ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}）`,
+    )
+    setTimeout(() => {
+      void (async () => {
+        const date = localDate(Date.now())
+        try {
+          const db = getDb()
+          const rec = recordObservations(db, { asOf: date })
+          const st = settleObservations(db, { asOf: date })
+          const snap = writeSnapshot(db, { asOf: date })
+          app.log.info(
+            { date, inserted: rec.inserted, matured: st.matured, pending: st.pending, t5: snap.t5.evaluated },
+            '联动结算完成',
+          )
+        } catch (err) {
+          app.log.warn({ err, date }, '联动结算失败（不影响其他任务）')
+        }
+        scheduleNext()
+      })()
+    }, delay)
+  }
   scheduleNext()
 }

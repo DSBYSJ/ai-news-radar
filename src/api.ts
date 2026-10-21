@@ -16,7 +16,7 @@ import type {
   RiskReport,
   RiskBacktest,
   MarketOverview,
-  LinkageSummary,
+  LinkageResponse,
   RiskParams,
   RiskHistoryPoint,
   AliasRule,
@@ -119,9 +119,8 @@ export const api = {
   riskBacktest: () => get<RiskBacktest>('/risk/backtest'),
   /** 美股 AI 产业链估值看板（只读本地表，不联网） */
   marketOverview: () => get<MarketOverview>('/market/overview'),
-  /** 新闻热度 × 股价联动（只读本地表） */
-  marketLinkage: (days = 60, minSources = 2, horizon = 5) =>
-    get<LinkageSummary>('/market/linkage', { days, minSources, horizon }),
+  /** 新闻热度 × 股价联动（观察记录 + 每日快照，只读本地表） */
+  marketLinkage: (asOf?: string) => get<LinkageResponse>('/market/linkage', { asOf }),
   volume: (days: number) => get<{ days: number; points: DailyPoint[] }>('/trend/volume', { days }),
   category: (days: number) => get<{ days: number; points: CategoryRatioPoint[] }>('/trend/category', { days }),
   velocity: (days: number, category?: string) => get<VelocityResponse>('/trend/velocity', { days, category }),

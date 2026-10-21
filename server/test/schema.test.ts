@@ -28,6 +28,8 @@ test('schema.sql：可在空库上建出全部表（含 v0.24.0 新增 3 张）'
       'equity_daily',
       'event_clusters',
       'events',
+      'linkage_daily_snapshots',
+      'linkage_observations',
       'macro_history',
       'manual_price',
       'mentions',

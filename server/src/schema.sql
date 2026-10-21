@@ -242,6 +242,66 @@ CREATE TABLE IF NOT EXISTS company_ratios (
   PRIMARY KEY (symbol, fiscal_end)
 );
 
+-- 新闻→股价联动的事件级观察记录（v0.43.0）
+--
+-- 设计原则：**首次入选时的事实永不覆盖**。
+-- 实体映射规则以后会改（补别名、公司 IPO），但"当时我们是怎么认的"必须保留 ——
+-- 否则历史统计会被静默改写，回测与复盘全部失效。
+-- 结果字段（t0/t5）允许更新，但每次更新要 +1 revision 并记录时间。
+CREATE TABLE IF NOT EXISTS linkage_observations (
+  event_id        TEXT PRIMARY KEY,   -- 稳定 ID：事件日|实体（与映射规则无关）
+  event_date      TEXT NOT NULL,      -- 新闻日期（事件日）
+  entity_raw      TEXT NOT NULL,      -- 原始实体名（不改写）
+  entity_class    TEXT NOT NULL,      -- listed / product / private / unknown
+  symbol          TEXT,               -- 可联动的股票（product 填母公司）
+  mapping_method  TEXT NOT NULL,      -- direct / alias / product-parent / private / unresolved
+  mapping_version TEXT NOT NULL,      -- 首次入选时的映射规则版本
+  algo_version    TEXT NOT NULL,      -- 首次入选时的算法版本
+  first_seen_at   TEXT NOT NULL,      -- 首次记录时间
+  sources         INTEGER NOT NULL,   -- 首次入选时的独立信源数
+  mentions        INTEGER NOT NULL,
+  -- 结果（可更新）
+  t0_excess       REAL,
+  t5_excess       REAL,
+  status          TEXT NOT NULL,      -- unmapped / no_price / pending / matured
+  status_reason   TEXT,
+  settled_at      TEXT,
+  revision        INTEGER NOT NULL DEFAULT 0,
+  updated_at      TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_linkage_obs_date ON linkage_observations (event_date);
+
+-- 每日联动统计快照（v0.43.0）
+-- 每份快照都记下：截止时间、算法版本、映射版本、价格数据截止日 —— 缺一不可复现
+CREATE TABLE IF NOT EXISTS linkage_daily_snapshots (
+  date             TEXT PRIMARY KEY,   -- 统计截止日（北京时间日期）
+  generated_at     TEXT NOT NULL,
+  algo_version     TEXT NOT NULL,
+  mapping_version  TEXT NOT NULL,
+  price_data_until TEXT,               -- 当时能拿到的最后一根 K 线
+  new_events       INTEGER NOT NULL,
+  total_events     INTEGER NOT NULL,
+  mapped_events    INTEGER NOT NULL,
+  pending          INTEGER NOT NULL,
+  matured          INTEGER NOT NULL,
+  no_price         INTEGER NOT NULL,
+  unmapped         INTEGER NOT NULL,
+  t0_evaluated     INTEGER NOT NULL,
+  t0_avg           REAL,
+  t0_median        REAL,
+  t0_winrate       REAL,
+  t5_evaluated     INTEGER NOT NULL,
+  t5_avg           REAL,
+  t5_median        REAL,
+  t5_winrate       REAL,
+  rate_direct      REAL,
+  rate_indirect    REAL,
+  rate_none        REAL,
+  sufficient       INTEGER NOT NULL,
+  note             TEXT
+);
+
 -- AIHOT 外部基准对照的每日快照（v0.34.0）：只存统计与样本，不存对方正文
 CREATE TABLE IF NOT EXISTS aihot_benchmark (
   date               TEXT PRIMARY KEY,   -- 北京时间日期

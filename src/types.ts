@@ -518,18 +518,27 @@ export interface MarketOverview {
   companies: MarketCompanyRow[]
 }
 
-/** 新闻热度 × 股价联动（v0.42.0） */
-export interface LinkageEvent {
-  date: string
-  symbol: string
+/** 新闻热度 × 股价联动（v0.43.0：观察记录 + 快照） */
+export type EntityClass = 'listed' | 'product' | 'private' | 'unknown'
+export type LinkageStatus = 'unmapped' | 'no_price' | 'pending' | 'matured'
+
+export interface LinkageObservation {
+  eventId: string
+  eventDate: string
   entity: string
+  entityClass: EntityClass
+  symbol: string | null
+  mappingMethod: 'direct' | 'alias' | 'product-parent' | 'private' | 'unresolved'
+  mappingVersion: string
+  algoVersion: string
+  firstSeenAt: string
   sources: number
   mentions: number
-  sameDayExcess: number | null
-  stockReturn: number | null
-  indexReturn: number | null
-  excessReturn: number | null
-  reason: string | null
+  t0Excess: number | null
+  t5Excess: number | null
+  status: LinkageStatus
+  statusReason: string | null
+  revision: number
 }
 
 export interface LinkageStat {
@@ -539,22 +548,40 @@ export interface LinkageStat {
   winRate: number | null
 }
 
-export interface LinkageSummary {
-  horizon: number
-  minSources: number
-  windowDays: number
-  newsFrom: string | null
-  newsTo: string | null
-  rawEvents: number
-  mappedEvents: number
-  evaluated: number
-  sameDay: LinkageStat
-  forward: LinkageStat
-  unmappedTop: { entity: string; mentions: number; sources: number }[]
+export interface LinkageStats {
+  asOf: string
+  priceDataUntil: string | null
+  totalEvents: number
+  byClass: Record<EntityClass, number>
+  byStatus: { unmapped: number; no_price: number; pending: number; matured: number }
+  mapping: { direct: number; indirect: number; none: number }
+  t0: LinkageStat
+  t5: LinkageStat
+  concentration: { symbol: string; share: number } | null
   sufficient: boolean
   note: string
-  bySymbol: { symbol: string; events: number; evaluated: number; avgExcess: number | null; winRate: number | null }[]
-  items: LinkageEvent[]
+}
+
+export interface LinkageSnapshot {
+  date: string
+  generatedAt: string
+  algoVersion: string
+  mappingVersion: string
+  priceDataUntil: string | null
+  newEvents: number
+  totalEvents: number
+  byStatus: { unmapped: number; no_price: number; pending: number; matured: number }
+  t5: LinkageStat
+  t0: LinkageStat
+  sufficient: boolean
+  note: string
+}
+
+export interface LinkageResponse {
+  asOf: string
+  stats: LinkageStats
+  observations: LinkageObservation[]
+  snapshots: LinkageSnapshot[]
 }
 
 /** 回测：事件级指标（v0.29.0） */
