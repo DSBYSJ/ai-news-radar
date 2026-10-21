@@ -5,8 +5,9 @@ import CountUp from './CountUp.tsx'
  * 半环仪表盘（CRS / NFI 共用）
  *
  * 手写 SVG（项目约定不引图表库）：
- *   外圈 = 四段风险色带；内弧 = 当前分（带辉光）；指针指向当前值；
- *   可选：历史灾难刻度（2008/2020/2023）与未来 12 个月概率区间阴影带。
+ *   外圈 = 四段风险色带；进度弧 = 当前分（带辉光）；
+ *   指针 = **外圈短标记**（不从圆心画，避免穿过中心数字）；
+ *   历史灾难刻度 = 弧上只留小刻度线，文字放到图下图例（避免三个红字互相压）。
  *
  * 性能：辉光用 CSS `filter: drop-shadow`（合成层友好），
  * 不用 SVG feGaussianBlur —— 后者在 WebView 里滚动会掉帧。
@@ -15,9 +16,9 @@ import CountUp from './CountUp.tsx'
 interface Props {
   value: number | null
   label: string
-  /** 中心副标题（如 "偏热" / "需留意"） */
+  /** 分档徽章（如 "偏热" / "需留意"） */
   bandLabel?: string
-  /** 中心底部小字（如 "2,206 条"） */
+  /** 副信息（如 "2,206 条"） */
   sub?: string
   marks?: { score: number; label: string; year: string }[]
   /** 未来 12 个月概率区间（0–100） */
@@ -26,9 +27,9 @@ interface Props {
 }
 
 const CX = 120
-const CY = 118
-const R_OUT = 96
-const R_IN = 82
+const CY = 116
+const R_BAND = 86 // 色带半径
+const R_BAND_IN = 74
 
 function polar(r: number, deg: number): { x: number; y: number } {
   const a = (deg * Math.PI) / 180
@@ -51,29 +52,33 @@ export default function GaugeArc({
   sub,
   marks = [],
   probability = null,
-  height = 168,
+  height = 150,
 }: Props) {
   const v = value === null || !Number.isFinite(value) ? null : Math.max(0, Math.min(100, value))
   const band: RiskBand = bandOf(v)
   const color = colorOf(v)
-  const needleDeg = v === null ? 180 : 180 - (v / 100) * 180
-  const needle = polar(R_IN - 6, needleDeg)
+  const valueDeg = v === null ? 180 : 180 - (v / 100) * 180
   const glow = band === 'critical' ? 'drop-shadow(0 0 8px rgba(229,72,77,0.75))' : `drop-shadow(0 0 6px ${color}66)`
 
+  // 当前值标记：只在外圈（不进入中心区）
+  const markInner = polar(R_BAND_IN - 2, valueDeg)
+  const markOuter = polar(R_BAND - 1, valueDeg)
+  const markTip = polar(R_BAND + 6, valueDeg)
+
   return (
-    <div className="relative mx-auto w-full max-w-[300px]">
-      <svg viewBox="0 0 240 152" style={{ height }} className="w-full overflow-visible" role="img" aria-label={`${label} 仪表盘`}>
+    <div className="mx-auto flex w-full max-w-[250px] flex-col items-center">
+      <svg viewBox="0 0 240 136" style={{ height }} className="w-full overflow-visible" role="img" aria-label={`${label} 仪表盘`}>
         {/* 底弧 */}
-        <path d={arcPath(R_IN + 7, 0, 100)} fill="none" stroke="rgba(148,163,184,0.16)" strokeWidth="13" strokeLinecap="round" />
+        <path d={arcPath(R_BAND, 0, 100)} fill="none" stroke="rgba(148,163,184,0.16)" strokeWidth="12" strokeLinecap="round" />
 
         {/* 四段风险色带 */}
         {GAUGE_STOPS.map((s) => (
           <path
             key={s.from}
-            d={arcPath(R_IN + 7, s.from + 0.4, s.to - 0.4)}
+            d={arcPath(R_BAND, s.from + 0.4, s.to - 0.4)}
             fill="none"
             stroke={s.color}
-            strokeWidth="13"
+            strokeWidth="12"
             strokeLinecap="round"
             opacity="0.32"
           />
@@ -82,116 +87,107 @@ export default function GaugeArc({
         {/* 进度弧（辉光） */}
         {v !== null && v > 0 && (
           <path
-            d={arcPath(R_IN + 7, 0, v)}
+            d={arcPath(R_BAND, 0, v)}
             fill="none"
             stroke={color}
-            strokeWidth="13"
+            strokeWidth="12"
             strokeLinecap="round"
             style={{ filter: glow }}
           />
         )}
 
-        {/* 历史灾难刻度 */}
+        {/* 历史灾难刻度：只画小刻度线（文字见图例） */}
         {marks.map((m) => {
           const deg = 180 - (m.score / 100) * 180
-          const inner = polar(R_OUT + 2, deg)
-          const outer = polar(R_OUT + 11, deg)
-          const text = polar(R_OUT + 15, deg)
+          const inner = polar(R_BAND - 7, deg)
+          const outer = polar(R_BAND + 1, deg)
           return (
-            <g key={m.year + m.label}>
-              <line x1={inner.x} y1={inner.y} x2={outer.x} y2={outer.y} stroke="rgba(229,72,77,0.8)" strokeWidth="1.4" />
-              <text
-                x={text.x}
-                y={text.y - 3}
-                textAnchor={deg > 100 ? 'end' : deg < 80 ? 'start' : 'middle'}
-                className="fill-[#e5484d]"
-                style={{ fontSize: 8 }}
-              >
-                {m.year}
-              </text>
-              <text
-                x={text.x}
-                y={text.y + 7}
-                textAnchor={deg > 100 ? 'end' : deg < 80 ? 'start' : 'middle'}
-                className="fill-[#e5484d] opacity-80"
-                style={{ fontSize: 7 }}
-              >
-                {m.label}
-              </text>
-            </g>
+            <line
+              key={m.year + m.label}
+              x1={inner.x}
+              y1={inner.y}
+              x2={outer.x}
+              y2={outer.y}
+              stroke="rgba(229,72,77,0.75)"
+              strokeWidth="1.4"
+            />
           )
         })}
 
-        {/* 指针：只画外半段（起点在 R_IN*0.55），不穿过中心数字区 */}
+        {/* 当前值标记（外圈短线 + 端点），不穿过中心数字 */}
         {v !== null && (
           <g>
-            {(() => {
-              const tail = polar(R_IN * 0.55, needleDeg)
-              return (
-                <line
-                  x1={tail.x}
-                  y1={tail.y}
-                  x2={needle.x}
-                  y2={needle.y}
-                  stroke={color}
-                  strokeWidth="3"
-                  strokeLinecap="round"
-                  style={{ filter: glow }}
-                />
-              )
-            })()}
-            <circle cx={needle.x} cy={needle.y} r="3.2" fill={color} />
+            <line
+              x1={markInner.x}
+              y1={markInner.y}
+              x2={markOuter.x}
+              y2={markOuter.y}
+              stroke={color}
+              strokeWidth="4"
+              strokeLinecap="round"
+              style={{ filter: glow }}
+            />
+            <circle cx={markTip.x} cy={markTip.y} r="3.4" fill={color} />
           </g>
         )}
       </svg>
 
-      {/* 中心数字：只放「数值 + 单位」，位置在弧顶下方，避开指针轴心 */}
-      <div className="pointer-events-none absolute inset-x-0 top-[26%] flex flex-col items-center">
+      {/* 中心数字：独立一块，位于弧内侧（没有任何指针穿过） */}
+      <div className="-mt-6 flex flex-col items-center">
         <span
-          className="text-[36px] font-semibold leading-none"
-          style={{ color, textShadow: band === 'critical' ? '0 0 18px rgba(229,72,77,0.5)' : 'none' }}
+          className="text-[34px] font-semibold leading-none"
+          style={{ color, textShadow: band === 'critical' ? '0 0 18px rgba(229,72,77,0.45)' : 'none' }}
         >
           <CountUp value={v} placeholder="—" />
         </span>
-        <span className="mt-1.5 text-[9px] tracking-[0.22em] text-slate-500">{label}</span>
+        <span className="mt-1.5 text-[9px] tracking-[0.22em] text-slate-500 dark:text-slate-500">{label}</span>
       </div>
 
-      {/* 字幕区：分档徽章 + 副信息（统一放在图下，避免压住轴心） */}
-      <div className="mt-1 flex flex-col items-center gap-1">
+      {/* 字幕区：分档徽章 + 副信息 */}
+      <div className="mt-1.5 flex flex-col items-center gap-1">
         {bandLabel && (
-          <span
-            className="rounded-full px-2 py-0.5 text-[10px]"
-            style={{ color, backgroundColor: `${color}1f` }}
-          >
+          <span className="rounded-full px-2 py-0.5 text-[10px]" style={{ color, backgroundColor: `${color}1f` }}>
             {bandLabel}
           </span>
         )}
-        {sub && <span className="num text-[9.5px] text-slate-500">{sub}</span>}
+        {sub && <span className="num text-[9.5px] text-slate-500 dark:text-slate-500">{sub}</span>}
       </div>
+
+      {/* 历史刻度图例（文字不再压在弧上） */}
+      {marks.length > 0 && (
+        <div className="mt-1.5 flex flex-wrap items-center justify-center gap-x-2.5 gap-y-0.5">
+          {marks.map((m) => (
+            <span key={m.year + m.label} className="num flex items-center gap-1 text-[9px] text-[#e5484d] opacity-85">
+              <span className="inline-block h-1.5 w-px bg-[#e5484d] opacity-70" />
+              {m.year} {m.label} {m.score}
+            </span>
+          ))}
+        </div>
+      )}
 
       {/* 未来 12 个月概率区间阴影带 */}
       {probability && (
-        <div className="mt-1.5 flex flex-col items-center">
-          <div className="relative h-1.5 w-[70%] overflow-hidden rounded-full bg-slate-800">
+        <div className="mt-2 flex w-full flex-col items-center">
+          <div className="relative h-1.5 w-[78%] overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
             <div
               className="absolute inset-y-0 rounded-full"
               style={{
                 left: `${probability.low}%`,
                 width: `${Math.max(2, probability.high - probability.low)}%`,
-                backgroundColor: `${color}80`,
+                backgroundColor: `${color}99`,
               }}
             />
           </div>
-          <span className="num mt-1 text-[9.5px] text-slate-500">
+          <span className="num mt-1 text-[9.5px] text-slate-500 dark:text-slate-500">
             未来 12 个月概率 {probability.low}%–{probability.high}%
           </span>
         </div>
       )}
 
       {v === null && (
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <span className="mt-8 text-[11px] text-slate-500">{RISK_LABEL[band]} · 数据不足</span>
-        </div>
+        <p className="mt-2 text-[10.5px] text-slate-500 dark:text-slate-500">
+          {RISK_LABEL[band]} · 数据不足，未计算
+        </p>
       )}
     </div>
   )

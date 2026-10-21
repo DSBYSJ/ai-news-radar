@@ -169,9 +169,11 @@ export default function RiskPage() {
           <div className="grid gap-4 lg:grid-cols-3">
             {/* 左侧主区 */}
             <div className="space-y-4 lg:col-span-2">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <section className="risk-panel rounded-2xl p-4">
-                  <p className="text-center text-[10px] tracking-[0.14em] text-slate-500">叙事泡沫指数</p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <section className="risk-panel rounded-2xl p-3.5">
+                  <p className="text-center text-[10px] tracking-[0.14em] text-slate-500 dark:text-slate-500">
+                    叙事泡沫指数
+                  </p>
                   <GaugeArc
                     value={report.nfi?.score ?? null}
                     label="NFI"
@@ -180,8 +182,10 @@ export default function RiskPage() {
                   />
                 </section>
 
-                <section className="risk-panel rounded-2xl p-4">
-                  <p className="text-center text-[10px] tracking-[0.14em] text-slate-500">危机风险分</p>
+                <section className="risk-panel rounded-2xl p-3.5">
+                  <p className="text-center text-[10px] tracking-[0.14em] text-slate-500 dark:text-slate-500">
+                    危机风险分
+                  </p>
                   <GaugeArc
                     value={report.crisis?.score ?? null}
                     label="CRS"
