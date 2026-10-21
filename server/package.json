@@ -1,6 +1,6 @@
 {
   "name": "ai-news-server",
-  "version": "0.43.0",
+  "version": "0.44.0",
   "private": true,
   "description": "AI 资讯趋势雷达 · 后端（采集 / 存储 / 趋势统计）",
   "type": "module",
@@ -33,7 +33,8 @@
     "aihot:benchmark": "node src/aihot/benchmark-run.ts",
     "market:sync": "node src/market/sync-run.ts",
     "market:manual": "node src/market/manual-run.ts",
-    "linkage:settle": "node src/market/linkage-run.ts"
+    "linkage:settle": "node src/market/linkage-run.ts",
+    "entity:audit": "node src/market/entity-audit-run.ts"
   },
   "dependencies": {
     "@fastify/websocket": "^11.3.4",

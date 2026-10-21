@@ -12,7 +12,7 @@ import { runBackfill } from '../risk/backfill.ts'
 import { runBacktest } from '../risk/backtest.ts'
 import { benchmarkTrend } from '../aihot/benchmark.ts'
 import { buildMarketOverview } from '../market/overview.ts'
-import { computeStats, listSnapshots, type LinkageStats } from '../market/linkageObs.ts'
+import { computeStats, coverageSummary, listSnapshots, type LinkageStats } from '../market/linkageObs.ts'
 import { deleteAlias, listAliases, listMapping, upsertAlias } from '../entities/alias.ts'
 import { realign } from '../entities/realign.ts'
 import { entityDailySeries } from '../analytics/trend.ts'
@@ -629,7 +629,7 @@ export async function newsRoutes(app: FastifyInstance): Promise<void> {
       )
       .all(asOf)
 
-    return { asOf, stats, observations, snapshots: listSnapshots(db, 14) }
+    return { asOf, stats, observations, snapshots: listSnapshots(db, 14), coverage: coverageSummary(db, { asOf }) }
   })
 
   /**

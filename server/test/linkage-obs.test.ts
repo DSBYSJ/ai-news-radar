@@ -249,3 +249,130 @@ test('验收6：补录价格后结果变化 → revision 递增，原始记录�
   assert.ok(first.first_seen_at)
   db.close()
 })
+
+/* ------------------------------ 注册表（v0.44.0） ------------------------------ */
+
+test('注册表：别名也能命中（不能只索引 key）', async () => {
+  const { lookupRegistry } = await import('../src/market/entityRegistry.ts')
+  assert.equal(lookupRegistry('Claude')?.symbol, null, 'Claude → 未上市（Anthropic）')
+  assert.equal(lookupRegistry('Claude Code')?.key, 'claude', '别名必须能命中主条目')
+  assert.equal(lookupRegistry('Muse Wonder Full')?.symbol, 'META')
+  assert.equal(lookupRegistry('GPT-6-Astra')?.parentName, 'OpenAI')
+  assert.equal(lookupRegistry('NVIDIA Corp'), null, '不做模糊包含')
+})
+
+test('classifyEntity：注册表优先于内置规则，且非企业实体不进"未映射"', async () => {
+  const { classifyEntity } = await import('../src/market/entityClass.ts')
+  const { symbolOfEntity } = await import('../src/market/universe.ts')
+
+  const pytorch = classifyEntity('PyTorch', symbolOfEntity)
+  assert.equal(pytorch.entityClass, 'noncorporate', '开源框架不是企业实体')
+  assert.equal(pytorch.symbol, null)
+
+  const torchtpu = classifyEntity('TorchTPU', symbolOfEntity)
+  assert.equal(torchtpu.entityClass, 'product')
+  assert.equal(torchtpu.symbol, 'GOOGL', 'TorchTPU 是 Google 开源项目')
+
+  const apple = classifyEntity('Apple', symbolOfEntity)
+  assert.equal(apple.entityClass, 'listed')
+  assert.equal(apple.symbol, 'AAPL', '不在监测清单也要给出真实代码，状态会落到 no_price')
+})
+
+test('mappingFromRegistry：事件早于上市日 → 按未上市处理，不得映射', async () => {
+  const { mappingFromRegistry } = await import('../src/market/entityClass.ts')
+  const entry = {
+    key: 'futureco',
+    name: 'FutureCo',
+    aliases: ['FutureCo'],
+    entityClass: 'listed' as const,
+    symbol: 'FCO',
+    parentName: null,
+    evidence: '测试用',
+    confidence: 'confirmed' as const,
+    listedSince: '2027-01-01',
+  }
+
+  const before = mappingFromRegistry(entry, '2026-06-01')
+  assert.equal(before.entityClass, 'private', '上市前按未上市处理')
+  assert.equal(before.symbol, null, '不能用后来的上市状态改写历史')
+  assert.match(before.evidence ?? '', /2027-01-01 才上市/)
+
+  const after = mappingFromRegistry(entry, '2027-03-01')
+  assert.equal(after.entityClass, 'listed')
+  assert.equal(after.symbol, 'FCO', '上市后才可映射')
+})
+
+test('mappingFromRegistry：unverified 一律留在 unknown，不硬猜', async () => {
+  const { mappingFromRegistry } = await import('../src/market/entityClass.ts')
+  const r = mappingFromRegistry({
+    key: 'x',
+    name: 'X',
+    aliases: [],
+    entityClass: 'listed',
+    symbol: 'XXX',
+    parentName: null,
+    evidence: '证据不足',
+    confidence: 'unverified',
+  })
+  assert.equal(r.entityClass, 'unknown')
+  assert.equal(r.symbol, null)
+})
+
+/* -------------------- 映射质量：实体维度 vs 事件维度（v0.44.0） -------------------- */
+
+test('映射质量：实体数 ≠ 事件数，且只读重放不改写冻结记录', async () => {
+  const { coverageSummary } = await import('../src/market/linkageObs.ts')
+  const db = setup()
+  // 补 GOOGL 行情，用于判断"新映射的事件能否结算"
+  const gx = db.prepare('INSERT INTO equity_daily (symbol, date, close, volume) VALUES (?, ?, ?, 1000)')
+  DAYS.forEach((d, i) => gx.run('GOOGL', d, 200 + i))
+
+  // 模拟"旧规则落库"的历史记录：当时认不出 Gemini（现规则可映射到 GOOGL）
+  const ins = db.prepare(
+    `INSERT INTO linkage_observations
+       (event_id, event_date, entity_raw, entity_class, symbol, mapping_method, mapping_version,
+        algo_version, first_seen_at, sources, mentions, status, revision, updated_at)
+     VALUES (?, ?, 'Gemini', 'unknown', NULL, 'unresolved', 'alias-1', 'linkage-1', ?, 2, 3, 'unmapped', 0, ?)`,
+  )
+  ins.run('2026-10-02|Gemini', '2026-10-02', '2026-10-02T00:00:00Z', '2026-10-02T00:00:00Z')
+  ins.run('2026-10-05|Gemini', '2026-10-05', '2026-10-05T00:00:00Z', '2026-10-05T00:00:00Z')
+
+  const c = coverageSummary(db, { asOf: '2026-10-14' })
+  assert.equal(c.entities, 1, '两条事件只对应 1 个实体')
+  assert.equal(c.eventsBefore.unknown, 2, '当时两条都是 unknown')
+  assert.equal(c.eventsAfter.product, 2, '按当前规则两条都归到 product')
+  assert.equal(c.classified, 1)
+  assert.equal(c.stillUnknown, 0)
+  assert.equal(c.newlyMapped, 2)
+  assert.equal(c.newlyEvaluable, 2, 'GOOGL 有行情 → 可结算')
+
+  // 冻结记录必须原封不动
+  const rows = db
+    .prepare('SELECT entity_class, symbol, mapping_version FROM linkage_observations ORDER BY event_date')
+    .all() as unknown as { entity_class: string; symbol: string | null; mapping_version: string }[]
+  assert.equal(rows.length, 2)
+  for (const r of rows) {
+    assert.equal(r.entity_class, 'unknown', '重放不得改写历史分类')
+    assert.equal(r.symbol, null)
+    assert.equal(r.mapping_version, 'alias-1', '重放不得改写历史映射版本')
+  }
+  db.close()
+})
+
+test('映射质量：无行情的实体仍算"可映射"，但不计入可结算', async () => {
+  const { coverageSummary } = await import('../src/market/linkageObs.ts')
+  const db = setup()
+  // Apple 在注册表里是 listed（AAPL），但库里没有 AAPL 行情
+  db.prepare(
+    `INSERT INTO linkage_observations
+       (event_id, event_date, entity_raw, entity_class, symbol, mapping_method, mapping_version,
+        algo_version, first_seen_at, sources, mentions, status, revision, updated_at)
+     VALUES ('2026-10-02|Apple', '2026-10-02', 'Apple', 'unknown', NULL, 'unresolved', 'alias-1',
+             'linkage-1', '2026-10-02T00:00:00Z', 2, 2, 'unmapped', 0, '2026-10-02T00:00:00Z')`,
+  ).run()
+
+  const c = coverageSummary(db, { asOf: '2026-10-14' })
+  assert.equal(c.newlyMapped, 1, '认得出 → 算可映射')
+  assert.equal(c.newlyEvaluable, 0, '没行情 → 不能结算（分类完成 ≠ 结果可评估）')
+  db.close()
+})

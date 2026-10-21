@@ -1,6 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite'
 import { loadSeries, type SeriesData } from '../risk/macroHistory.ts'
 import { classifyEntity, type EntityClass, type EntityMapping } from './entityClass.ts'
+import { REGISTRY_VERSION } from './entityRegistry.ts'
 import { loadPrices } from './prices.ts'
 import { symbolOfEntity } from './universe.ts'
 
@@ -21,7 +22,9 @@ import { symbolOfEntity } from './universe.ts'
 /** 算法版本：事件识别/结算逻辑变化时递增 */
 export const ALGO_VERSION = 'linkage-1'
 /** 映射规则版本：别名表或产品-母公司表变化时递增 */
-export const MAPPING_VERSION = 'alias-1'
+export const MAPPING_VERSION = 'mapping-2'
+
+export { REGISTRY_VERSION }
 
 const HORIZON = 5
 const MIN_SOURCES = 2
@@ -279,7 +282,7 @@ export interface LinkageStats {
   totalEvents: number
   byClass: Record<EntityClass, number>
   byStatus: { unmapped: number; no_price: number; pending: number; matured: number }
-  mapping: { direct: number; indirect: number; none: number }
+  mapping: { direct: number; indirect: number; none: number; corporateNone: number; noncorporate: number }
   t0: { evaluated: number; avg: number | null; median: number | null; winRate: number | null }
   t5: { evaluated: number; avg: number | null; median: number | null; winRate: number | null }
   /** 结果是否集中在少数标的（避免"其实是英伟达一家的故事"） */
@@ -324,7 +327,7 @@ export function computeStats(db: DatabaseSync, opts: { asOf: string }): LinkageS
     status: string
   }[]
 
-  const byClass: Record<EntityClass, number> = { listed: 0, product: 0, private: 0, unknown: 0 }
+  const byClass: Record<EntityClass, number> = { listed: 0, product: 0, private: 0, noncorporate: 0, unknown: 0 }
   const byStatus = { unmapped: 0, no_price: 0, pending: 0, matured: 0 }
   let direct = 0
   let indirect = 0
@@ -372,7 +375,18 @@ export function computeStats(db: DatabaseSync, opts: { asOf: string }): LinkageS
     totalEvents: total,
     byClass,
     byStatus,
-    mapping: { direct, indirect, none: total - direct - indirect },
+    /*
+     * 未映射 = 非 listed/product 的部分，但要能区分"未上市"与"非企业"。
+     * 非企业实体（框架/机构/语言）本来就不该有股票，算进"未映射"会误导 ——
+     * 所以单独给出 corporateNone（企业类里没能映射的）。
+     */
+    mapping: {
+      direct,
+      indirect,
+      none: total - direct - indirect,
+      corporateNone: byClass.private + byClass.unknown,
+      noncorporate: byClass.noncorporate,
+    },
     t0: stat(t0Vals),
     t5,
     concentration,
@@ -468,7 +482,7 @@ export function listSnapshots(db: DatabaseSync, days = 30): SnapshotRow[] {
     asOf: String(r.date),
     priceDataUntil: (r.price_data_until as string) ?? null,
     totalEvents: Number(r.total_events),
-    byClass: { listed: 0, product: 0, private: 0, unknown: 0 },
+    byClass: { listed: 0, product: 0, private: 0, noncorporate: 0, unknown: 0 },
     byStatus: {
       unmapped: Number(r.unmapped),
       no_price: Number(r.no_price),
@@ -479,6 +493,8 @@ export function listSnapshots(db: DatabaseSync, days = 30): SnapshotRow[] {
       direct: Math.round(Number(r.rate_direct ?? 0) * Number(r.total_events)),
       indirect: Math.round(Number(r.rate_indirect ?? 0) * Number(r.total_events)),
       none: Math.round(Number(r.rate_none ?? 0) * Number(r.total_events)),
+      corporateNone: 0,
+      noncorporate: 0,
     },
     t0: {
       evaluated: Number(r.t0_evaluated),
@@ -496,4 +512,178 @@ export function listSnapshots(db: DatabaseSync, days = 30): SnapshotRow[] {
     sufficient: Number(r.sufficient) === 1,
     note: String(r.note ?? ''),
   }))
+}
+
+/* ============================ 5. 重放对比（不改历史） ============================ */
+
+/**
+ * 用**当前**映射规则重放一遍历史事件，与已落库的观察记录对比。
+ *
+ * 为什么需要：已落库的记录是"当时怎么认的"，不能改（那是审计依据）。
+ * 但要评估"补别名到底有没有用"，就必须知道"如果当时就用新规则会怎样"。
+ * 所以做**只读重放**：不动 observations，只输出前后差异。
+ */
+export interface ReplayRow {
+  entity: string
+  events: number
+  beforeClass: EntityClass
+  afterClass: EntityClass
+  beforeSymbol: string | null
+  afterSymbol: string | null
+  /** 新增可结算（有行情）的事件数 */
+  newEvaluable: number
+}
+
+export interface ReplayReport {
+  asOf: string
+  totalEvents: number
+  before: Record<EntityClass, number>
+  after: Record<EntityClass, number>
+  /** 从"未映射"变成"可映射"的事件数 */
+  newlyMapped: number
+  /** 其中真正能算出 T0 的事件数（有行情） */
+  newlyEvaluable: number
+  /** 实体维度的处理情况（注意：事件数 ≠ 实体数，必须分开报） */
+  entities: {
+    total: number
+    /** 按当前规则分类后的实体数 */
+    afterByClass: Record<EntityClass, number>
+    /** 仍然认不出来的实体名 */
+    stillUnknown: string[]
+  }
+  rows: ReplayRow[]
+}
+
+export function replayCoverage(db: DatabaseSync, opts: { asOf: string }): ReplayReport {
+  const stored = db
+    .prepare(
+      `SELECT event_date, entity_raw, entity_class, symbol FROM linkage_observations WHERE event_date <= ?`,
+    )
+    .all(opts.asOf) as unknown as {
+    event_date: string
+    entity_raw: string
+    entity_class: EntityClass
+    symbol: string | null
+  }[]
+
+  const priceDates = new Map<string, Set<string>>()
+  const hasPrice = (symbol: string, date: string): boolean => {
+    let set = priceDates.get(symbol)
+    if (!set) {
+      const rows = db.prepare('SELECT date FROM equity_daily WHERE symbol = ?').all(symbol) as unknown as {
+        date: string
+      }[]
+      set = new Set(rows.map((r) => r.date))
+      priceDates.set(symbol, set)
+    }
+    // 事件日之后至少还要有 1 个交易日才算能结算 T0
+    for (const d of set) if (d > date) return true
+    return false
+  }
+
+  const before: Record<EntityClass, number> = { listed: 0, product: 0, private: 0, noncorporate: 0, unknown: 0 }
+  const after: Record<EntityClass, number> = { listed: 0, product: 0, private: 0, noncorporate: 0, unknown: 0 }
+  const byEntity = new Map<string, ReplayRow>()
+  let newlyMapped = 0
+  let newlyEvaluable = 0
+
+  for (const o of stored) {
+    const m = classifyEntity(o.entity_raw, symbolOfEntity, { eventDate: o.event_date })
+    before[o.entity_class] = (before[o.entity_class] ?? 0) + 1
+    after[m.entityClass] = (after[m.entityClass] ?? 0) + 1
+
+    const wasMapped = o.symbol !== null
+    const nowMapped = m.symbol !== null
+    if (!wasMapped && nowMapped) {
+      newlyMapped += 1
+      if (hasPrice(m.symbol as string, o.event_date)) newlyEvaluable += 1
+    }
+
+    const key = o.entity_raw
+    const cur = byEntity.get(key)
+    if (cur) {
+      cur.events += 1
+      if (!wasMapped && nowMapped && hasPrice(m.symbol as string, o.event_date)) cur.newEvaluable += 1
+    } else {
+      byEntity.set(key, {
+        entity: key,
+        events: 1,
+        beforeClass: o.entity_class,
+        afterClass: m.entityClass,
+        beforeSymbol: o.symbol,
+        afterSymbol: m.symbol,
+        newEvaluable: !wasMapped && nowMapped && hasPrice(m.symbol as string, o.event_date) ? 1 : 0,
+      })
+    }
+  }
+
+  const rows = [...byEntity.values()]
+    .filter((r) => r.beforeClass !== r.afterClass || r.beforeSymbol !== r.afterSymbol)
+    .sort((a, b) => b.events - a.events)
+
+  /*
+   * 实体维度单独统计：事件数 58 ≠ 实体数 47。
+   * "Unknown 处理率"必须按**实体**算，否则高频实体会把比率算歪。
+   */
+  const afterByClass: Record<EntityClass, number> = { listed: 0, product: 0, private: 0, noncorporate: 0, unknown: 0 }
+  const stillUnknown: string[] = []
+  for (const r of byEntity.values()) {
+    afterByClass[r.afterClass] = (afterByClass[r.afterClass] ?? 0) + 1
+    if (r.afterClass === 'unknown') stillUnknown.push(r.entity)
+  }
+  stillUnknown.sort()
+
+  return {
+    asOf: opts.asOf,
+    totalEvents: stored.length,
+    before,
+    after,
+    newlyMapped,
+    newlyEvaluable,
+    entities: { total: byEntity.size, afterByClass, stillUnknown },
+    rows,
+  }
+}
+
+/**
+ * 映射质量摘要 —— 给接口/页面用的轻量版重放结果。
+ *
+ * 只回答一件事：**实体维度**上我们认出了多少、还差多少。
+ * 不返回明细行，避免每次请求都传一大坨。
+ */
+export interface CoverageSummary {
+  mappingVersion: string
+  /** 出现过的不同实体数（注意 ≠ 事件数） */
+  entities: number
+  /** 当前规则下能归类的实体数 */
+  classified: number
+  /** 仍认不出的实体数 */
+  stillUnknown: number
+  /** 仍认不出的实体名（最多 10 个，供人工补证据） */
+  stillUnknownNames: string[]
+  /** 若用当前规则重放，能从"未映射"变成"可映射"的事件数 */
+  newlyMapped: number
+  /** 其中真正有行情、能结算 T0 的事件数 */
+  newlyEvaluable: number
+  /** 事件分类：首次发现时的记录（冻结，审计依据） */
+  eventsBefore: Record<EntityClass, number>
+  /** 事件分类：按当前规则重放（反映现在的识别能力） */
+  eventsAfter: Record<EntityClass, number>
+}
+
+export function coverageSummary(db: DatabaseSync, opts: { asOf: string }): CoverageSummary {
+  const r = replayCoverage(db, opts)
+  const total = r.entities.total
+  const unknown = r.entities.stillUnknown.length
+  return {
+    mappingVersion: MAPPING_VERSION,
+    entities: total,
+    classified: total - unknown,
+    stillUnknown: unknown,
+    stillUnknownNames: r.entities.stillUnknown.slice(0, 10),
+    newlyMapped: r.newlyMapped,
+    newlyEvaluable: r.newlyEvaluable,
+    eventsBefore: r.before,
+    eventsAfter: r.after,
+  }
 }

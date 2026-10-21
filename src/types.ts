@@ -518,8 +518,8 @@ export interface MarketOverview {
   companies: MarketCompanyRow[]
 }
 
-/** 新闻热度 × 股价联动（v0.43.0：观察记录 + 快照） */
-export type EntityClass = 'listed' | 'product' | 'private' | 'unknown'
+/** 新闻热度 × 股价联动（v0.44.0：五类实体 + 映射质量摘要） */
+export type EntityClass = 'listed' | 'product' | 'private' | 'noncorporate' | 'unknown'
 export type LinkageStatus = 'unmapped' | 'no_price' | 'pending' | 'matured'
 
 export interface LinkageObservation {
@@ -528,7 +528,7 @@ export interface LinkageObservation {
   entity: string
   entityClass: EntityClass
   symbol: string | null
-  mappingMethod: 'direct' | 'alias' | 'product-parent' | 'private' | 'unresolved'
+  mappingMethod: 'direct' | 'alias' | 'product-parent' | 'private' | 'noncorporate' | 'registry' | 'unresolved'
   mappingVersion: string
   algoVersion: string
   firstSeenAt: string
@@ -554,12 +554,28 @@ export interface LinkageStats {
   totalEvents: number
   byClass: Record<EntityClass, number>
   byStatus: { unmapped: number; no_price: number; pending: number; matured: number }
-  mapping: { direct: number; indirect: number; none: number }
+  /** corporateNone = 企业类里没映射上的（未上市 + 认不出）；noncorporate 本就不该有股票 */
+  mapping: { direct: number; indirect: number; none: number; corporateNone: number; noncorporate: number }
   t0: LinkageStat
   t5: LinkageStat
   concentration: { symbol: string; share: number } | null
   sufficient: boolean
   note: string
+}
+
+/** 映射质量摘要：实体维度（≠ 事件维度） */
+export interface LinkageCoverage {
+  mappingVersion: string
+  entities: number
+  classified: number
+  stillUnknown: number
+  stillUnknownNames: string[]
+  newlyMapped: number
+  newlyEvaluable: number
+  /** 事件分类：首次发现时（冻结） */
+  eventsBefore: Record<EntityClass, number>
+  /** 事件分类：按当前规则重放 */
+  eventsAfter: Record<EntityClass, number>
 }
 
 export interface LinkageSnapshot {
@@ -582,6 +598,7 @@ export interface LinkageResponse {
   stats: LinkageStats
   observations: LinkageObservation[]
   snapshots: LinkageSnapshot[]
+  coverage: LinkageCoverage
 }
 
 /** 回测：事件级指标（v0.29.0） */

@@ -3,15 +3,18 @@ import { api } from '../../api.ts'
 import type { EntityClass, LinkageObservation, LinkageResponse, LinkageStat, LinkageStatus } from '../../types.ts'
 
 /**
- * 新闻热度 × 股价：前瞻性观察系统（v0.43.0）
+ * 新闻热度 × 股价：前瞻性观察系统（v0.44.0：五类实体 + 映射质量）
  *
  * 与上一版的区别：不再每次现算覆盖，而是**记录当时知道什么，之后发生了什么**。
  *
  * 页面必须回答四个问题，顺序不能乱：
  *   1. 样本够不够判断？（不够就先说，不给结论）
- *   2. 事件分成了几类？（直接上市 / 产品关联 / 未上市 / 认不出）
+ *   2. 事件分成了几类？（直接上市 / 产品关联 / 未上市 / 非企业 / 认不出）
  *   3. 结算到哪一步了？（成熟 / 等数据 / 缺行情 / 无法映射）
  *   4. 结果是多少？（T0 与 T+5 分开）
+ *
+ * 另有「映射质量」一行：实体维度上认出多少、还差多少 —— 这是识别能力，
+ * 与「有没有资产」是两件事，不能混在事件分类里看。
  */
 
 const pct = (v: number | null, digits = 2): string =>
@@ -21,6 +24,7 @@ const CLASS_LABEL: Record<EntityClass, string> = {
   listed: '直接上市公司',
   product: '产品/品牌（关联母公司）',
   private: '未上市主体',
+  noncorporate: '非企业实体',
   unknown: '暂无法确定',
 }
 
@@ -89,9 +93,11 @@ export default function LinkageCard() {
   }
   if (!data) return <section className="card h-32 animate-pulse rounded-xl" />
 
-  const { stats, observations, snapshots } = data
+  const { stats, observations, snapshots, coverage } = data
+  const after = coverage.eventsAfter
   const mappedTotal = stats.mapping.direct + stats.mapping.indirect
   const rate = (n: number): string => (stats.totalEvents > 0 ? `${Math.round((n / stats.totalEvents) * 100)}%` : '—')
+  const classRate = (n: number): string => (coverage.entities > 0 ? `${Math.round((n / coverage.entities) * 100)}%` : '—')
 
   return (
     <section className="card p-4">
@@ -120,29 +126,74 @@ export default function LinkageCard() {
         {stats.note}
       </p>
 
-      {/* 2. 事件分成了几类 */}
+      {/* 2. 事件分成了几类（当前规则重放为主，冻结记录作对照） */}
       <div className="mt-2.5">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <p className="text-[10.5px] text-slate-500 dark:text-slate-400">事件分类（{stats.totalEvents} 个）</p>
           <p className="num text-[10px] text-slate-400">
-            直接映射 {stats.mapping.direct}（{rate(stats.mapping.direct)}）· 间接 {stats.mapping.indirect}（
-            {rate(stats.mapping.indirect)}）· 未映射 {stats.mapping.none}（{rate(stats.mapping.none)}）
+            直接映射 {after.listed}（{rate(after.listed)}）· 间接 {after.product}（{rate(after.product)}）· 企业类未映射{' '}
+            {after.private + after.unknown}（{rate(after.private + after.unknown)}）
           </p>
         </div>
-        <div className="mt-1 grid grid-cols-2 gap-1.5 sm:grid-cols-4">
-          {(Object.keys(CLASS_LABEL) as EntityClass[]).map((k) => (
-            <div key={k} className="rounded-lg bg-slate-50/80 px-2 py-1.5 dark:bg-white/[0.03]">
-              <p className="truncate text-[9.5px] text-slate-500">{CLASS_LABEL[k]}</p>
-              <p className="num text-[12px] text-slate-700 dark:text-slate-200">
-                {stats.byClass[k] ?? 0}
-                <span className="ml-1 text-[9.5px] text-slate-400">{rate(stats.byClass[k] ?? 0)}</span>
-              </p>
-            </div>
-          ))}
+        <div className="mt-1 grid grid-cols-2 gap-1.5 sm:grid-cols-5">
+          {(Object.keys(CLASS_LABEL) as EntityClass[]).map((k) => {
+            const now = after[k] ?? 0
+            const was = coverage.eventsBefore[k] ?? 0
+            return (
+              <div key={k} className="rounded-lg bg-slate-50/80 px-2 py-1.5 dark:bg-white/[0.03]">
+                <p className="truncate text-[9.5px] text-slate-500">{CLASS_LABEL[k]}</p>
+                <p className="num text-[12px] text-slate-700 dark:text-slate-200">
+                  {now}
+                  <span className="ml-1 text-[9.5px] text-slate-400">{rate(now)}</span>
+                </p>
+                {was !== now && (
+                  <p className="num text-[9px] text-slate-400" title="首次发现时记录的分类，不会被改写（审计用）">
+                    当时 {was}
+                  </p>
+                )}
+              </div>
+            )
+          })}
         </div>
         <p className="mt-1 text-[9.5px] leading-relaxed text-slate-400">
-          「暂无法确定」是我们<b>没认出来</b>，不等于该主体没有可投资资产 —— 补别名后会变成前两类。
+          大数字按<b>当前</b>映射规则重放；「当时 N」是首次发现时落库的分类，<b>永不改写</b>（审计依据）。
+          「非企业实体」是人物 / 研究机构 / 开源项目 / 论文平台，<b>本来就没有对应股票</b>，不该算进「没映射上」；
+          「暂无法确定」才是我们<b>没认出来</b> —— 不等于该主体没有可投资资产。
         </p>
+      </div>
+
+      {/* 2b. 映射质量：实体维度（≠ 事件维度） */}
+      <div className="mt-2 rounded-lg bg-slate-50/60 px-2.5 py-1.5 text-[10px] leading-relaxed dark:bg-white/[0.02]">
+        <span className="text-slate-500 dark:text-slate-400">
+          实体识别（规则 {coverage.mappingVersion}）：
+        </span>
+        <span className="num text-slate-700 dark:text-slate-200">
+          {' '}
+          {coverage.classified}/{coverage.entities}（{classRate(coverage.classified)}）
+        </span>
+        <span className="text-slate-500 dark:text-slate-400">
+          {' '}
+          已归类，仍缺证据 <b className="num">{coverage.stillUnknown}</b> 个
+        </span>
+        {coverage.newlyMapped > 0 && (
+          <>
+            <span className="text-slate-500 dark:text-slate-400">
+              {' '}
+              · 按新规则可多映射 <b className="num">{coverage.newlyMapped}</b> 个事件，其中{' '}
+              <b className="num">{coverage.newlyEvaluable}</b> 个有行情可结算
+            </span>
+            <p className="mt-0.5 text-[9px] text-amber-600 dark:text-amber-400">
+              这 {coverage.newlyMapped} 个是<b>历史事件</b>：按「首次事实永不覆盖」原则不会回溯改写，因此不计入下方统计；
+              新规则从<b>下一批事件</b>起生效。
+            </p>
+          </>
+        )}
+        {coverage.stillUnknownNames.length > 0 && (
+          <p className="mt-0.5 text-[9px] text-slate-400">
+            待补证据：{coverage.stillUnknownNames.join('、')}
+            {coverage.stillUnknown > coverage.stillUnknownNames.length ? ' …' : ''}
+          </p>
+        )}
       </div>
 
       {/* 3. 结算进度 */}
@@ -153,7 +204,7 @@ export default function LinkageCard() {
             <b className={`num ml-1 ${STATUS_LABEL[s].tone}`}>{stats.byStatus[s]}</b>
           </span>
         ))}
-        <span className="text-slate-400">（已映射 {mappedTotal} 个）</span>
+        <span className="text-slate-400">（当时已映射 {mappedTotal} 个；结算状态按当时映射判定）</span>
       </div>
 
       {/* 4. 结果 */}
