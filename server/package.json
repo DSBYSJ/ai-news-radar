@@ -1,6 +1,6 @@
 {
   "name": "ai-news-server",
-  "version": "0.25.0",
+  "version": "0.26.1",
   "private": true,
   "description": "AI 资讯趋势雷达 · 后端（采集 / 存储 / 趋势统计）",
   "type": "module",
@@ -19,6 +19,7 @@
     "sentiment": "node src/ai/sentiment-run.ts",
     "ask": "node src/ai/ask-run.ts",
     "risk": "node src/risk/run.ts",
+    "risk:backfill": "node src/risk/backfill-run.ts",
     "realign:entities": "node src/entities/run.ts",
     "mcp": "node src/mcp/stdio.ts",
     "prune": "node src/tools/prune.ts",

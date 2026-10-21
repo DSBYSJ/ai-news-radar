@@ -395,6 +395,10 @@ export interface MacroPoint {
   asOf: string
   yearAgo: number | null
   avg200: number | null
+  /** 52 周最高值（算回撤用） */
+  high52w: number | null
+  /** 历史序列（分位数 / Z-Score 用） */
+  history: number[]
   source: string
 }
 
@@ -402,6 +406,8 @@ export interface MacroSnapshot {
   available: boolean
   missing: string[]
   series: Record<string, MacroPoint>
+  /** 收益率曲线是否倒挂（2Y > 10Y） */
+  inversion: boolean | null
   notes: string[]
   fetchedAt: string
 }
@@ -410,7 +416,8 @@ export interface CrisisAssessment {
   score: number
   level: 'low' | 'guarded' | 'elevated' | 'high'
   probability12m: { low: number; high: number; note: string } | null
-  factors: RiskFactor[]
+  /** v2 因子：带分位数、Z-Score 与贡献分（瀑布图用） */
+  factors: RiskFactorV2[]
 }
 
 export interface RiskReport {
@@ -420,6 +427,84 @@ export interface RiskReport {
   macro: MacroSnapshot
   crisis: CrisisAssessment | null
   disclaimer: string
+  // ---- v0.26.0 新增（并行返回，旧字段不变）----
+  /** NFI v2（FOMO + 非线性加速度） */
+  nfi: NfiResult | null
+  /** 瀑布图归因 */
+  waterfall: { label: string; value: number; kind: 'base' | 'item' | 'total' }[] | null
+  /** 背离预警 */
+  divergences: Divergence[]
+  /** 宏观背景下最脆弱的实体 */
+  vulnerableEntities: VulnerableEntity[]
+  /** 当前生效参数 */
+  params: RiskParams
+  /** 公式说明（tooltip 直接渲染） */
+  formulas: { key: string; title: string; formula: string; detail: string }[]
+}
+
+export interface RiskFactorV2 {
+  key: string
+  label: string
+  value: number | null
+  percentile: number | null
+  z: number | null
+  score: number
+  weight: number
+  contribution: number
+  note: string
+}
+
+export interface NfiFactor {
+  key: string
+  label: string
+  value: number | null
+  score: number | null
+  weight: number
+  note: string
+}
+
+export interface NfiResult {
+  score: number | null
+  band: 'calm' | 'warm' | 'hot' | 'unknown'
+  factors: NfiFactor[]
+  fomo: { score: number; hits: string[]; exclaimDensity: number }
+}
+
+export interface Divergence {
+  type: 'sentiment_price' | 'heat_funding' | 'narrative_macro'
+  typeLabel: string
+  severity: 'warning' | 'critical'
+  title: string
+  detail: string
+  entity: string | null
+  metrics: { label: string; value: string }[]
+}
+
+export interface VulnerableEntity {
+  entity: string
+  negative: number
+  mentions: number
+  negativeShare: number
+  heatChange: number | null
+  funding: number
+  score: number
+  reason: string
+}
+
+export interface RiskParams {
+  nfi: { money: number; sentiment: number; concentration: number; acceleration: number; fomo: number }
+  acceleration: { threshold: number; sharpness: number }
+  crs: { nfi: number; rates: number; credit: number; index: number }
+  steps: { oas: number; rates: number; sharpness: number }
+  dynamic: { drawdown: number; boost: number }
+  divergence: { optimisticSentiment: number; downDays: number; surgeRatio: number; fundingDropRatio: number }
+  probability: { base: number; scale: number; band: number }
+}
+
+export interface RiskHistoryPoint {
+  date: string
+  nfi: number | null
+  crs: number | null
 }
 
 // ---------- 实体别名 / 底表映射 / 调试（v0.24.0） ----------

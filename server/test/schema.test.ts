@@ -24,8 +24,11 @@ test('schema.sql：可在空库上建出全部表（含 v0.24.0 新增 3 张）'
       'entity_mapping',
       'event_clusters',
       'events',
+      'macro_history',
       'mentions',
       'raw_items',
+      'risk_daily',
+      'risk_params',
       'sources',
     ],
   )

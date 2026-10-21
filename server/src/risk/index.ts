@@ -1,18 +1,25 @@
 import type { DatabaseSync } from 'node:sqlite'
 import { config } from '../config.ts'
-import { loadMacro, type MacroSnapshot } from './macro.ts'
-import { narrativeFroth, type NarrativeReport, type RiskFactor } from './narrative.ts'
+import { loadMacro, type MacroSnapshot, type MacroPoint } from './macro.ts'
+import { narrativeFroth, narrativeInputs, type NarrativeReport } from './narrative.ts'
+import { loadParams } from './params.ts'
+import {
+  computeCrs,
+  computeNfi,
+  detectDivergences,
+  type CrsFactor,
+  type CrsResult,
+  type Divergence,
+  type NfiResult,
+  type RiskParams,
+} from './calculation.ts'
 
 /**
- * AI 估值与金融危机风险模块（独立模块，不依赖其它业务代码）
+ * 风险聚合层（v0.26.0 重构）
  *
- * 输出分两级，**刻意不一致**：
- *   A. 叙事泡沫指数 NFI（0~100）—— 只用库里的新闻，随时可算
- *   B. 危机风险分 CRS（0~100）+ 12 个月概率区间 —— **必须有宏观数据**，
- *      否则返回 null 并说明缺什么
- *
- * 为什么不给"新闻版危机概率"：新闻只反映"大家在聊什么"，不反映"资产多贵、钱多贵"。
- * 缺利率与信用利差时，任何概率数字都是虚构的。这条写进 disclaimer，前端也照此展示。
+ * 兼容性：**旧字段一个都不删**（narrative / macro / crisis 的结构保持），
+ * 新算法算出的结果放在新字段里并行返回（nfi / waterfall / divergences / vulnerableEntities / params）。
+ * 旧字段里的 score 由新引擎计算，前端可以只切到新字段，不影响任何老逻辑。
  */
 
 export interface CrisisAssessment {
@@ -21,18 +28,49 @@ export interface CrisisAssessment {
   level: 'low' | 'guarded' | 'elevated' | 'high'
   /** 未来 12 个月的危机概率区间（百分比）；无法可靠估计时为 null */
   probability12m: { low: number; high: number; note: string } | null
-  factors: RiskFactor[]
+  factors: CrsFactor[]
+}
+
+export interface VulnerableEntity {
+  entity: string
+  /** 负面提及数 */
+  negative: number
+  /** 总提及数 */
+  mentions: number
+  /** 负面占比 0~1 */
+  negativeShare: number
+  /** 近 7 天 vs 前 7 天提及变化（正=升温） */
+  heatChange: number | null
+  /** 融资类提及数（缺乏实质融资 → 加分） */
+  funding: number
+  /** 脆弱性得分 0~100 */
+  score: number
+  reason: string
 }
 
 export interface RiskReport {
   generatedAt: string
-  /** 新闻窗口（天） */
   windowDays: number
+  /** 旧字段（保留）：叙事指数结构 */
   narrative: NarrativeReport
+  /** 旧字段（保留）：宏观快照（新增 history/high52w/inversion） */
   macro: MacroSnapshot
-  /** 需要宏观数据；宏观不可用时为 null */
+  /** 旧字段（保留）：危机风险分（现在由 v2 引擎算） */
   crisis: CrisisAssessment | null
-  /** 模块边界与免责说明，前端原样展示 */
+  // ---- v0.26.0 新增 ----
+  /** NFI v2（FOMO + 非线性加速度） */
+  nfi: NfiResult | null
+  /** 瀑布图归因（基础分 → 各项贡献 → 合计） */
+  waterfall: CrsResult['waterfall'] | null
+  /** 背离预警 */
+  divergences: Divergence[]
+  /** 宏观背景下最脆弱的实体（CRS ≥ 50 时才有意义） */
+  vulnerableEntities: VulnerableEntity[]
+  /** 当前生效的参数（前端 tooltip / 调参面板用） */
+  params: RiskParams
+  /** 公式与口径说明（前端 tooltip 直接渲染） */
+  formulas: { key: string; title: string; formula: string; detail: string }[]
+  /** 旧字段（保留）：模块边界与免责说明 */
   disclaimer: string
 }
 
@@ -42,118 +80,213 @@ const DISCLAIMER =
   'NFI 不是估值模型（新闻里没有估值倍数），CRS 的概率区间是基于历史基础率的启发式，' +
   '既不是预测也不构成任何投资建议。'
 
-function clamp01(x: number): number {
-  return Math.max(0, Math.min(1, x))
+/** 把宏观快照转成引擎需要的输入 */
+function macroInput(point: MacroPoint | undefined, key: string, label: string) {
+  if (!point) return null
+  return {
+    key,
+    label,
+    value: point.value,
+    history: point.history,
+    yearAgo: point.yearAgo,
+    avg200: point.avg200,
+    high52w: point.high52w,
+  }
 }
 
-function scale(value: number, lo: number, hi: number): number {
-  if (!Number.isFinite(value) || hi <= lo) return 0
-  return Math.round(clamp01((value - lo) / (hi - lo)) * 100)
+/** 指数连续下跌天数（从历史序列尾部往前数） */
+function consecutiveDownDays(history: number[]): number {
+  let n = 0
+  for (let i = history.length - 1; i > 0; i--) {
+    if (history[i] < history[i - 1]) n += 1
+    else break
+  }
+  return n
 }
 
-/** 宏观三项 → 0~100 的风险分 */
-function macroFactors(macro: MacroSnapshot): RiskFactor[] {
-  const factors: RiskFactor[] = []
-  const rates = macro.series.rates10y
-  const credit = macro.series.creditSpread
-  const nasdaq = macro.series.nasdaq
+/** 最脆弱实体：负面多 + 热度退潮 + 缺融资 */
+function vulnerableEntities(db: DatabaseSync, days: number, limit = 10): VulnerableEntity[] {
+  const rows = db
+    .prepare(
+      `SELECT m.entity AS entity,
+              COUNT(*) AS mentions,
+              SUM(CASE WHEN a.sentiment = 'negative' THEN 1 ELSE 0 END) AS neg,
+              SUM(CASE WHEN a.category = 'funding' THEN 1 ELSE 0 END) AS fund
+         FROM mentions m JOIN articles a ON a.id = m.article_id
+        WHERE a.ai_relevant = 1 AND a.published_at >= ?
+        GROUP BY m.entity
+       HAVING mentions >= 3`,
+    )
+    .all(new Date(Date.now() - days * 86_400_000).toISOString()) as unknown as {
+    entity: string
+    mentions: number
+    neg: number
+    fund: number
+  }[]
+  if (rows.length === 0) return []
 
-  if (rates) {
-    const levelScore = scale(rates.value, 3.5, 5.5)
-    const change = rates.yearAgo === null ? 0 : rates.value - rates.yearAgo
-    const changeScore = scale(change, 0, 1.5)
-    factors.push({
-      key: 'rates',
-      label: '利率压力',
-      value: Number(rates.value.toFixed(2)),
-      score: Math.round(0.6 * levelScore + 0.4 * changeScore),
-      weight: 20,
-      note: `10Y ${rates.value.toFixed(2)}%（一年前 ${rates.yearAgo?.toFixed(2) ?? '—'}）；利率越高、上行越快，长久期资产越脆`,
-    })
-  }
+  // 近 7 天 vs 前 7 天的提及变化
+  const recentRows = db
+    .prepare(
+      `SELECT m.entity AS entity, COUNT(*) AS n
+         FROM mentions m JOIN articles a ON a.id = m.article_id
+        WHERE a.ai_relevant = 1 AND a.published_at >= ?
+        GROUP BY m.entity`,
+    )
+    .all(new Date(Date.now() - 7 * 86_400_000).toISOString()) as unknown as { entity: string; n: number }[]
+  const prevRows = db
+    .prepare(
+      `SELECT m.entity AS entity, COUNT(*) AS n
+         FROM mentions m JOIN articles a ON a.id = m.article_id
+        WHERE a.ai_relevant = 1 AND a.published_at >= ? AND a.published_at < ?
+        GROUP BY m.entity`,
+    )
+    .all(
+      new Date(Date.now() - 14 * 86_400_000).toISOString(),
+      new Date(Date.now() - 7 * 86_400_000).toISOString(),
+    ) as unknown as { entity: string; n: number }[]
+  const recentMap = new Map(recentRows.map((r) => [r.entity, Number(r.n)]))
+  const prevMap = new Map(prevRows.map((r) => [r.entity, Number(r.n)]))
 
-  if (credit) {
-    // 两头都是风险：极窄=自满，快速走阔=已经开始出事，取两者较大值
-    const tightness = scale(3.5 - credit.value, -0.5, 1.2)
-    const widening = credit.yearAgo === null ? 0 : scale(credit.value - credit.yearAgo, 0, 2)
-    factors.push({
-      key: 'credit',
-      label: '信用环境',
-      value: Number(credit.value.toFixed(2)),
-      score: Math.max(tightness, widening),
-      weight: 20,
-      note: `高收益债 OAS ${credit.value.toFixed(2)}%；利差极窄=自满，快速走阔=已承压，取两者较大`,
-    })
-  }
+  const scored = rows.map((r) => {
+    const mentions = Number(r.mentions)
+    const negative = Number(r.neg ?? 0)
+    const funding = Number(r.fund ?? 0)
+    const negativeShare = mentions > 0 ? negative / mentions : 0
+    const recent = recentMap.get(r.entity) ?? 0
+    const prev = prevMap.get(r.entity) ?? 0
+    const heatChange = prev > 0 ? (recent - prev) / prev : null
+    // 脆弱性 = 负面占比×50 + 热度退潮×30 + 缺融资×20
+    const heatPenalty = heatChange === null ? 0 : Math.max(0, -heatChange)
+    const score = Math.round(
+      Math.min(100, negativeShare * 50 + heatPenalty * 30 + (funding === 0 ? 20 : 0)),
+    )
+    const reasons: string[] = []
+    if (negativeShare >= 0.3) reasons.push(`负面占比 ${(negativeShare * 100).toFixed(0)}%`)
+    if (heatPenalty > 0.2) reasons.push(`热度退潮 ${(heatPenalty * 100).toFixed(0)}%`)
+    if (funding === 0) reasons.push('无融资类报道')
+    return {
+      entity: r.entity,
+      negative,
+      mentions,
+      negativeShare: Number(negativeShare.toFixed(3)),
+      heatChange: heatChange === null ? null : Number(heatChange.toFixed(2)),
+      funding,
+      score,
+      reason: reasons.length > 0 ? reasons.join('、') : '负面偏多',
+    }
+  })
 
-  if (nasdaq) {
-    const overext = nasdaq.avg200 ? scale(nasdaq.value / nasdaq.avg200 - 1, 0.02, 0.25) : 0
-    const runup = nasdaq.yearAgo ? scale(nasdaq.value / nasdaq.yearAgo - 1, 0.1, 0.6) : 0
-    factors.push({
-      key: 'index',
-      label: '指数过热',
-      value: Number(nasdaq.value.toFixed(0)),
-      score: Math.round(0.5 * overext + 0.5 * runup),
-      weight: 20,
-      note: nasdaq.avg200
-        ? `纳指 ${nasdaq.value.toFixed(0)}，较 200 日均值 ${((nasdaq.value / nasdaq.avg200 - 1) * 100).toFixed(1)}%，一年涨 ${((nasdaq.value / (nasdaq.yearAgo ?? nasdaq.value) - 1) * 100).toFixed(1)}%`
-        : `纳指 ${nasdaq.value.toFixed(0)}（200 日均值样本不足）`,
-    })
-  }
-
-  return factors
+  return scored.sort((a, b) => b.score - a.score || b.negative - a.negative).slice(0, limit)
 }
 
 export async function riskReport(
   db: DatabaseSync,
   opts: { days?: number; now?: number; macroKey?: string; macro?: MacroSnapshot } = {},
 ): Promise<RiskReport> {
+  const params = loadParams(db)
   const narrative = narrativeFroth(db, { days: opts.days, now: opts.now })
+  const inputs = narrativeInputs(db, { days: opts.days, now: opts.now })
   const macro = opts.macro ?? (await loadMacro(opts.macroKey ?? config.fredApiKey))
 
-  let crisis: CrisisAssessment | null = null
-  const macroFactorList = macroFactors(macro)
+  // ---------- NFI v2 ----------
+  const nfi = computeNfi(
+    {
+      moneyShare: inputs.moneyShare,
+      sentimentSkew: inputs.sentimentSkew,
+      concentration: inputs.concentration,
+      acceleration: inputs.acceleration,
+      fomo: inputs.fomo,
+      // 赛道锚点：预留（估值倍数 / 资金净流入暂无数据源）
+      anchors: [],
+    },
+    params,
+  )
 
-  if (macro.available && macroFactorList.length > 0) {
-    const factors: RiskFactor[] = [...macroFactorList]
-    // 叙事指数作为一个分项并入（40% 权重），宏观三项各 20%
-    if (narrative.nfi !== null) {
-      factors.unshift({
-        key: 'narrative',
-        label: '叙事过热（NFI）',
-        value: narrative.nfi,
-        score: narrative.nfi,
-        weight: 40,
-        note: '来自站内新闻的叙事温度，非估值指标',
-      })
-    }
-    const weightSum = factors.reduce((s, f) => s + f.weight, 0)
-    const score = Math.round(factors.reduce((s, f) => s + (f.score ?? 0) * f.weight, 0) / weightSum)
-    const level: CrisisAssessment['level'] = score >= 70 ? 'high' : score >= 50 ? 'elevated' : score >= 30 ? 'guarded' : 'low'
+  // ---------- CRS v2 ----------
+  const rates = macroInput(macro.series.rates10y, 'rates', '10 年期美债收益率')
+  const credit = macroInput(macro.series.creditSpread, 'credit', '高收益债信用利差（OAS）')
+  const index = macroInput(macro.series.nasdaq, 'index', '纳斯达克综合指数')
+  const crs: CrsResult | null =
+    macro.available && (rates || credit || index)
+      ? computeCrs({ nfi: nfi.score, rates, credit, index, inversion: macro.inversion }, params)
+      : null
 
-    /*
-     * 概率区间：以 12%/年 的"危机基础率"为锚，按风险分做指数调整，再给 ±5pp 区间。
-     * 参数是**人为设定并写在这里的**，不是回测拟合结果 —— 所以只给区间与量级，不给小数点。
-     */
-    const center = Math.max(0.03, Math.min(0.6, 0.12 * Math.exp((score - 50) / 28)))
-    crisis = {
-      score,
-      level,
-      probability12m: {
-        low: Math.round(Math.max(0.02, center - 0.05) * 100),
-        high: Math.round(Math.min(0.75, center + 0.05) * 100),
-        note: '以 12%/年 的危机基础率为锚、按风险分指数调整；参数人为设定，非回测拟合，仅供量级参考',
-      },
-      factors,
-    }
-  }
+  // ---------- 背离检测 ----------
+  const indexHistory = macro.series.nasdaq?.history ?? []
+  const indexDownDays = consecutiveDownDays(indexHistory)
+  const indexChange =
+    indexHistory.length >= 6 && indexHistory[indexHistory.length - 6] > 0
+      ? indexHistory[indexHistory.length - 1] / indexHistory[indexHistory.length - 6] - 1
+      : null
+
+  const dayMs = 86_400_000
+  const now = opts.now ?? Date.now()
+  const countBetween = (from: number, to: number, extra = ''): number =>
+    (
+      db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM articles
+            WHERE ai_relevant = 1 AND published_at >= ? AND published_at < ?${extra}`,
+        )
+        .get(new Date(now - from * dayMs).toISOString(), new Date(now - to * dayMs).toISOString()) as { n: number }
+    ).n
+  const recentCount = countBetween(7, 0)
+  const prevCount = countBetween(14, 7)
+  const heatSurgeRatio = prevCount > 0 ? recentCount / prevCount : null
+  const fundingRecent = countBetween(7, 0, " AND category = 'funding'")
+  const fundingPrev = countBetween(14, 7, " AND category = 'funding'")
+  const fundingChangeRatio = fundingPrev > 0 ? (fundingRecent - fundingPrev) / fundingPrev : null
+
+  const divergences = detectDivergences({
+    optimism: inputs.optimism,
+    indexDownDays,
+    heatSurgeRatio,
+    fundingChangeRatio,
+    entity: null,
+    moneyShare: inputs.moneyShare,
+    indexChange,
+    params,
+  })
+
+  // ---------- 脆弱实体（CRS 高时才值得看） ----------
+  const vulnerable = crs && crs.score >= 50 ? vulnerableEntities(db, narrative.windowDays, 10) : []
+
+  const crisis: CrisisAssessment | null = crs
+    ? { score: crs.score, level: crs.level, probability12m: crs.probability12m, factors: crs.factors }
+    : null
 
   return {
     generatedAt: new Date().toISOString(),
     windowDays: narrative.windowDays,
-    narrative,
+    narrative: { ...narrative, nfi: nfi.score, band: nfi.band },
     macro,
     crisis,
+    nfi,
     disclaimer: DISCLAIMER,
+    waterfall: crs?.waterfall ?? null,
+    divergences,
+    vulnerableEntities: vulnerable,
+    params,
+    formulas: [
+      {
+        key: 'nfi',
+        title: 'NFI 叙事泡沫指数（v2）',
+        formula: `Σ(分项得分 × 权重) / Σ权重，权重：融资 ${params.nfi.money}% / 情绪 ${params.nfi.sentiment}% / 集中度 ${params.nfi.concentration}% / 加速度 ${params.nfi.acceleration}% / FOMO ${params.nfi.fomo}%`,
+        detail: `加速度超过 ${(1 + params.acceleration.threshold).toFixed(2)} 倍后按阶跃跳升（sharpness=${params.acceleration.sharpness}）；FOMO = 追高词命中 + 感叹号密度`,
+      },
+      {
+        key: 'crs',
+        title: 'CRS 危机风险分（v2）',
+        formula: `基础权重 NFI ${params.crs.nfi}% / 利率 ${params.crs.rates}% / 信用 ${params.crs.credit}% / 指数 ${params.crs.index}%，再加交叉项（利率×信用）最多 +8 分`,
+        detail: `宏观指标用 20 年历史分位数化；OAS > ${params.steps.oas}% 阶跃跳升；纳指回撤 > ${(params.dynamic.drawdown * 100).toFixed(0)}% 或收益率倒挂时宏观权重 ×${params.dynamic.boost}`,
+      },
+      {
+        key: 'fomo',
+        title: 'FOMO 系数',
+        formula: '命中追高词（暴涨/翻倍/踏空/狂飙/疯抢/涨停…）每个 22 分 + 感叹号密度每百字 6 分（上限 30），封顶 100',
+        detail: `本次命中：${inputs.fomo.hits.join('、') || '无'}；感叹号密度 ${inputs.fomo.exclaimDensity}/百字`,
+      },
+    ],
   }
 }

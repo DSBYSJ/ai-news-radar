@@ -1,4 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite'
+import { fomoCoefficient } from './calculation.ts'
 
 /**
  * 叙事泡沫指数（Narrative Froth Index, NFI）
@@ -245,4 +246,106 @@ export function narrativeFroth(db: DatabaseSync, opts: { days?: number; now?: nu
   ]
 
   return { windowDays: days, articles: total, classified, nfi, band, factors, observations, latestDate }
+}
+
+/**
+ * 叙事原始输入（v0.26.0）：把 NFI 需要的原始量一次性算出来，
+ * v1（narrativeFroth）与 v2（computeNfi）共用，避免两套口径。
+ */
+export interface NarrativeInputs {
+  windowDays: number
+  articles: number
+  classified: number
+  positive: number
+  negative: number
+  /** 融资/上市类占比 0~1 */
+  moneyShare: number
+  /** 情绪偏正 -1~1 */
+  sentimentSkew: number | null
+  /** 乐观度 0~100（正面占比） */
+  optimism: number | null
+  /** 前 5 实体占比 0~1 */
+  concentration: number | null
+  /** 热度加速度：7 日均线的环比变化率（1 = 不变） */
+  acceleration: number | null
+  /** FOMO 系数（感叹号 + 追高词） */
+  fomo: { score: number; hits: string[]; exclaimDensity: number }
+  latestDate: string | null
+}
+
+export function narrativeInputs(db: DatabaseSync, opts: { days?: number; now?: number } = {}): NarrativeInputs {
+  const days = Math.max(7, Math.min(180, opts.days ?? 30))
+  const now = opts.now ?? Date.now()
+  const cutoff = new Date(now - days * 86_400_000).toISOString().slice(0, 10)
+
+  const rows = db
+    .prepare(
+      `SELECT a.title, a.summary, a.category, a.entities, a.sentiment, a.published_at
+         FROM articles a
+        WHERE a.ai_relevant = 1 AND date(a.published_at) >= ?`,
+    )
+    .all(cutoff) as unknown as {
+    title: string
+    summary: string | null
+    category: string
+    entities: string | null
+    sentiment: string | null
+    published_at: string
+  }[]
+
+  const total = rows.length
+  const moneyCount = rows.filter((r) => r.category === 'funding' || hitAny(`${r.title} ${r.summary ?? ''}`, MONEY_WORDS)).length
+  const classifiedRows = rows.filter((r) => r.sentiment !== null)
+  const positive = classifiedRows.filter((r) => r.sentiment === 'positive').length
+  const negative = classifiedRows.filter((r) => r.sentiment === 'negative').length
+  const classified = classifiedRows.length
+  const sentimentSkew = classified > 0 ? (positive - negative) / classified : null
+  const optimism = classified > 0 ? Math.round((positive / classified) * 100) : null
+
+  // 实体集中度
+  const entityCount = new Map<string, number>()
+  for (const r of rows) {
+    if (!r.entities) continue
+    try {
+      const list = JSON.parse(r.entities) as unknown
+      if (!Array.isArray(list)) continue
+      for (const name of list) {
+        if (typeof name !== 'string' || !name.trim()) continue
+        entityCount.set(name, (entityCount.get(name) ?? 0) + 1)
+      }
+    } catch {
+      /* 脏数据跳过 */
+    }
+  }
+  const entityTotal = [...entityCount.values()].reduce((a, b) => a + b, 0)
+  const top5 = [...entityCount.values()].sort((a, b) => b - a).slice(0, 5).reduce((a, b) => a + b, 0)
+  const concentration = entityTotal > 0 ? top5 / entityTotal : null
+
+  // 热度加速度：7 日均线的环比变化率
+  const dayMs = 86_400_000
+  const inRange = (r: { published_at: string }, from: number, to: number): boolean => {
+    const t = Date.parse(r.published_at)
+    return t >= now - from * dayMs && t < now - to * dayMs
+  }
+  const recent = rows.filter((r) => inRange(r, 7, 0)).length / 7
+  const prev = rows.filter((r) => inRange(r, 14, 7)).length / 7
+  const acceleration = prev >= 1 ? recent / prev : null
+
+  // FOMO：标题+摘要里的追高词与感叹号
+  const fomo = fomoCoefficient(rows.map((r) => `${r.title} ${r.summary ?? ''}`))
+
+  return {
+    windowDays: days,
+    articles: total,
+    classified,
+    positive,
+    negative,
+    moneyShare: total > 0 ? moneyCount / total : 0,
+    sentimentSkew,
+    optimism,
+    concentration,
+    acceleration,
+    fomo,
+    latestDate: total > 0 ? rows[0].published_at.slice(0, 10) : null,
+  }
 }

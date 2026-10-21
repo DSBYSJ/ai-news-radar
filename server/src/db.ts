@@ -28,6 +28,14 @@ function migrate(conn: DatabaseSync): void {
   if (!rawColumns.some((c) => c.name === 'content')) {
     conn.exec('ALTER TABLE raw_items ADD COLUMN content TEXT')
   }
+  // v0.26.0：风险参数 / 宏观历史 / 风险日快照
+  for (const ddl of [
+    `CREATE TABLE IF NOT EXISTS risk_params (key TEXT PRIMARY KEY, params TEXT NOT NULL, updated_at TEXT NOT NULL)`,
+    `CREATE TABLE IF NOT EXISTS macro_history (date TEXT NOT NULL, series TEXT NOT NULL, value REAL NOT NULL, PRIMARY KEY (date, series))`,
+    `CREATE TABLE IF NOT EXISTS risk_daily (date TEXT PRIMARY KEY, nfi REAL, nfi_factors TEXT, crs REAL, crs_factors TEXT, divergences TEXT, created_at TEXT NOT NULL)`,
+  ]) {
+    conn.exec(ddl)
+  }
   // v0.24.0：实体别名 / 底表映射 / 采集日志
   for (const ddl of [
     `CREATE TABLE IF NOT EXISTS entity_aliases (

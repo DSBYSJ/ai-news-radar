@@ -162,3 +162,31 @@ CREATE INDEX IF NOT EXISTS idx_collect_log_at ON collect_log(at);
 
 -- AI 处理状态（articles 的调试字段；不影响现有查询）
 -- ai_status: 'ok' | 'failed' | 'timeout' | 'heuristic'
+
+
+-- ============ v0.26.0：风险模块重构（分位数 / 背离 / 参数 / 回溯） ============
+-- 风险参数（可在后台调；key 形如 'default'）
+CREATE TABLE IF NOT EXISTS risk_params (
+  key        TEXT PRIMARY KEY,
+  params     TEXT NOT NULL,           -- JSON（完整参数对象）
+  updated_at TEXT NOT NULL
+);
+
+-- 宏观历史快照（每天每序列一行，用于分位数/Z-Score 与回溯）
+CREATE TABLE IF NOT EXISTS macro_history (
+  date    TEXT NOT NULL,
+  series  TEXT NOT NULL,
+  value   REAL NOT NULL,
+  PRIMARY KEY (date, series)
+);
+
+-- 风险分数日快照（回溯视图的数据源）
+CREATE TABLE IF NOT EXISTS risk_daily (
+  date        TEXT PRIMARY KEY,
+  nfi         REAL,
+  nfi_factors TEXT,                   -- JSON
+  crs         REAL,
+  crs_factors TEXT,                   -- JSON
+  divergences TEXT,                   -- JSON
+  created_at  TEXT NOT NULL
+);

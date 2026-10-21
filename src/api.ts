@@ -14,6 +14,8 @@ import type {
   HotResponse,
   OverviewResponse,
   RiskReport,
+  RiskParams,
+  RiskHistoryPoint,
   AliasRule,
   MappingRow,
   EntityDailySeries,
@@ -91,6 +93,16 @@ export const api = {
   realignStatus: (id: string) => get<{ status: string; report?: unknown; error?: string }>(`/entities/realign/${id}`),
   collectDebug: (days = 7) => get<CollectDebug>('/debug/collect', { days }),
   aiStatus: (days = 14) => get<AiStatusDebug>('/debug/ai-status', { days }),
+
+  // v0.26.0 风险模块
+  riskHistory: (days = 180) => get<{ days: number; items: RiskHistoryPoint[] }>('/risk/history', { days }),
+  riskParams: () => get<{ params: RiskParams; defaults: RiskParams }>('/risk/params'),
+  riskSaveParams: (params: unknown) =>
+    post<{ ok: boolean; params?: RiskParams; errors?: string[] }>('/risk/params', { params }),
+  riskResetParams: () => post<{ ok: boolean; params: RiskParams }>('/risk/params/reset'),
+  riskRecompute: (days = 180) => post<{ ok: boolean; jobId?: string }>('/risk/recompute', undefined),
+  riskRecomputeStatus: (id: string) =>
+    get<{ status: string; report?: unknown; error?: string }>(`/risk/recompute/${id}`),
 
   /** 独立模块：AI 估值与危机风险（叙事指数 + 可选危机分） */
   risk: (days = 30) => get<RiskReport>('/risk', { days }),

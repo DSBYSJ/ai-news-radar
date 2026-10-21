@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api.ts'
-import type { RiskFactor, RiskReport } from '../types.ts'
+import type { Divergence, RiskFactorV2, RiskReport, VulnerableEntity } from '../types.ts'
 import MetricInfo from '../components/MetricInfo.tsx'
+import WaterfallChart from '../components/WaterfallChart.tsx'
+import RiskHistoryChart from '../components/RiskHistoryChart.tsx'
 
 const BAND_TEXT: Record<string, { label: string; hint: string }> = {
   calm: { label: '冷静', hint: '叙事没有明显过热：融资话题占比低、情绪不偏、关注点分散。' },
@@ -24,23 +26,23 @@ function barColor(score: number | null): string {
   return 'var(--accent)'
 }
 
-function FactorRow({ f }: { f: RiskFactor }) {
-  const score = f.score
+function FactorRow({ f }: { f: RiskFactorV2 }) {
   return (
     <li className="py-2.5">
       <div className="flex items-baseline gap-2">
         <span className="text-[12.5px] font-medium text-slate-700 dark:text-slate-200">{f.label}</span>
         <span className="num text-[11px] text-slate-400 dark:text-slate-500">
-          {score === null ? '未参与' : `${score}`} × {f.weight}%
+          {f.score} 分 · 权重 {f.weight}% → 贡献 {f.contribution}
         </span>
         <span className="num ml-auto text-[11px] text-slate-400 dark:text-slate-500">
           {f.value === null ? '—' : f.value}
+          {f.percentile !== null ? `（分位 ${(f.percentile * 100).toFixed(0)}%）` : ''}
         </span>
       </div>
       <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-white/[0.07]">
         <div
           className="h-full rounded-full transition-[width] duration-500"
-          style={{ width: `${score ?? 0}%`, backgroundColor: barColor(score) }}
+          style={{ width: `${f.score}%`, backgroundColor: barColor(f.score) }}
         />
       </div>
       <p className="mt-1 text-[10.5px] leading-relaxed text-slate-400 dark:text-slate-500">{f.note}</p>
@@ -48,12 +50,69 @@ function FactorRow({ f }: { f: RiskFactor }) {
   )
 }
 
+/** 背离预警卡片（item 5） */
+function DivergenceCard({ d }: { d: Divergence }) {
+  const critical = d.severity === 'critical'
+  return (
+    <div
+      className={`rounded-xl border p-3 ${
+        critical
+          ? 'border-red-300 bg-red-50/70 dark:border-red-500/30 dark:bg-red-950/25'
+          : 'border-amber-300 bg-amber-50/70 dark:border-amber-500/25 dark:bg-amber-950/20'
+      }`}
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <span
+          className={`rounded px-1.5 py-0.5 text-[10px] font-semibold text-white ${
+            critical ? 'bg-red-600' : 'bg-amber-500'
+          }`}
+        >
+          {d.typeLabel}
+        </span>
+        <span className="text-[12.5px] font-medium text-slate-800 dark:text-slate-100">{d.title}</span>
+        {d.entity && (
+          <span className="num rounded bg-slate-900/80 px-1.5 py-0.5 text-[10px] text-white">{d.entity}</span>
+        )}
+      </div>
+      <p className="mt-1 text-[11px] leading-relaxed text-slate-600 dark:text-slate-300">{d.detail}</p>
+      <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1">
+        {d.metrics.map((m) => (
+          <span key={m.label} className="num text-[10.5px] text-slate-500 dark:text-slate-400">
+            {m.label} {m.value}
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/** 脆弱实体（item 6） */
+function VulnerableList({ items }: { items: VulnerableEntity[] }) {
+  if (items.length === 0) return null
+  return (
+    <ul className="divide-y divide-slate-100 dark:divide-white/[0.06]">
+      {items.map((v) => (
+        <li key={v.entity} className="flex items-center gap-2 py-2 text-[12px]">
+          <span className="num w-8 shrink-0 rounded bg-slate-100 px-1 text-center text-[10.5px] font-semibold text-slate-600 dark:bg-white/10 dark:text-slate-300">
+            {v.score}
+          </span>
+          <span className="min-w-0 flex-1 truncate font-medium text-slate-700 dark:text-slate-200">{v.entity}</span>
+          <span className="num shrink-0 text-[10.5px] text-slate-400">
+            负面 {v.negative}/{v.mentions}
+            {v.heatChange !== null && ` · 热度 ${v.heatChange > 0 ? '+' : ''}${(v.heatChange * 100).toFixed(0)}%`}
+          </span>
+          <span className="hidden shrink-0 text-[10.5px] text-slate-400 sm:block">{v.reason}</span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 /**
- * AI 估值与金融危机风险（独立模块）
+ * AI 估值与金融危机风险（独立模块，v0.26.0）
  *
- * 页面刻意把「能算的」和「算不了的」分开摆在最显眼处：
- * 叙事指数（NFI）随时可算；危机风险分缺宏观数据时**显示为未计算**并列出缺什么。
- * 不把"新闻热度"包装成"估值"或"崩盘概率"。
+ * 展示顺序刻意如此：先「有没有异常信号」（背离看板）→ 再「分数怎么来的」（瀑布图）
+ * → 再「落到谁身上」（脆弱实体）→ 最后「历史上准不准」（回溯）。
  */
 export default function RiskPage() {
   const [days, setDays] = useState(30)
@@ -82,8 +141,9 @@ export default function RiskPage() {
     }
   }, [days])
 
-  const n = report?.narrative
-  const band = BAND_TEXT[n?.band ?? 'unknown']
+  const nfi = report?.nfi
+  const band = BAND_TEXT[nfi?.band ?? report?.narrative.band ?? 'unknown']
+  const formulaOf = (key: string): string => report?.formulas.find((f) => f.key === key)?.formula ?? ''
 
   return (
     <div className="space-y-4">
@@ -97,7 +157,7 @@ export default function RiskPage() {
             AI 估值与危机风险
           </h2>
           <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-            叙事泡沫指数用站内新闻算；危机风险分必须接利率/信用利差/指数，缺数据就不出概率。
+            叙事泡沫指数（NFI）用站内新闻算；危机风险分（CRS）必须接利率/信用利差/指数，缺数据就不出概率。
           </p>
         </div>
         <div className="flex items-center gap-1.5">
@@ -123,53 +183,25 @@ export default function RiskPage() {
         <p className="rounded-lg bg-red-50 p-3 text-sm text-red-600 dark:bg-red-950/40 dark:text-red-400">{error}</p>
       )}
 
-      {/* 叙事泡沫指数 */}
-      {n && (
-        <section className="card card-accent p-4">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="min-w-0">
-              <p className="eyebrow text-[10px] text-slate-400 dark:text-slate-500">叙事泡沫指数 NFI</p>
-              <div className="mt-1 flex items-baseline gap-2">
-                <span className="num text-[34px] font-semibold leading-none" style={{ color: barColor(n.nfi) }}>
-                  {n.nfi ?? '—'}
-                </span>
-                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600 dark:bg-white/10 dark:text-slate-300">
-                  {band.label}
-                </span>
-              </div>
-              <p className="mt-2 max-w-[52ch] text-[11.5px] leading-relaxed text-slate-500 dark:text-slate-400">
-                {band.hint}
-              </p>
-            </div>
-            <div className="num shrink-0 text-right text-[11px] text-slate-400 dark:text-slate-500">
-              <p>窗口 {n.windowDays} 天</p>
-              <p className="mt-0.5">{n.articles} 条入库</p>
-              <p className="mt-0.5">情感判定 {n.classified} 条</p>
-            </div>
-          </div>
-
-          <ul className="mt-3 divide-y divide-slate-100 border-t border-slate-100 dark:divide-white/[0.06] dark:border-white/[0.06]">
-            {n.factors.map((f) => (
-              <FactorRow key={f.key} f={f} />
-            ))}
-          </ul>
+      {/* ===== 背离预警（置顶） ===== */}
+      {report && report.divergences.length > 0 && (
+        <section className="space-y-2">
+          <p className="eyebrow flex items-center gap-1.5 text-[10px] text-[var(--hot)]">
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-[var(--hot)]" />
+            背离预警 · {report.divergences.length} 条
+          </p>
+          {report.divergences.map((d) => (
+            <DivergenceCard key={d.type} d={d} />
+          ))}
         </section>
       )}
 
-      {/* 危机风险分 */}
-      <section className="card p-4">
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <p className="eyebrow flex items-center gap-1.5 text-[10px] text-slate-400 dark:text-slate-500">
-            危机风险分 CRS
-            <MetricInfo metric="crs" />
-          </p>
-          <p className="text-[10.5px] text-slate-400 dark:text-slate-500">未来 12 个月</p>
-        </div>
-
-        {/* 三个宏观读数：先看事实，再看合成分 */}
-        {report && Object.keys(report.macro.series).length > 0 && (
-          <div className="mt-2 grid gap-2 sm:grid-cols-3">
-            {Object.values(report.macro.series).map((s) => (
+      {/* ===== 宏观读数 ===== */}
+      {report && Object.keys(report.macro.series).length > 0 && (
+        <div className="grid gap-2 sm:grid-cols-4">
+          {Object.values(report.macro.series)
+            .filter((s) => s.key !== 'rates2y')
+            .map((s) => (
               <div key={s.key} className="rounded-lg bg-slate-50/80 p-2.5 dark:bg-white/[0.03]">
                 <p className="text-[10px] text-slate-400 dark:text-slate-500">{s.label}</p>
                 <p className="num mt-0.5 text-[15px] font-semibold text-slate-800 dark:text-slate-100">
@@ -182,8 +214,100 @@ export default function RiskPage() {
                 </p>
               </div>
             ))}
+          {report.macro.inversion !== null && (
+            <div className="rounded-lg bg-slate-50/80 p-2.5 dark:bg-white/[0.03]">
+              <p className="text-[10px] text-slate-400 dark:text-slate-500">收益率曲线</p>
+              <p
+                className={`mt-0.5 text-[15px] font-semibold ${
+                  report.macro.inversion ? 'text-[var(--hot)]' : 'text-slate-800 dark:text-slate-100'
+                }`}
+              >
+                {report.macro.inversion ? '倒挂' : '正常'}
+              </p>
+              <p className="mt-0.5 text-[10px] text-slate-400 dark:text-slate-500">2Y vs 10Y</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ===== 叙事泡沫指数 ===== */}
+      {report && (
+        <section className="card card-accent p-4">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="eyebrow flex items-center gap-1.5 text-[10px] text-slate-400 dark:text-slate-500">
+                叙事泡沫指数 NFI
+                <MetricInfo metric="nfi" />
+                <span className="cursor-help text-[10px] text-slate-400 underline decoration-dotted" title={formulaOf('nfi')}>
+                  公式
+                </span>
+              </p>
+              <div className="mt-1 flex items-baseline gap-2">
+                <span className="num text-[34px] font-semibold leading-none" style={{ color: barColor(nfi?.score ?? null) }}>
+                  {nfi?.score ?? '—'}
+                </span>
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600 dark:bg-white/10 dark:text-slate-300">
+                  {band.label}
+                </span>
+              </div>
+              <p className="mt-2 max-w-[52ch] text-[11.5px] leading-relaxed text-slate-500 dark:text-slate-400">
+                {band.hint}
+              </p>
+            </div>
+            <div className="num shrink-0 text-right text-[11px] text-slate-400 dark:text-slate-500">
+              <p>窗口 {report.windowDays} 天</p>
+              <p className="mt-0.5">{report.narrative.articles} 条入库</p>
+              <p className="mt-0.5">情感判定 {report.narrative.classified} 条</p>
+            </div>
           </div>
-        )}
+
+          <ul className="mt-3 divide-y divide-slate-100 border-t border-slate-100 dark:divide-white/[0.06] dark:border-white/[0.06]">
+            {(nfi?.factors ?? []).map((f) => (
+              <li key={f.key} className="py-2.5">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-[12.5px] font-medium text-slate-700 dark:text-slate-200">{f.label}</span>
+                  <span className="num text-[11px] text-slate-400 dark:text-slate-500">
+                    {f.score === null ? '未参与' : `${f.score}`} × {f.weight}%
+                  </span>
+                  <span className="num ml-auto text-[11px] text-slate-400 dark:text-slate-500">
+                    {f.value === null ? '—' : f.value}
+                  </span>
+                </div>
+                <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-white/[0.07]">
+                  <div
+                    className="h-full rounded-full transition-[width] duration-500"
+                    style={{ width: `${f.score ?? 0}%`, backgroundColor: barColor(f.score) }}
+                  />
+                </div>
+                <p className="mt-1 text-[10.5px] leading-relaxed text-slate-400 dark:text-slate-500">{f.note}</p>
+              </li>
+            ))}
+          </ul>
+
+          {nfi && (
+            <p className="mt-2 flex flex-wrap items-center gap-1.5 text-[10.5px] text-slate-400">
+              <span className="cursor-help underline decoration-dotted" title={formulaOf('fomo')}>
+                FOMO 系数 {nfi.fomo.score}
+              </span>
+              {nfi.fomo.hits.length > 0 && <span className="num">命中：{nfi.fomo.hits.join('、')}</span>}
+              <span className="num">感叹号密度 {nfi.fomo.exclaimDensity}/百字</span>
+            </p>
+          )}
+        </section>
+      )}
+
+      {/* ===== 危机风险分 + 瀑布图 ===== */}
+      <section className="card p-4">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <p className="eyebrow flex items-center gap-1.5 text-[10px] text-slate-400 dark:text-slate-500">
+            危机风险分 CRS
+            <MetricInfo metric="crs" />
+            <span className="cursor-help text-[10px] text-slate-400 underline decoration-dotted" title={formulaOf('crs')}>
+              公式
+            </span>
+          </p>
+          <p className="text-[10.5px] text-slate-400 dark:text-slate-500">未来 12 个月</p>
+        </div>
 
         {report?.crisis ? (
           <>
@@ -200,6 +324,22 @@ export default function RiskPage() {
                 </span>
               )}
             </div>
+
+            {report.waterfall && (
+              <div className="mt-3">
+                <p className="eyebrow mb-1 text-[10px] text-slate-400 dark:text-slate-500">归因拆解</p>
+                <WaterfallChart items={report.waterfall} />
+                <p className="num mt-1 text-[10px] text-slate-400">
+                  各项贡献之和 = 合计（校验用）：
+                  {report.waterfall
+                    .filter((w) => w.kind === 'item')
+                    .reduce((s, w) => s + w.value, 0)
+                    .toFixed(1)}{' '}
+                  vs 总分 {report.crisis.score}
+                </p>
+              </div>
+            )}
+
             <ul className="mt-2 divide-y divide-slate-100 border-t border-slate-100 dark:divide-white/[0.06] dark:border-white/[0.06]">
               {report.crisis.factors.map((f) => (
                 <FactorRow key={f.key} f={f} />
@@ -231,52 +371,36 @@ export default function RiskPage() {
         )}
       </section>
 
-      {/* 怎么读这个分 */}
-      <details className="rounded-xl border border-[var(--line)] px-3 py-2">
-        <summary className="cursor-pointer list-none text-[11px] text-slate-500 dark:text-slate-400">
-          怎么读这个分？
-        </summary>
-        <div className="mt-2 space-y-1.5 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
-          <p>
-            <b className="text-slate-600 dark:text-slate-300">四个分项各管一件事：</b>
-            利率 = 折现率（长久期资产最怕它涨）、信用 = 借钱贵不贵（借钱便宜=自满）、
-            指数 = 已经涨了多少（超涨=脆弱）、叙事 = 讨论热不热（过热是泡沫的必要条件）。
-          </p>
-          <p>
-            <b className="text-slate-600 dark:text-slate-300">分档：</b>
-            0–30 低（常态）· 30–50 需留意 · 50–70 偏高 · 70+ 高。四项里有两三项同时偏高位，才值得紧张。
-          </p>
-          <p>
-            <b className="text-slate-600 dark:text-slate-300">概率区间：</b>
-            以 12%/年 的危机基础率为锚、按风险分做指数调整，±5pp 是区间宽度。
-            参数是人为设定的、没做历史回测 —— 所以看量级就行，别当精确值。
-          </p>
-          <p>
-            <b className="text-slate-600 dark:text-slate-300">最该记住的一点：</b>
-            分数高不等于明天崩，分数低也不等于安全。它衡量的是「脆弱性」，
-            真正引爆还需要一个触发事件（政策、财报、某家公司暴雷）。
-          </p>
-        </div>
-      </details>
-
-      {/* 观察项 + 免责 */}
-      {n && (
+      {/* ===== 脆弱实体（CRS ≥ 50 才有意义） ===== */}
+      {report && report.vulnerableEntities.length > 0 && (
         <section className="card p-4">
-          <p className="eyebrow text-[10px] text-slate-400 dark:text-slate-500">不计分的观察项</p>
-          <ul className="mt-1.5 space-y-1">
-            {n.observations.map((o) => (
-              <li key={o.key} className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
-                <span className="font-medium text-slate-600 dark:text-slate-300">{o.label}：</span>
-                {o.value}
-              </li>
-            ))}
-          </ul>
-          {report && (
-            <p className="mt-3 border-t border-slate-100 pt-2.5 text-[10.5px] leading-relaxed text-slate-400 dark:border-white/[0.06] dark:text-slate-500">
-              {report.disclaimer}
-            </p>
-          )}
+          <p className="eyebrow text-[10px] text-slate-400 dark:text-slate-500">
+            当前宏观背景下最脆弱的 Top {report.vulnerableEntities.length} AI 实体
+          </p>
+          <p className="mt-1 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+            依据：负面新闻占比、热度退潮幅度、缺乏实质融资（"资金流出最快"目前没有资金流数据，用这三个代理指标）。
+          </p>
+          <div className="mt-2">
+            <VulnerableList items={report.vulnerableEntities} />
+          </div>
         </section>
+      )}
+
+      {/* ===== 历史回溯 ===== */}
+      <section className="card p-4">
+        <p className="eyebrow text-[10px] text-slate-400 dark:text-slate-500">历史回溯（近一年）</p>
+        <p className="mt-1 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+          NFI 与 CRS 的日快照；红色虚线标出已知重大事件，可用来检验"分数高点"与"真实事件"是否对得上。
+        </p>
+        <div className="mt-2">
+          <RiskHistoryChart days={365} />
+        </div>
+      </section>
+
+      {report && (
+        <p className="border-t border-[var(--line)] pt-2.5 text-[10.5px] leading-relaxed text-slate-400 dark:border-white/[0.06] dark:text-slate-500">
+          {report.disclaimer}
+        </p>
       )}
     </div>
   )

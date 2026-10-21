@@ -6,6 +6,9 @@ import { dailyEdition } from '../analytics/edition.ts'
 import { periodReport } from '../analytics/period.ts'
 import { hotRanking } from '../analytics/hot.ts'
 import { riskReport } from '../risk/index.ts'
+import { DEFAULT_PARAMS } from '../risk/calculation.ts'
+import { loadParams, mergeParams, resetParams, saveParams, validateParams } from '../risk/params.ts'
+import { runBackfill } from '../risk/backfill.ts'
 import { deleteAlias, listAliases, listMapping, upsertAlias } from '../entities/alias.ts'
 import { realign } from '../entities/realign.ts'
 import { entityDailySeries } from '../analytics/trend.ts'
@@ -518,6 +521,71 @@ export async function newsRoutes(app: FastifyInstance): Promise<void> {
       )
       .all(cutoff) as unknown as { id: number; title: string; ai_status: string; ai_error: string | null; published_at: string; source_name: string }[]
     return { days, byDay, recent }
+  })
+
+
+  // ==================== v0.26.0：风险模块（参数 / 回溯 / 重算） ====================
+
+  /** 风险参数（当前生效值 + 默认值，供调参面板与 tooltip） */
+  app.get('/api/news/risk/params', async () => {
+    const db = getDb()
+    return { params: loadParams(db), defaults: DEFAULT_PARAMS }
+  })
+
+  /** 保存风险参数（校验权重合计等）；保存后建议触发一次异步重算 */
+  app.post('/api/news/risk/params', async (req) => {
+    const body = (req.body ?? {}) as { params?: unknown }
+    const db = getDb()
+    const merged = mergeParams(DEFAULT_PARAMS, body.params)
+    const check = validateParams(merged)
+    if (!check.ok) return { ok: false, errors: check.errors }
+    saveParams(db, body.params)
+    return { ok: true, params: loadParams(db) }
+  })
+
+  /** 恢复默认参数 */
+  app.post('/api/news/risk/params/reset', async () => {
+    const db = getDb()
+    return { ok: true, params: resetParams(db) }
+  })
+
+  /** 历史回溯：risk_daily 的日快照（NFI / CRS 走势） */
+  app.get('/api/news/risk/history', async (req) => {
+    const q = req.query as Query
+    const days = Math.max(7, Math.min(400, num(q.days, 180)))
+    const db = getDb()
+    const rows = db
+      .prepare('SELECT date, nfi, crs FROM risk_daily ORDER BY date DESC LIMIT ?')
+      .all(days) as unknown as { date: string; nfi: number | null; crs: number | null }[]
+    return { days, items: rows.reverse() }
+  })
+
+  /**
+   * 异步重算：后台跑逐日回算，立即返回 job id（不阻塞接口）。
+   * 语料越大越慢，所以必须走异步。
+   */
+  const riskJobs = new Map<string, { status: 'running' | 'done' | 'error'; startedAt: string; finishedAt?: string; report?: unknown; error?: string }>()
+  app.post('/api/news/risk/recompute', async (req) => {
+    const q = req.query as Query
+    const days = Math.max(7, Math.min(400, num(q.days, 180)))
+    const id = `rk_${Date.now().toString(36)}`
+    riskJobs.set(id, { status: 'running', startedAt: new Date().toISOString() })
+    setImmediate(() => {
+      void (async () => {
+        try {
+          const report = await runBackfill(getDb(), { days, apply: true })
+          riskJobs.set(id, { status: 'done', startedAt: '', finishedAt: new Date().toISOString(), report })
+        } catch (err) {
+          riskJobs.set(id, { status: 'error', startedAt: '', finishedAt: new Date().toISOString(), error: String(err) })
+        }
+      })()
+    })
+    return { ok: true, jobId: id, days }
+  })
+  app.get('/api/news/risk/recompute/:id', async (req) => {
+    const job = riskJobs.get((req.params as { id: string }).id)
+    if (!job) return { status: 'unknown' }
+    return job
   })
 
   /** 结构化日报：头条 + 分类分区 + 快讯（简报页按版面渲染） */

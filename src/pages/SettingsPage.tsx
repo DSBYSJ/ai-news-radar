@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api.ts'
-import type { AiStatusDebug, AliasRule, CollectDebug, MappingRow } from '../types.ts'
+import type { AiStatusDebug, AliasRule, CollectDebug, MappingRow, RiskParams } from '../types.ts'
 
 /**
  * 后台/调试页（v0.24.0）
@@ -27,6 +27,10 @@ export default function SettingsPage() {
   const [collect, setCollect] = useState<CollectDebug | null>(null)
   const [ai, setAi] = useState<AiStatusDebug | null>(null)
   const [job, setJob] = useState<{ id: string; status: string; report?: unknown } | null>(null)
+  // 风险参数（v0.26.0）
+  const [riskParams, setRiskParams] = useState<RiskParams | null>(null)
+  const [riskMsg, setRiskMsg] = useState('')
+  const [riskJob, setRiskJob] = useState<{ id: string; status: string } | null>(null)
 
   const refreshAliases = useCallback(async () => {
     const r = await api.aliasList()
@@ -43,6 +47,10 @@ export default function SettingsPage() {
     void refreshMapping()
     void api.collectDebug(7).then(setCollect).catch(() => {})
     void api.aiStatus(14).then(setAi).catch(() => {})
+    void api
+      .riskParams()
+      .then((r) => setRiskParams(r.params ?? null))
+      .catch(() => {})
   }, [refreshAliases, refreshMapping])
 
   const saveAlias = async (): Promise<void> => {
@@ -236,6 +244,233 @@ export default function SettingsPage() {
             </table>
           </div>
         )}
+      </section>
+
+
+      {/* ===== 风险参数（v0.26.0：权重 / 阶跃阈值 / 背离条件） ===== */}
+      <section className="card p-4">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <p className="eyebrow text-[10px] text-slate-400 dark:text-slate-500">风险算法参数</p>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={async () => {
+                const r = await api.riskResetParams()
+                if (r.params) setRiskParams(r.params)
+                setRiskMsg('已恢复默认参数')
+              }}
+              className="rounded-lg border border-[var(--line)] px-2.5 py-1 text-[11px] text-slate-500 transition hover:border-slate-400 dark:text-slate-400"
+            >
+              恢复默认
+            </button>
+            <button
+              type="button"
+              onClick={async () => {
+                if (!riskParams) return
+                const r = await api.riskSaveParams(riskParams)
+                if (!r.ok) {
+                  setRiskMsg(`保存失败：${(r.errors ?? []).join('；')}`)
+                  return
+                }
+                if (r.params) setRiskParams(r.params)
+                setRiskMsg('参数已保存，历史曲线需重算后才会更新…')
+                // 异步重算（不阻塞）
+                const job = await api.riskRecompute(180)
+                if (job.jobId) {
+                  setRiskJob({ id: job.jobId, status: 'running' })
+                  for (let i = 0; i < 30; i++) {
+                    await new Promise((res) => setTimeout(res, 800))
+                    const st = await api.riskRecomputeStatus(job.jobId)
+                    setRiskJob({ id: job.jobId, status: st.status })
+                    if (st.status !== 'running') break
+                  }
+                  setRiskMsg(
+                    riskJob?.status === 'error' ? '重算失败' : '参数已保存，重算完成',
+                  )
+                }
+              }}
+              className="rounded-lg bg-[var(--accent)] px-3 py-1.5 text-[11.5px] font-medium text-white transition hover:opacity-90"
+            >
+              保存并异步重算
+            </button>
+          </div>
+        </div>
+        {riskMsg && <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">{riskMsg}</p>}
+        {riskJob && (
+          <p className="num mt-1 text-[10.5px] text-slate-400">重算任务 {riskJob.id}：{riskJob.status}</p>
+        )}
+
+        {!riskParams ? (
+          <p className="mt-2 text-[12px] text-slate-400">加载中…</p>
+        ) : (
+          <div className="mt-3 grid gap-4 sm:grid-cols-2">
+            <div>
+              <p className="text-[11px] font-medium text-slate-600 dark:text-slate-300">NFI 权重（合计 100）</p>
+              <div className="mt-1.5 grid grid-cols-2 gap-2">
+                {(
+                  [
+                    ['money', '融资/上市'],
+                    ['sentiment', '情绪偏正'],
+                    ['concentration', '叙事集中'],
+                    ['acceleration', '热度加速度'],
+                    ['fomo', 'FOMO'],
+                  ] as const
+                ).map(([key, label]) => (
+                  <label key={key} className="flex items-center justify-between gap-2 text-[11px] text-slate-500">
+                    <span>{label}</span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={riskParams.nfi[key]}
+                      onChange={(e) =>
+                        setRiskParams({ ...riskParams, nfi: { ...riskParams.nfi, [key]: Number(e.target.value) } })
+                      }
+                      className="num w-16 rounded border border-[var(--line)] bg-white px-1.5 py-0.5 text-right text-[11px] dark:bg-white/[0.04]"
+                    />
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <p className="text-[11px] font-medium text-slate-600 dark:text-slate-300">CRS 权重（合计 100）</p>
+              <div className="mt-1.5 grid grid-cols-2 gap-2">
+                {(
+                  [
+                    ['nfi', '叙事 NFI'],
+                    ['rates', '利率'],
+                    ['credit', '信用'],
+                    ['index', '指数'],
+                  ] as const
+                ).map(([key, label]) => (
+                  <label key={key} className="flex items-center justify-between gap-2 text-[11px] text-slate-500">
+                    <span>{label}</span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={riskParams.crs[key]}
+                      onChange={(e) =>
+                        setRiskParams({ ...riskParams, crs: { ...riskParams.crs, [key]: Number(e.target.value) } })
+                      }
+                      className="num w-16 rounded border border-[var(--line)] bg-white px-1.5 py-0.5 text-right text-[11px] dark:bg-white/[0.04]"
+                    />
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <p className="text-[11px] font-medium text-slate-600 dark:text-slate-300">阶跃阈值</p>
+              <div className="mt-1.5 grid grid-cols-2 gap-2">
+                <label className="flex items-center justify-between gap-2 text-[11px] text-slate-500">
+                  <span>OAS 临界 %</span>
+                  <input
+                    type="number"
+                    step={0.1}
+                    value={riskParams.steps.oas}
+                    onChange={(e) => setRiskParams({ ...riskParams, steps: { ...riskParams.steps, oas: Number(e.target.value) } })}
+                    className="num w-16 rounded border border-[var(--line)] bg-white px-1.5 py-0.5 text-right text-[11px] dark:bg-white/[0.04]"
+                  />
+                </label>
+                <label className="flex items-center justify-between gap-2 text-[11px] text-slate-500">
+                  <span>10Y 临界 %</span>
+                  <input
+                    type="number"
+                    step={0.1}
+                    value={riskParams.steps.rates}
+                    onChange={(e) => setRiskParams({ ...riskParams, steps: { ...riskParams.steps, rates: Number(e.target.value) } })}
+                    className="num w-16 rounded border border-[var(--line)] bg-white px-1.5 py-0.5 text-right text-[11px] dark:bg-white/[0.04]"
+                  />
+                </label>
+                <label className="flex items-center justify-between gap-2 text-[11px] text-slate-500">
+                  <span>回撤触发 %</span>
+                  <input
+                    type="number"
+                    step={1}
+                    value={Math.round(riskParams.dynamic.drawdown * 100)}
+                    onChange={(e) =>
+                      setRiskParams({ ...riskParams, dynamic: { ...riskParams.dynamic, drawdown: Number(e.target.value) / 100 } })
+                    }
+                    className="num w-16 rounded border border-[var(--line)] bg-white px-1.5 py-0.5 text-right text-[11px] dark:bg-white/[0.04]"
+                  />
+                </label>
+                <label className="flex items-center justify-between gap-2 text-[11px] text-slate-500">
+                  <span>动态放大 ×</span>
+                  <input
+                    type="number"
+                    step={0.1}
+                    value={riskParams.dynamic.boost}
+                    onChange={(e) => setRiskParams({ ...riskParams, dynamic: { ...riskParams.dynamic, boost: Number(e.target.value) } })}
+                    className="num w-16 rounded border border-[var(--line)] bg-white px-1.5 py-0.5 text-right text-[11px] dark:bg-white/[0.04]"
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div>
+              <p className="text-[11px] font-medium text-slate-600 dark:text-slate-300">背离触发条件</p>
+              <div className="mt-1.5 grid grid-cols-2 gap-2">
+                <label className="flex items-center justify-between gap-2 text-[11px] text-slate-500">
+                  <span>乐观情绪 ≥</span>
+                  <input
+                    type="number"
+                    value={riskParams.divergence.optimisticSentiment}
+                    onChange={(e) =>
+                      setRiskParams({
+                        ...riskParams,
+                        divergence: { ...riskParams.divergence, optimisticSentiment: Number(e.target.value) },
+                      })
+                    }
+                    className="num w-16 rounded border border-[var(--line)] bg-white px-1.5 py-0.5 text-right text-[11px] dark:bg-white/[0.04]"
+                  />
+                </label>
+                <label className="flex items-center justify-between gap-2 text-[11px] text-slate-500">
+                  <span>连跌天数 ≥</span>
+                  <input
+                    type="number"
+                    value={riskParams.divergence.downDays}
+                    onChange={(e) =>
+                      setRiskParams({ ...riskParams, divergence: { ...riskParams.divergence, downDays: Number(e.target.value) } })
+                    }
+                    className="num w-16 rounded border border-[var(--line)] bg-white px-1.5 py-0.5 text-right text-[11px] dark:bg-white/[0.04]"
+                  />
+                </label>
+                <label className="flex items-center justify-between gap-2 text-[11px] text-slate-500">
+                  <span>热度激增 ×</span>
+                  <input
+                    type="number"
+                    step={0.1}
+                    value={riskParams.divergence.surgeRatio}
+                    onChange={(e) =>
+                      setRiskParams({ ...riskParams, divergence: { ...riskParams.divergence, surgeRatio: Number(e.target.value) } })
+                    }
+                    className="num w-16 rounded border border-[var(--line)] bg-white px-1.5 py-0.5 text-right text-[11px] dark:bg-white/[0.04]"
+                  />
+                </label>
+                <label className="flex items-center justify-between gap-2 text-[11px] text-slate-500">
+                  <span>融资骤降 %</span>
+                  <input
+                    type="number"
+                    value={Math.round(riskParams.divergence.fundingDropRatio * 100)}
+                    onChange={(e) =>
+                      setRiskParams({
+                        ...riskParams,
+                        divergence: { ...riskParams.divergence, fundingDropRatio: Number(e.target.value) / 100 },
+                      })
+                    }
+                    className="num w-16 rounded border border-[var(--line)] bg-white px-1.5 py-0.5 text-right text-[11px] dark:bg-white/[0.04]"
+                  />
+                </label>
+              </div>
+            </div>
+          </div>
+        )}
+        <p className="mt-2 text-[10.5px] leading-relaxed text-slate-400">
+          提示：权重合计必须等于 100（保存时会校验）；阶跃阈值与背离条件改动后，页面上的即时分数会用新参数，
+          历史曲线需要「保存并异步重算」后才会更新。
+        </p>
       </section>
 
       {/* ===== 采集健康度（item 11） ===== */}

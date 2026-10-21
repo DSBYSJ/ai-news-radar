@@ -84,6 +84,7 @@ test('riskReport：没有宏观数据时不给危机概率，并说明缺什么'
     available: false,
     missing: ['10 年期美债收益率', '高收益债信用利差', '纳斯达克指数'],
     series: {},
+    inversion: null,
     notes: ['测试注入'],
     fetchedAt: new Date(NOW).toISOString(),
   }
@@ -103,12 +104,13 @@ test('riskReport：接入宏观数据后才计算风险分与概率区间', asyn
   const macro: MacroSnapshot = {
     available: true,
     missing: [],
+    inversion: false,
     fetchedAt: new Date(NOW).toISOString(),
     notes: [],
     series: {
-      rates10y: { key: 'rates10y', label: '10Y', value: 4.8, asOf: '2026-10-20', yearAgo: 3.9, avg200: null, source: 'test' },
-      creditSpread: { key: 'creditSpread', label: 'OAS', value: 2.6, asOf: '2026-10-20', yearAgo: 3.4, avg200: null, source: 'test' },
-      nasdaq: { key: 'nasdaq', label: 'NDX', value: 26000, asOf: '2026-10-20', yearAgo: 18000, avg200: 22000, source: 'test' },
+      rates10y: { key: 'rates10y', label: '10Y', value: 4.8, asOf: '2026-10-20', yearAgo: 3.9, avg200: null, high52w: null, history: [3.9, 4.8], source: 'test' },
+      creditSpread: { key: 'creditSpread', label: 'OAS', value: 2.6, asOf: '2026-10-20', yearAgo: 3.4, avg200: null, high52w: null, history: [3.4, 2.6], source: 'test' },
+      nasdaq: { key: 'nasdaq', label: 'NDX', value: 26000, asOf: '2026-10-20', yearAgo: 18000, avg200: 22000, high52w: 27000, history: [18000, 26000], source: 'test' },
     },
   }
   const r = await riskReport(db, { now: NOW, macro })

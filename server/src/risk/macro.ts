@@ -27,6 +27,10 @@ export interface MacroPoint {
   yearAgo: number | null
   /** 200 个观测的均值（指数用；其它为 null） */
   avg200: number | null
+  /** 52 周最高值（算回撤用；指数用） */
+  high52w: number | null
+  /** 历史序列（分位数 / Z-Score 用；由长历史 CSV 取得） */
+  history: number[]
   source: string
 }
 
@@ -35,6 +39,8 @@ export interface MacroSnapshot {
   /** 缺哪些（给前端展示"为什么没有危机概率"） */
   missing: string[]
   series: Record<string, MacroPoint>
+  /** 收益率曲线是否倒挂（2Y > 10Y）；无数据为 null */
+  inversion: boolean | null
   notes: string[]
   fetchedAt: string
 }
@@ -82,9 +88,9 @@ function nearest(obs: Observation[], target: string): number | null {
   return best && bestDiff <= 30 * 86_400_000 ? best.value : null
 }
 
-async function fetchFredCsv(seriesId: string): Promise<Observation[]> {
-  // cosd = 起始日期：只要最近两年（DGS10 全量有 269KB / 1962 年至今，够用即可）
-  const cosd = new Date(Date.now() - 800 * 86_400_000).toISOString().slice(0, 10)
+async function fetchFredCsv(seriesId: string, years = 20): Promise<Observation[]> {
+  // cosd = 起始日期：默认拉 20 年（分位数需要长历史；DGS10 全量有 269KB / 1962 年至今）
+  const cosd = new Date(Date.now() - years * 365 * 86_400_000).toISOString().slice(0, 10)
   const url = `https://fred.stlouisfed.org/graph/fredgraph.csv?id=${encodeURIComponent(seriesId)}&cosd=${cosd}`
   const res = await fetch(url, {
     headers: { 'user-agent': 'ai-news-radar/0.1 (personal feed reader)' },
@@ -119,6 +125,7 @@ interface SeriesSpec {
 
 const SPECS: SeriesSpec[] = [
   { key: 'rates10y', label: '10 年期美债收益率', id: 'DGS10', needAvg200: false },
+  { key: 'rates2y', label: '2 年期美债收益率', id: 'DGS2', needAvg200: false },
   { key: 'creditSpread', label: '高收益债信用利差（OAS）', id: 'BAMLH0A0HYM2', needAvg200: false },
   { key: 'nasdaq', label: '纳斯达克综合指数', id: 'NASDAQCOM', needAvg200: true },
 ]
@@ -169,6 +176,7 @@ export async function loadMacro(apiKey: string | undefined, opts: { force?: bool
     const last = obs[obs.length - 1]
     const yearTarget = new Date(Date.parse(last.date) - 365 * 86_400_000).toISOString().slice(0, 10)
     const window200 = obs.slice(-200)
+    const window52w = obs.slice(-252)
     series[r.spec.key] = {
       key: r.spec.key,
       label: r.spec.label,
@@ -179,9 +187,19 @@ export async function loadMacro(apiKey: string | undefined, opts: { force?: bool
         r.spec.needAvg200 && window200.length >= 60
           ? window200.reduce((a, b) => a + b.value, 0) / window200.length
           : null,
+      high52w:
+        r.spec.needAvg200 && window52w.length > 0
+          ? Math.max(...window52w.map((o) => o.value))
+          : null,
+      history: obs.map((o) => o.value),
       source: `${r.spec.id} · ${r.via}`,
     }
   }
+
+  // 倒挂：2 年期 > 10 年期
+  const two = series.rates2y?.value
+  const ten = series.rates10y?.value
+  const inversion = two !== undefined && ten !== undefined ? two > ten : null
 
   const available = Object.keys(series).length > 0
   if (!available) {
@@ -192,7 +210,7 @@ export async function loadMacro(apiKey: string | undefined, opts: { force?: bool
       `宏观数据源：FRED（免 key 的 CSV 下载）；数据日期 ${dates[0]} ~ ${dates[dates.length - 1]}，滞后 1–2 个交易日属正常。`,
     )
   }
-  const snapshot: MacroSnapshot = { available, missing, series, notes, fetchedAt }
+  const snapshot: MacroSnapshot = { available, missing, series, inversion, notes, fetchedAt }
   cached = { at: Date.now(), data: snapshot }
   return snapshot
 }
