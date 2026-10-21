@@ -44,6 +44,39 @@ const CANDIDATES: Candidate[] = [
   { id: 'wired-ai', name: 'Wired AI', url: 'https://www.wired.com/feed/tag/ai/latest/rss', tag: '英文 AI' },
 ]
 
+
+/** 官方工程博客 / 研究机构（v0.33.0）：来源线索来自 AIHOT 的对照结果 —— 它的 19 个来源里
+ *  一半是这类一手信源，而我们一个都没有。X 账号不在此列（合规红线，不抓）。 */
+const OFFICIAL: Candidate[] = [
+  // 已确认可达（服务器实测）
+  { id: 'databricks', name: 'Databricks Blog', url: 'https://www.databricks.com/feed', tag: '机构/研究' },
+  { id: 'metr', name: 'METR', url: 'https://metr.org/feed.xml', tag: '机构/研究' },
+  { id: 'together', name: 'Together AI', url: 'https://www.together.ai/blog/rss.xml', tag: '机构/研究' },
+  // 本轮待验的地址变体（同一站点列多个，看哪个能解析）
+  { id: 'pytorch-a', name: 'PyTorch /blog/feed.xml', url: 'https://pytorch.org/blog/feed.xml', tag: '机构/研究' },
+  { id: 'vllm-a', name: 'vLLM /blog/rss.xml', url: 'https://vllm.ai/blog/rss.xml', tag: '机构/研究' },
+  { id: 'modal-a', name: 'Modal /blog/rss.xml', url: 'https://modal.com/blog/rss.xml', tag: '机构/研究' },
+  { id: 'modal-b', name: 'Modal /blog/feed.xml', url: 'https://modal.com/blog/feed.xml', tag: '机构/研究' },
+  { id: 'waymo-a', name: 'Waymo /blog/rss.xml', url: 'https://waymo.com/blog/rss.xml', tag: '机构/研究' },
+  { id: 'waymo-b', name: 'Waymo /blog/feed/', url: 'https://waymo.com/blog/feed/', tag: '机构/研究' },
+  { id: 'anthropic-a', name: 'Anthropic /news/rss.xml', url: 'https://www.anthropic.com/news/rss.xml', tag: '机构/研究' },
+  { id: 'anthropic-b', name: 'Anthropic /rss.xml', url: 'https://www.anthropic.com/rss.xml', tag: '机构/研究' },
+  { id: 'gdev-a', name: 'GoogleDev alt=rss', url: 'https://developers.googleblog.com/feeds/posts/default?alt=rss', tag: '机构/研究' },
+  { id: 'gdev-b', name: 'GoogleDev default', url: 'https://developers.googleblog.com/feeds/posts/default', tag: '机构/研究' },
+  { id: 'fireworks-a', name: 'Fireworks /blog/rss.xml', url: 'https://fireworks.ai/blog/rss.xml', tag: '机构/研究' },
+  { id: 'fireworks-b', name: 'Fireworks /blog/feed.xml', url: 'https://fireworks.ai/blog/feed.xml', tag: '机构/研究' },
+  { id: 'lmsys-a', name: 'LMSYS /blog/index.xml', url: 'https://lmsys.org/blog/index.xml', tag: '机构/研究' },
+  { id: 'lmsys-b', name: 'LMSYS /rss.xml', url: 'https://lmsys.org/rss.xml', tag: '机构/研究' },
+  { id: 'eleuther-a', name: 'EleutherAI feed.xml', url: 'https://blog.eleuther.ai/feed.xml', tag: '机构/研究' },
+  { id: 'eleuther-b', name: 'EleutherAI rss/', url: 'https://blog.eleuther.ai/rss/', tag: '机构/研究' },
+  { id: 'ibm-a', name: 'IBM Research rss.xml', url: 'https://research.ibm.com/blog/rss.xml', tag: '机构/研究' },
+  { id: 'msr', name: 'Microsoft Research', url: 'https://www.microsoft.com/en-us/research/feed/', tag: '机构/研究' },
+  { id: 'cohere', name: 'Cohere Blog', url: 'https://cohere.com/blog/rss.xml', tag: '机构/研究' },
+  { id: 'langchain', name: 'LangChain Blog', url: 'https://blog.langchain.dev/rss/', tag: '机构/研究' },
+]
+
+const SETS: Record<string, Candidate[]> = { default: CANDIDATES, official: OFFICIAL }
+
 interface Result {
   c: Candidate
   ok: boolean
@@ -78,7 +111,9 @@ async function probe(c: Candidate): Promise<Result> {
   }
 }
 
-const results = await Promise.all(CANDIDATES.map(probe))
+const setName = process.argv.find((a) => a.startsWith('--set='))?.slice(6) ?? 'default'
+const picked = SETS[setName] ?? CANDIDATES
+const results = await Promise.all(picked.map(probe))
 const pad = (s: string, n: number): string => s + ' '.repeat(Math.max(0, n - [...s].reduce((a, ch) => a + (ch.charCodeAt(0) > 255 ? 2 : 1), 0)))
 
 console.log('\n源名'.padEnd(26) + '分类      状态  条数  最新        备注')

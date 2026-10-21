@@ -10,9 +10,10 @@ export interface SeedSource {
  * 采集源清单（2026-10-21 服务器实测可达，见 docs/项目方案.md 第七节）
  *
  * ⚠️ 明确不接入（2026-10-21 在服务器上重测，结果如下）：
- *   返回 HTML 被拦（不绕，直接放弃）：36氪、品玩、机器之心、Stanford HAI
+ *   返回 HTML 被拦（不绕，直接放弃）：36氪、品玩、机器之心、Stanford HAI、Cohere、LangChain
  *   格式无法解析（既非 RSS 也非 Atom）：虎嗅、VentureBeat AI、Hugging Face、Meta AI、
- *     The Batch、Import AI
+ *     The Batch、Import AI、Modal、Waymo、Anthropic、Google Developers、Fireworks、
+ *     LMSYS、EleutherAI、IBM Research（这些站点在境内均取不到可用 feed，已试多个地址变体）
  *   源已停更：新浪科技（最新 2018-09）、SemiAnalysis（最新 2025-09）
  *   历史记录：Google DeepMind 本机不可达但**服务器可达**，已接入
  * ⚠️ 趋势分析要「宁可少而稳」：时通时不通的源会产生比源数量变化更难处理的噪声，
@@ -206,5 +207,50 @@ export const SEED_SOURCES: SeedSource[] = [
     url: 'https://www.wired.com/feed/tag/ai/latest/rss',
     kind: 'rss',
     weight: 2,
+  },
+  // ---------- v0.33.0 新增 6 个官方一手源 ----------
+  // 线索来自 AIHOT 对照：它的 19 个来源里一半是官方工程博客，而我们一个都没有。
+  // 2026-10-21 在服务器上逐个实测（HTTP 200 + 能解析 + 近期有更新）才接入。
+  {
+    id: 'vllm',
+    name: 'vLLM Blog',
+    url: 'https://vllm.ai/blog/rss.xml',
+    kind: 'rss',
+    weight: 3, // 推理框架一手发布，50 条/轮，当日有更新
+  },
+  {
+    id: 'pytorch',
+    name: 'PyTorch Blog',
+    url: 'https://pytorch.org/blog/feed.xml',
+    kind: 'rss',
+    weight: 3, // 训练框架一手
+  },
+  {
+    id: 'databricks',
+    name: 'Databricks Blog',
+    url: 'https://www.databricks.com/feed',
+    kind: 'rss',
+    weight: 2, // 企业级数据/模型平台，工程实践向
+  },
+  {
+    id: 'metr',
+    name: 'METR',
+    url: 'https://metr.org/feed.xml',
+    kind: 'rss',
+    weight: 3, // AI 能力评估研究，噪声极低
+  },
+  {
+    id: 'together',
+    name: 'Together AI',
+    url: 'https://www.together.ai/blog/rss.xml',
+    kind: 'rss',
+    weight: 2, // 推理云厂商，开源模型部署相关
+  },
+  {
+    id: 'msr',
+    name: 'Microsoft Research',
+    url: 'https://www.microsoft.com/en-us/research/feed/',
+    kind: 'rss',
+    weight: 3, // 研究机构一手
   },
 ]
