@@ -65,9 +65,38 @@ function SparkIcon() {
   )
 }
 
+/** 页签集合（顺序即导航顺序）：同时用于 URL 锚点校验 */
+const TABS: [Tab, string][] = [
+  ['overview', '概览'],
+  ['hot', '热点'],
+  ['list', '资讯'],
+  ['trend', '趋势'],
+  ['risk', '风险'],
+  ['settings', '后台'],
+  ['summary', '简报'],
+]
+
+/** 从 location.hash 读初始页签（支持直接分享 /news/#trend 这种链接） */
+function tabFromHash(): Tab {
+  const h = window.location.hash.replace(/^#/, '')
+  return TABS.some(([k]) => k === h) ? (h as Tab) : 'overview'
+}
+
 export default function App() {
-  const [tab, setTab] = useState<Tab>('overview')
+  const [tab, setTabState] = useState<Tab>(tabFromHash)
   const [theme, setTheme] = useState<Theme>(initialTheme)
+
+  /** 切页签时同步 URL 锚点（不产生历史堆栈爆炸：用 replaceState） */
+  const setTab = (t: Tab): void => {
+    setTabState(t)
+    if (window.location.hash !== `#${t}`) window.history.replaceState(null, '', `#${t}`)
+  }
+
+  useEffect(() => {
+    const onHash = (): void => setTabState(tabFromHash())
+    window.addEventListener('hashchange', onHash)
+    return () => window.removeEventListener('hashchange', onHash)
+  }, [])
   const [health, setHealth] = useState<Health | null>(null)
   const [sources, setSources] = useState<SourceItem[]>([])
   const [running, setRunning] = useState<string>('')
@@ -345,17 +374,7 @@ export default function App() {
 
         {/* ===== 页签：分段控件 ===== */}
         <nav className="seg mt-4" role="tablist">
-          {(
-            [
-              ['overview', '概览'],
-              ['hot', '热点'],
-              ['list', '资讯'],
-              ['trend', '趋势'],
-              ['risk', '风险'],
-              ['settings', '后台'],
-              ['summary', '简报'],
-            ] as [Tab, string][]
-          ).map(([key, label]) => (
+          {TABS.map(([key, label]) => (
             <button
               key={key}
               type="button"

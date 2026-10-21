@@ -2,11 +2,33 @@ import { useState } from 'react'
 import type { ReactNode } from 'react'
 import Modal from './Modal.tsx'
 
+/**
+ * 图表卡
+ *
+ * v0.35.0 改动：`level` 原本传「第 1 层 / 第 2 层」这种编号，但编号本身不携带信息 ——
+ * 用户看到「第 2 层」并不知道它是什么意思，而且卡片数（5）和「四层递进」的说法（4）对不上。
+ * 现在改成**语义标签**（基线 / 构成 / 趋势 / 异常 / 情绪 / 实体），并用 `tone` 给不同类别上色，
+ * 让读者扫一眼就能分辨"这张卡在回答什么问题"。
+ */
+
+export type CardTone = 'base' | 'mix' | 'trend' | 'alert' | 'mood' | 'entity'
+
+const TONE_STYLE: Record<CardTone, string> = {
+  base: 'from-slate-500 to-slate-600 shadow-[0_4px_10px_-4px_rgba(71,85,105,0.7),inset_0_1px_0_rgba(255,255,255,0.25)]',
+  mix: 'from-sky-500 to-sky-600 shadow-[0_4px_10px_-4px_rgba(2,132,199,0.7),inset_0_1px_0_rgba(255,255,255,0.25)]',
+  trend: 'from-violet-500 to-violet-600 shadow-[0_4px_10px_-4px_rgba(109,40,217,0.8),inset_0_1px_0_rgba(255,255,255,0.3)]',
+  alert: 'from-amber-500 to-orange-600 shadow-[0_4px_10px_-4px_rgba(217,119,6,0.7),inset_0_1px_0_rgba(255,255,255,0.25)]',
+  mood: 'from-emerald-500 to-emerald-600 shadow-[0_4px_10px_-4px_rgba(5,150,105,0.7),inset_0_1px_0_rgba(255,255,255,0.25)]',
+  entity: 'from-teal-500 to-cyan-600 shadow-[0_4px_10px_-4px_rgba(13,148,136,0.7),inset_0_1px_0_rgba(255,255,255,0.25)]',
+}
+
 interface Props {
+  /** 语义标签（如「基线」「构成」），不是编号 */
   level: string
   title: string
   hint?: string
   badge?: ReactNode
+  tone?: CardTone
   children: ReactNode
 }
 
@@ -21,13 +43,7 @@ function ExpandIcon() {
   )
 }
 
-/**
- * 图表卡：
- * - 左上「层级」标签用编号胶囊（第 1/2/3/4 层），形成阅读节奏
- * - 标题即放大入口；右上角另有独立按钮（悬停才显形，避免卡片边缘堆装饰）
- * - hint 折成更克制的一行，放在标题下方
- */
-export default function ChartCard({ level, title, hint, badge, children }: Props) {
+export default function ChartCard({ level, title, hint, badge, tone = 'trend', children }: Props) {
   const [zoomed, setZoomed] = useState(false)
 
   return (
@@ -35,7 +51,9 @@ export default function ChartCard({ level, title, hint, badge, children }: Props
       <section className="card card-hover group relative p-5">
         <header className="mb-4">
           <div className="flex items-start gap-2.5 pr-9">
-            <span className="mt-px shrink-0 rounded-md bg-gradient-to-b from-violet-500 to-violet-600 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-white shadow-[0_4px_10px_-4px_rgba(109,40,217,0.8),inset_0_1px_0_rgba(255,255,255,0.3)]">
+            <span
+              className={`mt-px shrink-0 rounded-md bg-gradient-to-b px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-white ${TONE_STYLE[tone]}`}
+            >
               {level}
             </span>
             <button
@@ -73,7 +91,9 @@ export default function ChartCard({ level, title, hint, badge, children }: Props
         maxWidthClass="max-w-6xl"
         title={
           <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-md bg-gradient-to-b from-violet-500 to-violet-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+            <span
+              className={`rounded-md bg-gradient-to-b px-1.5 py-0.5 text-[10px] font-semibold text-white ${TONE_STYLE[tone]}`}
+            >
               {level}
             </span>
             <h3 className="text-base font-semibold leading-snug text-slate-900 dark:text-slate-100">{title}</h3>
