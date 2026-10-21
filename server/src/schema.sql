@@ -207,6 +207,18 @@ CREATE TABLE IF NOT EXISTS equity_daily (
   PRIMARY KEY (symbol, date)
 );
 
+-- 手工补录的收盘价（v0.39.0）
+-- 用途：FMP 免费档没覆盖的标的，允许手工补一个价格点，让它也能算出 P/S
+-- ⚠️ 补录值优先级高于接口值，界面上必须标「补录」—— 否则会被当成自动数据
+CREATE TABLE IF NOT EXISTS manual_price (
+  symbol     TEXT NOT NULL,
+  date       TEXT NOT NULL,
+  close      REAL NOT NULL,
+  note       TEXT,                 -- 来源说明（从哪抄的、谁核对的）
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (symbol, date)
+);
+
 -- 年度估值比率（v0.37.0，来源 FMP /stable/ratios；FMP 已按各期财报口径算好）
 CREATE TABLE IF NOT EXISTS company_ratios (
   symbol              TEXT NOT NULL,

@@ -36,8 +36,10 @@ export interface MarketCompanyRow {
   psPercentile: number | null
   pe: number | null
   pePercentile: number | null
-  /** 估值序列点数（≈ 交易日数） */
+  /** 估值序列点数（≈ 交易日数）= 分位的有效样本数 */
   points: number
+  /** 最新价格是否来自手工补录 */
+  manualPrice: boolean
   /** 为什么没有估值（给界面直接显示，避免"空着"） */
   missingValuation: string | null
 }
@@ -52,6 +54,11 @@ export interface MarketOverview {
     valued: number
     /** 数据源说明（为什么覆盖不全） */
     note: string
+    /** 分位所用的历史窗口（从实际数据算，不写死） */
+    windowFrom: string | null
+    windowTo: string | null
+    /** 窗口年数（保留一位小数） */
+    windowYears: number | null
   }
   segments: (SegmentSummary & { psMedian: number | null; percentileMedian: number | null; valuationCovered: number })[]
   companies: MarketCompanyRow[]
@@ -76,7 +83,7 @@ export function buildMarketOverview(db: DatabaseSync): MarketOverview {
     const psSeries = series.map((p) => p.ps).filter((v): v is number => v !== null)
 
     let missing: string | null = null
-    if (prices.length === 0) missing = '数据源未覆盖该标的（FMP 免费档限制）'
+    if (prices.length === 0) missing = 'FMP 免费档未覆盖该标的行情（可手工补录收盘价）'
     else if (!latest) missing = '缺少股本或营收，无法计算市值'
     else if (latest.ps === null) missing = '缺少营收，无法计算 P/S'
 
@@ -100,6 +107,7 @@ export function buildMarketOverview(db: DatabaseSync): MarketOverview {
       pe: latest?.pe ?? null,
       pePercentile: latest?.pe != null ? percentile(latest.pe, series.map((p) => p.pe).filter((v): v is number => v !== null)) : null,
       points: series.length,
+      manualPrice: latest?.manual === true,
       missingValuation: missing,
     }
   })
@@ -118,6 +126,17 @@ export function buildMarketOverview(db: DatabaseSync): MarketOverview {
   const priced = rows.filter((r) => r.points > 0).length
   const valued = rows.filter((r) => r.ps !== null).length
 
+  // 窗口从实际数据算，不写死 —— 写死"近 3 年"而实际是 5 年，就是在骗人
+  const span = db.prepare('SELECT MIN(date) AS a, MAX(date) AS b FROM equity_daily').get() as
+    | { a: string | null; b: string | null }
+    | undefined
+  const windowFrom = span?.a ?? null
+  const windowTo = span?.b ?? null
+  const windowYears =
+    windowFrom && windowTo
+      ? Number(((Date.parse(windowTo) - Date.parse(windowFrom)) / (365 * 86_400_000)).toFixed(1))
+      : null
+
   return {
     generatedAt: new Date().toISOString(),
     coverage: {
@@ -129,6 +148,9 @@ export function buildMarketOverview(db: DatabaseSync): MarketOverview {
           ? `行情数据来自 FMP 免费档，只覆盖部分标的（${valued}/${rows.length} 可算估值）；` +
             '未覆盖的标的不显示倍数，不是"没有估值"'
           : '全部标的均可计算估值',
+      windowFrom,
+      windowTo,
+      windowYears,
     },
     segments,
     companies: rows,

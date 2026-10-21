@@ -29,6 +29,7 @@ test('schema.sql：可在空库上建出全部表（含 v0.24.0 新增 3 张）'
       'event_clusters',
       'events',
       'macro_history',
+      'manual_price',
       'mentions',
       'raw_items',
       'risk_daily',

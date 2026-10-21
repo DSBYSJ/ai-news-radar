@@ -79,3 +79,44 @@ test('company_fundamentals：主键去重，同日重跑覆盖而不是新增', 
   assert.equal(rows[0].revenue, 120, '应被覆盖为最新值')
   db.close()
 })
+
+/* ------------------------------ 手工补录（v0.39.0） ------------------------------ */
+
+test('loadPrices：补录价格覆盖同日接口价，并标记 manual', async () => {
+  const { DatabaseSync } = await import('node:sqlite')
+  const { loadPrices, saveManualPrice } = await import('../src/market/prices.ts')
+  const db = new DatabaseSync(':memory:')
+  db.exec(schemaSql)
+
+  const ins = db.prepare('INSERT INTO equity_daily (symbol, date, close, volume) VALUES (?, ?, ?, ?)')
+  ins.run('SMCI', '2026-10-19', 40, 100)
+  ins.run('SMCI', '2026-10-20', 41, 100)
+
+  // 没有补录时：全部是接口数据
+  let rows = loadPrices(db, 'SMCI')
+  assert.equal(rows.length, 2)
+  assert.equal(rows[0].manual, false)
+
+  // 补录同一天 + 一个接口没有的日期
+  saveManualPrice(db, { symbol: 'smci', date: '2026-10-20', close: 45, note: '官网' })
+  saveManualPrice(db, { symbol: 'SMCI', date: '2026-10-21', close: 46 })
+
+  rows = loadPrices(db, 'SMCI')
+  assert.equal(rows.length, 3, '新增一天，不是替换整条序列')
+  const d20 = rows.find((r) => r.date === '2026-10-20')!
+  assert.equal(d20.close, 45, '补录值应覆盖接口值')
+  assert.equal(d20.manual, true, '补录行必须打标，否则会被当成接口数据')
+  const d21 = rows.find((r) => r.date === '2026-10-21')!
+  assert.equal(d21.manual, true)
+  db.close()
+})
+
+test('saveManualPrice：拒绝非法价格与日期格式', async () => {
+  const { DatabaseSync } = await import('node:sqlite')
+  const { saveManualPrice } = await import('../src/market/prices.ts')
+  const db = new DatabaseSync(':memory:')
+  db.exec(schemaSql)
+  assert.throws(() => saveManualPrice(db, { symbol: 'X', date: '2026-10-20', close: 0 }), /正数/)
+  assert.throws(() => saveManualPrice(db, { symbol: 'X', date: '2026/10/20', close: 10 }), /YYYY-MM-DD/)
+  db.close()
+})

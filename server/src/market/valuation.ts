@@ -24,6 +24,8 @@ export interface ValuationPoint {
   marketCap: number
   ps: number | null
   pe: number | null
+  /** 这一天的价格是手工补录的 */
+  manual?: boolean
 }
 
 /** 取 t 日"已经能看到"的最近一期财报（fiscalEnd <= t） */
@@ -49,6 +51,7 @@ export function buildDailyValuation(prices: PriceRow[], fundamentals: Fundamenta
       marketCap,
       ps: f.revenue && f.revenue > 0 ? marketCap / f.revenue : null,
       pe: f.epsDiluted && f.epsDiluted > 0 ? p.close / f.epsDiluted : null,
+      manual: p.manual === true,
     })
   }
   return out

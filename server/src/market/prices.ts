@@ -138,12 +138,55 @@ export async function syncRatios(db: DatabaseSync, opts: { only?: string[] } = {
 export interface PriceRow {
   date: string
   close: number
+  /** true = 这一天的价格是手工补录的（界面必须标出来，不能和接口数据混为一谈） */
+  manual?: boolean
 }
 
+/**
+ * 读取价格序列：接口数据 + 手工补录，按日期合并，**补录优先**。
+ * 补录行带 `manual: true`，上层据此在界面上打标。
+ */
 export function loadPrices(db: DatabaseSync, symbol: string): PriceRow[] {
-  return db
-    .prepare('SELECT date, close FROM equity_daily WHERE symbol = ? ORDER BY date')
+  const auto = db
+    .prepare('SELECT date, close FROM equity_daily WHERE symbol = ?')
     .all(symbol) as unknown as PriceRow[]
+  const manual = db
+    .prepare('SELECT date, close FROM manual_price WHERE symbol = ?')
+    .all(symbol) as unknown as PriceRow[]
+
+  const byDate = new Map<string, PriceRow>()
+  for (const r of auto) byDate.set(r.date, { date: r.date, close: Number(r.close), manual: false })
+  for (const r of manual) byDate.set(r.date, { date: r.date, close: Number(r.close), manual: true })
+
+  return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date))
+}
+
+export interface ManualPriceRow {
+  symbol: string
+  date: string
+  close: number
+  note: string | null
+  updatedAt: string
+}
+
+/** 补录一条收盘价（同一天重复补录会覆盖） */
+export function saveManualPrice(
+  db: DatabaseSync,
+  r: { symbol: string; date: string; close: number; note?: string },
+): void {
+  if (!Number.isFinite(r.close) || r.close <= 0) throw new Error('价格必须是正数')
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(r.date)) throw new Error('日期格式应为 YYYY-MM-DD')
+  db.prepare(
+    `INSERT INTO manual_price (symbol, date, close, note, updated_at) VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(symbol, date) DO UPDATE SET close = excluded.close, note = excluded.note, updated_at = excluded.updated_at`,
+  ).run(r.symbol.toUpperCase(), r.date, r.close, r.note ?? null, new Date().toISOString())
+}
+
+export function listManualPrices(db: DatabaseSync, symbol?: string): ManualPriceRow[] {
+  const sql = `SELECT symbol, date, close, note, updated_at AS updatedAt FROM manual_price
+               ${symbol ? 'WHERE symbol = ?' : ''} ORDER BY symbol, date DESC`
+  const stmt = db.prepare(sql)
+  return (symbol ? stmt.all(symbol.toUpperCase()) : stmt.all()) as unknown as ManualPriceRow[]
 }
 
 export interface RatioRecord {

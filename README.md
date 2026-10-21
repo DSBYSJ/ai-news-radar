@@ -73,7 +73,8 @@ docs/                  内部设计文档（不进版本控制）
 | server | `npm run summary` | 生成每日简报（`--date=YYYY-MM-DD` / `--backfill=14` 补历史） |
 | server | `npm run risk:backfill -- --days=180 --apply` | 回算风险日快照（写入真实宏观日期） |
 | server | `npm run risk:backtest` | **历史回测**：检验风险分有没有区分能力（`--json` 出完整结果） |
-| server | `npm run market:sync` | 同步 18 家美股 AI 公司基本面（SEC EDGAR，免费无 key） |
+| server | `npm run market:sync` | 同步 18 家美股 AI 公司基本面（SEC EDGAR）+ 行情估值（FMP） |
+| server | `npm run market:manual -- --list` | 手工补录收盘价（FMP 未覆盖的标的） |
 | server | `npm test` / `npm run typecheck` | 后端测试 / 类型检查 |
 | 根 | `npm run dev` / `npm run build` | 前端开发 / 构建 |
 | 根 | `npm test` | 前端测试（vitest，串行） |

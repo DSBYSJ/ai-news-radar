@@ -484,6 +484,7 @@ export interface MarketCompanyRow {
   pe: number | null
   pePercentile: number | null
   points: number
+  manualPrice: boolean
   missingValuation: string | null
 }
 
@@ -504,7 +505,15 @@ export interface MarketSegmentRow {
 
 export interface MarketOverview {
   generatedAt: string
-  coverage: { total: number; priced: number; valued: number; note: string }
+  coverage: {
+    total: number
+    priced: number
+    valued: number
+    note: string
+    windowFrom: string | null
+    windowTo: string | null
+    windowYears: number | null
+  }
   segments: MarketSegmentRow[]
   companies: MarketCompanyRow[]
 }

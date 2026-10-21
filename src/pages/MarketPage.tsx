@@ -122,6 +122,12 @@ export default function MarketPage() {
             覆盖 <b className="num text-slate-700 dark:text-slate-200">{coverage.valued}</b>/{coverage.total} 家可算估值
           </span>
           <span className="text-slate-400 dark:text-slate-500">（有价格 {coverage.priced} 家）</span>
+          {coverage.windowFrom && (
+            <span className="text-slate-400 dark:text-slate-500">
+              分位窗口 {coverage.windowFrom} ~ {coverage.windowTo}
+              {coverage.windowYears !== null && `（约 ${coverage.windowYears} 年日频）`}
+            </span>
+          )}
           {topExpensive.length > 0 && (
             <span className="text-slate-500 dark:text-slate-400">
               最贵：
@@ -169,11 +175,23 @@ export default function MarketPage() {
               </div>
               <div className="mt-0.5 flex items-baseline justify-between">
                 <span className="text-[10px] text-slate-400">P/S 中位</span>
-                <span className="num text-[12px] text-slate-600 dark:text-slate-300">{fmtX(s.psMedian)}</span>
+                <span className="num text-[12px] text-slate-600 dark:text-slate-300">
+                  {fmtX(s.psMedian)}
+                  {/* 样本数必须跟着数字走：N=1 的"中位数"其实就是单家公司的值 */}
+                  <span
+                    className="ml-1 text-[9.5px] text-slate-400"
+                    title={`该板块有 ${s.valuationCovered}/${s.companies} 家能算估值，中位数基于 ${s.valuationCovered} 个样本`}
+                  >
+                    (N={s.valuationCovered})
+                  </span>
+                </span>
               </div>
               <div className="mt-1 flex items-center justify-between">
                 <span className="text-[10px] text-slate-400">估值分位</span>
-                <PctBar value={s.percentileMedian} />
+                <span className="flex items-center gap-1">
+                  <PctBar value={s.percentileMedian} />
+                  <span className="text-[9.5px] text-slate-400">(N={s.valuationCovered})</span>
+                </span>
               </div>
             </div>
           ))}
@@ -220,7 +238,19 @@ export default function MarketPage() {
                 <th className="py-1.5 px-1.5 text-right font-normal">净利率</th>
                 <th className="py-1.5 px-1.5 text-right font-normal">市值</th>
                 <th className="py-1.5 px-1.5 text-right font-normal">P/S</th>
-                <th className="py-1.5 pl-1.5 text-left font-normal">历史分位</th>
+                <th className="py-1.5 pl-1.5 text-left font-normal">
+                  <span
+                    className="inline-flex cursor-help items-center gap-0.5"
+                    title={
+                      coverage.windowFrom && coverage.windowTo
+                        ? `分位 = 当前 P/S 在该标的自身历史中的位置。\n历史窗口：${coverage.windowFrom} ~ ${coverage.windowTo}（约 ${coverage.windowYears} 年日频数据，约 ${Math.round((coverage.windowYears ?? 0) * 250)} 个交易日）。\n样本不足 60 个交易日时不计算分位。`
+                        : '分位 = 当前 P/S 在该标的自身历史中的位置（需 ≥60 个交易日）'
+                    }
+                  >
+                    历史分位
+                    <span className="text-[9px] text-slate-400">ⓘ</span>
+                  </span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -230,6 +260,14 @@ export default function MarketPage() {
                     <span className="font-medium text-slate-800 dark:text-slate-100">{c.symbol}</span>
                     <span className="ml-1.5 text-[10px] text-slate-400">{c.name}</span>
                     {c.stale && <span className="ml-1 text-[10px] text-amber-500" title="最新财年超过 2 年">⚠️</span>}
+                    {c.manualPrice && (
+                      <span
+                        className="ml-1 rounded bg-sky-100 px-1 text-[9px] text-sky-700 dark:bg-sky-500/15 dark:text-sky-300"
+                        title="该价格由手工补录，不是接口数据"
+                      >
+                        补录
+                      </span>
+                    )}
                   </td>
                   <td className="py-1.5 px-1.5 text-[10.5px] text-slate-500">{c.segmentLabel}</td>
                   <td className="num py-1.5 px-1.5 text-right text-slate-600 dark:text-slate-300">{fmtB(c.revenue)}</td>
@@ -245,7 +283,10 @@ export default function MarketPage() {
                     {c.psPercentile !== null ? (
                       <PctBar value={c.psPercentile} />
                     ) : (
-                      <span className="text-[10px] text-slate-400" title={c.missingValuation ?? '样本不足'}>
+                      <span
+                        className="cursor-help text-[10px] text-slate-400 underline decoration-dotted"
+                        title={c.missingValuation ?? '历史样本不足 60 个交易日，暂不计算分位'}
+                      >
                         {c.missingValuation ? '未覆盖' : '样本不足'}
                       </span>
                     )}
@@ -257,10 +298,67 @@ export default function MarketPage() {
         </div>
 
         <p className="mt-2.5 text-[10px] leading-relaxed text-slate-400 dark:text-slate-500">
-          口径：P/S = 市值 ÷ 最近一期已披露年报营收；历史分位 = 该值在自身近 5 年日频序列中的位置。
+          口径：P/S = 市值 ÷ 最近一期已披露年报营收；历史分位 = 该值在自身历史日频序列中的位置
+          {coverage.windowYears !== null && `（当前窗口约 ${coverage.windowYears} 年）`}。
           财报来自 SEC XBRL，价格来自 FMP。分位越高＝相对自己历史越贵，与绝对倍数无关。
         </p>
       </section>
+
+      {/* 指标选择说明：统一用 P/S 是权宜之计，必须说清它的局限 */}
+      <details className="card p-4">
+        <summary className="cursor-pointer text-[11px] tracking-[0.12em] text-slate-400">
+          指标选择说明：为什么这里统一用 P/S，以及它的局限
+        </summary>
+        <div className="mt-2.5 space-y-2 text-[11px] leading-relaxed text-slate-600 dark:text-slate-300">
+          <p className="text-[10.5px] text-slate-400 dark:text-slate-500">
+            不同商业模式适合不同估值指标。本页统一用 P/S，是为了「同一把尺子横向比」，
+            <b className="text-slate-600 dark:text-slate-300">代价是牺牲了各行业的适配性</b>：
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[520px] text-[10.5px]">
+              <thead>
+                <tr className="text-slate-500">
+                  <th className="py-1 pr-2 text-left font-normal">层级</th>
+                  <th className="py-1 px-2 text-left font-normal">更合适的指标</th>
+                  <th className="py-1 pl-2 text-left font-normal">为什么</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="border-t border-slate-100 dark:border-white/[0.06]">
+                  <td className="py-1.5 pr-2 text-slate-700 dark:text-slate-200">算力芯片</td>
+                  <td className="py-1.5 px-2 font-medium">P/S</td>
+                  <td className="py-1.5 pl-2 text-slate-500">
+                    周期性强，盈利在周期底部可能接近 0，P/E 会失真甚至为负；营收更稳定
+                  </td>
+                </tr>
+                <tr className="border-t border-slate-100 dark:border-white/[0.06]">
+                  <td className="py-1.5 pr-2 text-slate-700 dark:text-slate-200">云与平台</td>
+                  <td className="py-1.5 px-2 font-medium">P/E 或 EV/EBITDA</td>
+                  <td className="py-1.5 pl-2 text-slate-500">
+                    利润稳定、资本结构复杂（大量债务与折旧），EBITDA 能剔除折旧与杠杆差异
+                  </td>
+                </tr>
+                <tr className="border-t border-slate-100 dark:border-white/[0.06]">
+                  <td className="py-1.5 pr-2 text-slate-700 dark:text-slate-200">模型与应用</td>
+                  <td className="py-1.5 px-2 font-medium">ARR 倍数</td>
+                  <td className="py-1.5 pl-2 text-slate-500">
+                    订阅制、当期常亏损（P/E 无意义），ARR 比会计营收更贴近真实增长
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p className="text-[10.5px] text-amber-700 dark:text-amber-400">
+            ⚠️ 因此：<b>跨板块比较 P/S 没有意义</b>（芯片的 25x 和应用的 100x 不是同一件事），
+            板块内部的相对位置才有参考价值。本系统没有 ARR 数据，也没有 EV/EBITDA ——
+            这两项需要更细的财报拆分，目前不做。
+          </p>
+          <p className="text-[10px] text-slate-400 dark:text-slate-500">
+            另：P/S 高不一定贵 —— 如果毛利率与增速足够高，高 P/S 是合理的。
+            这也是为什么本页把「净利率」「营收增速」和「估值分位」放在一起看，而不是单看倍数。
+          </p>
+        </div>
+      </details>
     </div>
   )
 }
