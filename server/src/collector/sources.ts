@@ -7,14 +7,18 @@ export interface SeedSource {
 }
 
 /**
- * 采集源清单（2026-10-14 服务器实测可达，见 docs/项目方案.md 第七节）
+ * 采集源清单（2026-10-21 服务器实测可达，见 docs/项目方案.md 第七节）
  *
- * ⚠️ 明确不接入（境内服务器实测不可达 / RSS 已停，改地址无效）：
- *   Google DeepMind、Hugging Face、Google Research、Mistral AI、BAIR（不可达）
- *   机器之心（RSS 已停，302 到 data-service）、Anthropic / Import AI / The Batch / Meta（无 RSS）
+ * ⚠️ 明确不接入（2026-10-21 在服务器上重测，结果如下）：
+ *   返回 HTML 被拦（不绕，直接放弃）：36氪、品玩、机器之心、Stanford HAI
+ *   格式无法解析（既非 RSS 也非 Atom）：虎嗅、VentureBeat AI、Hugging Face、Meta AI、
+ *     The Batch、Import AI
+ *   源已停更：新浪科技（最新 2018-09）、SemiAnalysis（最新 2025-09）
+ *   历史记录：Google DeepMind 本机不可达但**服务器可达**，已接入
  * ⚠️ 趋势分析要「宁可少而稳」：时通时不通的源会产生比源数量变化更难处理的噪声，
  *   不稳定的一律不接，哪怕内容很好。
  * ⚠️ 源要够多才看得出「跨源交叉度」——单一来源的独家报道天然没有交叉信号。
+ * ⚠️ 只吃 RSS / 官方 API：不抓网页正文、不绕反爬。被拦的源一律放弃，不换 UA 硬试。
  */
 export const SEED_SOURCES: SeedSource[] = [
   {
@@ -143,5 +147,64 @@ export const SEED_SOURCES: SeedSource[] = [
     url: 'https://www.ithome.com/rss/',
     kind: 'rss',
     weight: 2, // 32/60，量大速度快（AIHOT 也用它）
+  },
+  // ---------- v0.30.0 新增 8 源（2026-10-21 服务器实测：200 + 当日有更新） ----------
+  // 目的有两个：① 补「资本市场向」语料，让 NFI 的融资密度不再只有 3.2%；
+  //            ② 补「官方一手 / 研究机构」，提升跨源交叉度的判定质量。
+  {
+    id: 'tmtpost',
+    name: '钛媒体',
+    url: 'https://www.tmtpost.com/rss.xml',
+    kind: 'rss',
+    weight: 2, // 18 条/轮，科技 + 一级市场，中文源里最贴近「融资叙事」
+  },
+  {
+    id: 'jiemian',
+    name: '界面新闻',
+    url: 'https://a.jiemian.com/index.php?m=article&a=rss',
+    kind: 'rss',
+    weight: 1, // 30 条/轮，综合财经；AI 相关占比低，权重压低避免刷屏
+  },
+  {
+    id: 'sspai',
+    name: '少数派',
+    url: 'https://sspai.com/feed',
+    kind: 'rss',
+    weight: 1, // 10 条/轮，偏消费与效率工具，AI 占比不高
+  },
+  {
+    id: 'crunchbase-news',
+    name: 'Crunchbase News',
+    url: 'https://news.crunchbase.com/feed/',
+    kind: 'rss',
+    weight: 3, // 融资/并购一手数据源，直接补「估值叙事」缺口
+  },
+  {
+    id: 'tc-venture',
+    name: 'TechCrunch Venture',
+    url: 'https://techcrunch.com/category/venture/feed/',
+    kind: 'rss',
+    weight: 2, // 一级市场动态，与 Crunchbase 形成交叉验证
+  },
+  {
+    id: 'deepmind',
+    name: 'Google DeepMind',
+    url: 'https://deepmind.google/blog/rss.xml',
+    kind: 'rss',
+    weight: 3, // 官方一手；本机不可达但服务器可达（100 条/轮）
+  },
+  {
+    id: 'ieee-ai',
+    name: 'IEEE Spectrum AI',
+    url: 'https://spectrum.ieee.org/feeds/topic/artificial-intelligence.rss',
+    kind: 'rss',
+    weight: 3, // 工程与研究向，噪声低
+  },
+  {
+    id: 'wired-ai',
+    name: 'Wired AI',
+    url: 'https://www.wired.com/feed/tag/ai/latest/rss',
+    kind: 'rss',
+    weight: 2,
   },
 ]
