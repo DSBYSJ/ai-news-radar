@@ -518,6 +518,45 @@ export interface MarketOverview {
   companies: MarketCompanyRow[]
 }
 
+/** 新闻热度 × 股价联动（v0.42.0） */
+export interface LinkageEvent {
+  date: string
+  symbol: string
+  entity: string
+  sources: number
+  mentions: number
+  sameDayExcess: number | null
+  stockReturn: number | null
+  indexReturn: number | null
+  excessReturn: number | null
+  reason: string | null
+}
+
+export interface LinkageStat {
+  evaluated: number
+  avg: number | null
+  median: number | null
+  winRate: number | null
+}
+
+export interface LinkageSummary {
+  horizon: number
+  minSources: number
+  windowDays: number
+  newsFrom: string | null
+  newsTo: string | null
+  rawEvents: number
+  mappedEvents: number
+  evaluated: number
+  sameDay: LinkageStat
+  forward: LinkageStat
+  unmappedTop: { entity: string; mentions: number; sources: number }[]
+  sufficient: boolean
+  note: string
+  bySymbol: { symbol: string; events: number; evaluated: number; avgExcess: number | null; winRate: number | null }[]
+  items: LinkageEvent[]
+}
+
 /** 回测：事件级指标（v0.29.0） */
 export interface BacktestEventDetail {
   label: string

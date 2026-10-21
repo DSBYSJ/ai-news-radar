@@ -12,6 +12,7 @@ import { runBackfill } from '../risk/backfill.ts'
 import { runBacktest } from '../risk/backtest.ts'
 import { benchmarkTrend } from '../aihot/benchmark.ts'
 import { buildMarketOverview } from '../market/overview.ts'
+import { buildLinkage } from '../market/linkage.ts'
 import { deleteAlias, listAliases, listMapping, upsertAlias } from '../entities/alias.ts'
 import { realign } from '../entities/realign.ts'
 import { entityDailySeries } from '../analytics/trend.ts'
@@ -603,6 +604,21 @@ export async function newsRoutes(app: FastifyInstance): Promise<void> {
     const data = buildMarketOverview(getDb())
     marketCache = { at: Date.now(), data }
     return data
+  })
+
+  /**
+   * 新闻热度 × 股价联动（v0.42.0）
+   *
+   * 事件 = 某实体当日被 ≥minSources 家独立源报道；结果是**超额收益**（个股 − 纳指）。
+   * 只读本地表，不联网。
+   */
+  app.get('/api/news/market/linkage', async (req) => {
+    const q = req.query as Query
+    return buildLinkage(getDb(), {
+      minSources: Math.max(2, Math.min(10, num(q.minSources, 2))),
+      horizon: Math.max(1, Math.min(20, num(q.horizon, 5))),
+      windowDays: Math.max(7, Math.min(365, num(q.days, 60))),
+    })
   })
 
   /**

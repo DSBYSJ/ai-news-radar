@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api.ts'
 import type { MarketCompanyRow, MarketOverview } from '../types.ts'
+import LinkageCard from '../components/market/LinkageCard.tsx'
 
 /**
  * AI 资产估值看板（v0.38.0）
@@ -303,6 +304,9 @@ export default function MarketPage() {
           财报来自 SEC XBRL，价格来自 FMP。分位越高＝相对自己历史越贵，与绝对倍数无关。
         </p>
       </section>
+
+      {/* 新闻热度 × 股价联动 */}
+      <LinkageCard />
 
       {/* 指标选择说明：统一用 P/S 是权宜之计，必须说清它的局限 */}
       <details className="card p-4">
