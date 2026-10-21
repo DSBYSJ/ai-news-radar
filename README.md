@@ -74,6 +74,8 @@ docs/                  内部设计文档（不进版本控制）
 | server | `npm run risk:backfill -- --days=180 --apply` | 回算风险日快照（写入真实宏观日期） |
 | server | `npm run risk:backtest` | **历史回测**：检验风险分有没有区分能力（`--json` 出完整结果） |
 | server | `npm run market:sync` | 同步 18 家美股 AI 公司基本面（SEC EDGAR）+ 行情估值（FMP） |
+| root | `npm run check` | **统一检查**：前后端类型 + 全部测试 + 构建 + 推送审计 |
+| root | `npm run check:full` | 完整检查 + `npm audit` 安全审计 |
 | server | `npm run market:manual -- --list` | 手工补录收盘价（FMP 未覆盖的标的） |
 | server | `npm test` / `npm run typecheck` | 后端测试 / 类型检查 |
 | 根 | `npm run dev` / `npm run build` | 前端开发 / 构建 |

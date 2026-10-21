@@ -65,18 +65,21 @@ test('summarizeSegments：只统计有数据的公司，并如实给出覆盖数
   assert.equal(chip.netMargin, 50)
 })
 
-test('company_fundamentals：主键去重，同日重跑覆盖而不是新增', () => {
+test('company_fundamentals：版本表——同版本覆盖、不同申报日各存一条', () => {
   const db = new DatabaseSync(':memory:')
   db.exec(schemaSql)
   const ins = db.prepare(
-    `INSERT INTO company_fundamentals (symbol, fiscal_end, revenue, updated_at) VALUES (?, ?, ?, ?)
-     ON CONFLICT(symbol, fiscal_end) DO UPDATE SET revenue = excluded.revenue, updated_at = excluded.updated_at`,
+    `INSERT INTO company_fundamentals (symbol, fiscal_end, filed_at, revenue, updated_at) VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(symbol, fiscal_end, filed_at) DO UPDATE SET revenue = excluded.revenue, updated_at = excluded.updated_at`,
   )
-  ins.run('NVDA', '2025-01-26', 100, 't1')
-  ins.run('NVDA', '2025-01-26', 120, 't2')
+  ins.run('NVDA', '2025-01-26', '2025-02-20', 100, 't1')
+  ins.run('NVDA', '2025-01-26', '2025-02-20', 120, 't2') // 同一版本重跑 → 覆盖
+  ins.run('NVDA', '2025-01-26', '2026-02-25', 130, 't3') // 后续年报重述 → 新版本
+
   const rows = loadFundamentals(db, 'NVDA')
-  assert.equal(rows.length, 1, '同一天只能有一行')
-  assert.equal(rows[0].revenue, 120, '应被覆盖为最新值')
+  assert.equal(rows.length, 2, '两个申报日 = 两个版本，不能互相覆盖')
+  assert.equal(rows[0].revenue, 120, '同版本应被覆盖为最新值')
+  assert.equal(rows[1].revenue, 130)
   db.close()
 })
 

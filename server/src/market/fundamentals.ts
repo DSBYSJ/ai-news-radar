@@ -34,12 +34,12 @@ export async function syncFundamentals(
 
   const upsert = db.prepare(
     `INSERT INTO company_fundamentals
-       (symbol, fiscal_end, revenue, net_income, equity, eps_diluted, shares, revenue_tag, filed_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT(symbol, fiscal_end) DO UPDATE SET
+       (symbol, fiscal_end, filed_at, revenue, net_income, equity, eps_diluted, shares, revenue_tag, pit_reliable, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(symbol, fiscal_end, filed_at) DO UPDATE SET
        revenue = excluded.revenue, net_income = excluded.net_income, equity = excluded.equity,
        eps_diluted = excluded.eps_diluted, shares = excluded.shares,
-       revenue_tag = excluded.revenue_tag, filed_at = excluded.filed_at, updated_at = excluded.updated_at`,
+       revenue_tag = excluded.revenue_tag, pit_reliable = excluded.pit_reliable, updated_at = excluded.updated_at`,
   )
 
   const skipped: SyncReport['skipped'] = []
@@ -65,13 +65,14 @@ export async function syncFundamentals(
         upsert.run(
           c.symbol,
           a.fiscalEnd,
+          a.filedAt,
           a.revenue,
           a.netIncome,
           a.equity,
           a.epsDiluted,
           a.shares,
           facts.revenueTag,
-          a.filedAt,
+          a.filedAt ? 1 : 0,
           now,
         )
         rows += 1
@@ -100,8 +101,10 @@ export async function syncFundamentals(
 
 export interface FundamentalsRow {
   fiscalEnd: string
-  /** 首次申报日；为空时退回 fiscalEnd（老数据） */
+  /** 该版本的申报日；为空时退回 fiscalEnd（老数据，pitReliable=false） */
   filedAt?: string | null
+  /** 是否有真实申报日。false 时不能用于严格时点回测 */
+  pitReliable?: boolean
   revenue: number | null
   netIncome: number | null
   equity: number | null
@@ -130,19 +133,31 @@ export interface DerivedMetrics {
 
 /** 从库里读一家公司的年度序列（升序） */
 export function loadFundamentals(db: DatabaseSync, symbol: string): FundamentalsRow[] {
-  return db
+  const rows = db
     .prepare(
-      `SELECT fiscal_end AS fiscalEnd, filed_at AS filedAt, revenue, net_income AS netIncome, equity,
-              eps_diluted AS epsDiluted, shares
-         FROM company_fundamentals WHERE symbol = ? ORDER BY fiscal_end`,
+      `SELECT fiscal_end AS fiscalEnd, filed_at AS filedAt, pit_reliable AS pit,
+              revenue, net_income AS netIncome, equity, eps_diluted AS epsDiluted, shares
+         FROM company_fundamentals WHERE symbol = ? ORDER BY fiscal_end, filed_at`,
     )
-    .all(symbol) as unknown as FundamentalsRow[]
+    .all(symbol) as unknown as (FundamentalsRow & { pit: number })[]
+  return rows.map((r) => ({ ...r, pitReliable: Number(r.pit) === 1 }))
 }
 
 /** 派生指标：只算"能从财报直接读出"的东西，不掺价格 */
 export function deriveMetrics(company: Company, rows: FundamentalsRow[]): DerivedMetrics {
-  const latest = rows.length > 0 ? rows[rows.length - 1] : null
-  const prev = rows.length > 1 ? rows[rows.length - 2] : null
+  /*
+   * 版本表里同一财年有多条，展示用的是**最新财年的最新版本**（当前最准确的数）。
+   * 注意：这与"历史某天能看到什么"是两件事 —— 后者由 valuation.ts 的
+   * fundamentalsAt() 按申报日选取，两者不能混用。
+   */
+  const byYear = new Map<string, FundamentalsRow>()
+  for (const r of rows) {
+    const prevV = byYear.get(r.fiscalEnd)
+    if (!prevV || (r.filedAt ?? '') > (prevV.filedAt ?? '')) byYear.set(r.fiscalEnd, r)
+  }
+  const years = [...byYear.values()].sort((a, b) => a.fiscalEnd.localeCompare(b.fiscalEnd))
+  const latest = years.length > 0 ? years[years.length - 1] : null
+  const prev = years.length > 1 ? years[years.length - 2] : null
 
   const revenueGrowth =
     latest?.revenue && prev?.revenue && prev.revenue > 0

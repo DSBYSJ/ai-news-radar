@@ -14,10 +14,48 @@ export function getDb(): DatabaseSync {
   db.exec('PRAGMA foreign_keys = ON;')
   db.exec(readFileSync(path.join(import.meta.dirname, 'schema.sql'), 'utf8'))
   migrate(db)
+  migrateFundamentalVersions(db)
   return db
 }
 
 /** 结构迁移（幂等）：老库补新列（CREATE TABLE IF NOT EXISTS 不会更新已有表） */
+/**
+ * v0.41.0：company_fundamentals 从 PK(symbol, fiscal_end) 改为 PK(symbol, fiscal_end, filed_at)。
+ * SQLite 不支持改主键，只能重建表。旧数据 filed_at 可能为空 → 退回 fiscal_end 并标 pit_reliable=0。
+ */
+function migrateFundamentalVersions(conn: DatabaseSync): void {
+  const cols = conn.prepare('PRAGMA table_info(company_fundamentals)').all() as unknown as {
+    name: string
+    pk: number
+  }[]
+  if (cols.length === 0) return // 新库由 schema.sql 直接建成新版
+  const pkCount = cols.filter((c) => c.pk > 0).length
+  if (pkCount >= 3) return // 已是版本表
+
+  conn.exec('BEGIN')
+  try {
+    conn.exec(`CREATE TABLE company_fundamentals_v2 (
+      symbol TEXT NOT NULL, fiscal_end TEXT NOT NULL, filed_at TEXT NOT NULL,
+      revenue REAL, net_income REAL, equity REAL, eps_diluted REAL, shares REAL,
+      revenue_tag TEXT, pit_reliable INTEGER NOT NULL DEFAULT 1, updated_at TEXT NOT NULL,
+      PRIMARY KEY (symbol, fiscal_end, filed_at)
+    )`)
+    conn.exec(`INSERT INTO company_fundamentals_v2
+        (symbol, fiscal_end, filed_at, revenue, net_income, equity, eps_diluted, shares, revenue_tag, pit_reliable, updated_at)
+      SELECT symbol, fiscal_end, COALESCE(filed_at, fiscal_end), revenue, net_income, equity, eps_diluted, shares,
+             revenue_tag,
+             CASE WHEN filed_at IS NULL THEN 0 ELSE 1 END,
+             updated_at
+        FROM company_fundamentals`)
+    conn.exec('DROP TABLE company_fundamentals')
+    conn.exec('ALTER TABLE company_fundamentals_v2 RENAME TO company_fundamentals')
+    conn.exec('COMMIT')
+  } catch (err) {
+    conn.exec('ROLLBACK')
+    throw err
+  }
+}
+
 function migrate(conn: DatabaseSync): void {
   const columns = conn.prepare('PRAGMA table_info(articles)').all() as unknown as { name: string }[]
   if (!columns.some((c) => c.name === 'sentiment')) {

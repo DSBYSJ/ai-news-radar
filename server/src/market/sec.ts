@@ -205,17 +205,20 @@ function annualFacts(
     return (x.form === '10-K' || x.form === '20-F') && d >= 350 && d <= 380
   })
   /*
-   * 同一 fiscalEnd 会被后续年报当"比较期"重复引用，所以每年都有多条。
-   * 取**最早申报**的那条 = 首次披露时市场看到的值，这才是 point-in-time 正确的口径。
-   * （之前取的是最晚申报，等于用了重述后的数字，而且 filed 日期晚一年，
-   *   会让"可用性门槛"失效 —— 这是估值序列里最隐蔽的一处未来数据泄漏。）
+   * **保留全部版本**，按 (财年末, 申报日) 去重。
+   *
+   * 同一 fiscalEnd 会被后续年报当"比较期"重复申报，重述也走同一条路。
+   * 只留一条只能是近似口径（最早=首次披露，最晚=用了未来数据）；
+   * 保留全部版本，才能在上层按"该日期已公开的最新版本"做严格时点查询。
    */
-  const byEnd = new Map<string, Fact>()
+  const byKey = new Map<string, Fact>()
   for (const x of annual) {
-    const prev = byEnd.get(x.end)
-    if (!prev || x.filed < prev.filed) byEnd.set(x.end, x)
+    const k = `${x.end}|${x.filed}`
+    if (!byKey.has(k)) byKey.set(k, x)
   }
-  return [...byEnd.values()].sort((a, b) => a.end.localeCompare(b.end))
+  return [...byKey.values()].sort((a, b) =>
+    a.end === b.end ? a.filed.localeCompare(b.filed) : a.end.localeCompare(b.end),
+  )
 }
 
 /** 时点型事实（权益/股本）：不限期间长度，取该日期最近申报 */
@@ -284,11 +287,12 @@ export async function fetchCompanyFundamentals(cik: string): Promise<CompanyFact
     () => instantFacts(gaap, 'EntityCommonStockSharesOutstanding', SHARE_UNITS),
   ])
 
+  const vkey = (x: Fact): string => `${x.end}|${x.filed}`
   const map = <T>(arr: T[], key: (x: T) => string): Map<string, T> => new Map(arr.map((x) => [key(x), x]))
 
-  const netByEnd = map(netIncome, (x) => x.end)
-  const epsByEnd = map(eps, (x) => x.end)
-  // 权益/股本取"不晚于该财年末的最近一条"
+  const netByKey = map(netIncome, vkey)
+  const epsByKey = map(eps, vkey)
+  // 权益/股本取"不晚于该财年末的最近一条"（同一财年各版本的资产负债表相同，不随重述变）
   const pickLatest = (arr: Fact[], end: string): Fact | null => {
     let best: Fact | null = null
     for (const x of arr) if (x.end <= end) best = x
@@ -300,13 +304,13 @@ export async function fetchCompanyFundamentals(cik: string): Promise<CompanyFact
     const sh = pickLatest(shares, r.end)
     return {
       fiscalEnd: r.end,
+      filedAt: r.filed,
       days: daysBetween(r.start, r.end),
       revenue: r.val,
-      netIncome: netByEnd.get(r.end)?.val ?? null,
+      netIncome: netByKey.get(vkey(r))?.val ?? null,
       equity: eq?.val ?? null,
-      epsDiluted: epsByEnd.get(r.end)?.val ?? null,
+      epsDiluted: epsByKey.get(vkey(r))?.val ?? null,
       shares: sh?.val ?? null,
-      filedAt: r.filed,
     }
   })
 

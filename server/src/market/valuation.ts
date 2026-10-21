@@ -18,6 +18,14 @@ import { UNIVERSE, type Company } from './universe.ts'
  *    不是 t 日所在财年 —— 后者会用到未来数据（年报要等财年结束几个月才发）。
  */
 
+/** 某个估值点用了哪份财报 —— 可追溯性（每个点都能解释自己是怎么算出来的） */
+export interface ValuationBasis {
+  fiscalEnd: string
+  filedAt: string
+  /** false = 该版本缺真实申报日，退回财年末，不能用于严格时点回测 */
+  pitReliable: boolean
+}
+
 export interface ValuationPoint {
   date: string
   close: number
@@ -26,21 +34,36 @@ export interface ValuationPoint {
   pe: number | null
   /** 这一天的价格是手工补录的 */
   manual?: boolean
+  /** 该点采用的财报版本（可追溯） */
+  basis?: ValuationBasis
 }
 
 /**
- * 取 t 日"已经能看到"的最近一期财报。
+ * 取 t 日「当时已公开的最新有效版本」。
  *
- * ⚠️ 门槛必须是 **申报日（filedAt）**，不是财年结束日（fiscalEnd）。
- *    10-K 通常在财年结束后 1~3 个月才提交：FY2026 结束于 2026-01-25、
- *    2026-02-25 才申报，那么 2026-02-01 这天**还看不到** FY2026 的营收。
- *    用 fiscalEnd 判断等于提前一个月知道财报 —— 典型的 look-ahead bias。
+ * 严格历史时点口径（不是首次披露口径）：
+ *   1. 只有申报日 ≤ t 的版本才可见（10-K 在财年结束后 1~3 个月才提交）
+ *   2. 同一财年有多个版本时（比较期重报、正式重述），取**申报日最大**的那个 ——
+ *      即"截至 t 日市场能看到的最新版本"，重述从它实际公开的那天起才生效
+ *   3. 不同财年之间取**财年最新**的
+ *
+ * 与「首次披露口径」的区别：首次披露会让重述永远不生效；
+ * 这里重述会在其公开日之后生效 —— 这才是"当时真实可见"的信息集。
  */
 function fundamentalsAt(rows: FundamentalsRow[], date: string): FundamentalsRow | null {
   let best: FundamentalsRow | null = null
   for (const r of rows) {
-    const available = (r.filedAt ?? r.fiscalEnd) <= date
-    if (available) best = r
+    const filed = r.filedAt ?? r.fiscalEnd
+    if (filed > date) continue
+    if (!best) {
+      best = r
+      continue
+    }
+    const bestFiled = best.filedAt ?? best.fiscalEnd
+    // 财年更新者优先；同财年取申报更晚的版本
+    if (r.fiscalEnd > best.fiscalEnd || (r.fiscalEnd === best.fiscalEnd && filed > bestFiled)) {
+      best = r
+    }
   }
   return best
 }
@@ -59,6 +82,12 @@ export function buildDailyValuation(prices: PriceRow[], fundamentals: Fundamenta
       ps: f.revenue && f.revenue > 0 ? marketCap / f.revenue : null,
       pe: f.epsDiluted && f.epsDiluted > 0 ? p.close / f.epsDiluted : null,
       manual: p.manual === true,
+      basis: {
+        fiscalEnd: f.fiscalEnd,
+        filedAt: f.filedAt ?? f.fiscalEnd,
+        // 显式标记优先；没有标记时按"是否有真实申报日"推断（不能默认 true）
+        pitReliable: f.pitReliable ?? f.filedAt != null,
+      },
     })
   }
   return out

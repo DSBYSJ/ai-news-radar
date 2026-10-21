@@ -183,18 +183,28 @@ CREATE TABLE IF NOT EXISTS macro_history (
 -- 风险分数日快照（回溯视图的数据源）
 -- 美股 AI 产业链公司年度基本面（v0.36.0，来源 SEC XBRL，免费无 key）
 -- 只存原始事实（营收/净利/权益/股本），不存比率 —— 比率随口径变化，应由读取时计算
+-- 财报事实的**版本表**（v0.41.0 起）
+--
+-- 为什么按版本存：同一财年会被后续年报当"比较期"重复申报，重述也走同一条路。
+-- 只保留一条（无论最早还是最晚）都只能得到一种近似口径：
+--   · 只留最早 → 首次披露口径（重述永不生效）
+--   · 只留最晚 → 用了未来才知道的值（look-ahead）
+-- 保留全部版本 + 各自的申报日，才能在任意历史日期回答
+-- 「那天市场能看到的最新有效版本是什么」—— 这才是严格的历史时点口径。
 CREATE TABLE IF NOT EXISTS company_fundamentals (
   symbol       TEXT NOT NULL,
   fiscal_end   TEXT NOT NULL,        -- 财年末 YYYY-MM-DD
+  filed_at     TEXT NOT NULL,        -- 该版本的申报日（版本键）
   revenue      REAL,
   net_income   REAL,
   equity       REAL,
   eps_diluted  REAL,
   shares       REAL,
   revenue_tag  TEXT,                 -- 用了哪个 us-gaap 标签（各公司不一致，留痕便于核对）
-  filed_at     TEXT,                 -- 首次申报日
+  -- 1 = 有真实申报日，可用于严格时点回测；0 = 缺申报日退回财年末（仅可展示，不可用于严格回测）
+  pit_reliable INTEGER NOT NULL DEFAULT 1,
   updated_at   TEXT NOT NULL,
-  PRIMARY KEY (symbol, fiscal_end)
+  PRIMARY KEY (symbol, fiscal_end, filed_at)
 );
 
 -- 美股日线收盘价（v0.37.0，来源 FMP stable/historical-price-eod/light）

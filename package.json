@@ -1,7 +1,7 @@
 {
   "name": "ai-news-web",
   "private": true,
-  "version": "0.40.0",
+  "version": "0.41.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,7 +10,14 @@
     "preview": "vite preview",
     "test": "vitest run --no-file-parallelism",
     "bump:patch": "npm version patch --no-git-tag-version",
-    "see": "node scripts/see.mjs"
+    "see": "node scripts/see.mjs",
+    "check:types": "tsc --noEmit && npm --prefix server exec tsc --noEmit",
+    "check:test": "npm test && npm --prefix server test",
+    "check:build": "npm run build:web",
+    "check:audit": "node scripts/pre-push-audit.mjs --range origin/main..HEAD",
+    "check": "npm run check:types && npm run check:test && npm run check:build && npm run check:audit",
+    "check:security": "npm audit --omit=dev && npm --prefix server audit --omit=dev",
+    "check:full": "npm run check && npm run check:security"
   },
   "dependencies": {
     "react": "^18.3.1",
