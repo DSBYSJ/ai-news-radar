@@ -2,6 +2,21 @@
 
 版本号唯一来源：各 `package.json`。发布前照「升版本 → 写 changelog → 跑验证 → 推送部署」四步走。
 
+## 0.27.4（2026-10-21）
+
+**安全：加 pre-push 审计闸门，服务器信息不再可能误推公开仓库**
+
+- 新增 `scripts/pre-push-audit.mjs` + `.githooks/pre-push`：
+  检查**本次真正要推送的提交**（而非工作区），因为工作区干净、历史有毒照样会泄
+  - 内置规则（只放形态、不含真值）：公网 IP、宝塔应用目录路径、`sk-` 密钥、
+    私钥块、真实备案号、SSH 指纹
+  - 禁止路径：`docs/`、`启动提示词.md`、`server/.env`、`server/scripts/`、证书与私钥文件
+  - 本地词表 `scripts/audit-words.local`（已 gitignore）放域名等真值，脚本本身可公开
+  - 输出打码：命中的真值在报错里也做掩码，避免审计日志成为二次泄漏源
+  - 启用：`git config core.hooksPath .githooks`（每台机器一次）
+- 清理 `CHANGELOG.md` 0.7.4 条目里的域名与包名（改为 `<主域名>` 占位）
+- `.gitignore` 补 `.workbuddy-ai/` 与审计词表
+
 ## 0.27.3（2026-10-21）
 
 **仪表盘重做：短标记式指针 + 历史刻度移到图例**
@@ -920,7 +935,7 @@ src/components/risk/
 ## 0.7.4（2026-10-14）
 
 **安卓 App 打包（网页版保持在线）**
-- 新建独立壳工程 `G:/glmscs/bike/ai-news-android`（Capacitor 7，加载 `https://example.cn/news/`）：应用名「AI 资讯雷达」，包名 `cn.example.ainews`，Debug APK 约 4 MB
+- 新建独立壳工程 `ai-news-android`（Capacitor 7，加载 `https://<主域名>/news/`）：应用名「AI 资讯雷达」，包名 `cn.<主域名>.ainews`，Debug APK 约 4 MB
 - 图标与启动图用 Pillow 直接生成全部密度资源（`make-android-res.py`）；服务器不可达时展示深色兜底页
 - 网页端配合做**安全区适配**（`env(safe-area-inset-*)` + `viewport-fit=cover`）：安卓 edge-to-edge 下内容不再顶到状态栏；桌面端无影响
 - ⚠️ **网页版继续保留**（`/news/` 不下架），App 与网页共用同一套登录与接口

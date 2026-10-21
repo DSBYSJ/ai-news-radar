@@ -1,0 +1,9 @@
+#!/bin/sh
+# 推送前审计闸门：服务器配置（IP / 域名 / 备案号 / 宝塔路径 / 密钥）绝不进公开仓库
+#
+# 启用方式（每台机器执行一次，不进版本控制）：
+#   git config core.hooksPath .githooks
+#
+# 临时绕过（仅在确认无误时）：git push --no-verify
+ROOT=$(git rev-parse --show-toplevel) || exit 1
+exec node "$ROOT/scripts/pre-push-audit.mjs"

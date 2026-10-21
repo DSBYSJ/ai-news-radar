@@ -14,6 +14,9 @@ server/.env.*
 server/scripts/
 server/README.md
 
+# 推送审计的敏感词表（含域名等真值）
+scripts/audit-words.local
+
 # 依赖与构建产物
 node_modules/
 dist/
@@ -30,6 +33,7 @@ data/
 
 # 本地工作数据
 .workbuddy/
+.workbuddy-ai/
 .tmp/
 .shots/
 
