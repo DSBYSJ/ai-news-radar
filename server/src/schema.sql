@@ -181,6 +181,21 @@ CREATE TABLE IF NOT EXISTS macro_history (
 );
 
 -- 风险分数日快照（回溯视图的数据源）
+-- AIHOT 外部基准对照的每日快照（v0.34.0）：只存统计与样本，不存对方正文
+CREATE TABLE IF NOT EXISTS aihot_benchmark (
+  date               TEXT PRIMARY KEY,   -- 北京时间日期
+  generated_at       TEXT NOT NULL,
+  aihot_count        INTEGER NOT NULL,
+  ours_count         INTEGER NOT NULL,
+  ours_high          INTEGER NOT NULL,
+  matched            INTEGER NOT NULL,
+  coverage_of_aihot  REAL,
+  coverage_of_ours   REAL,
+  category_agreement REAL,
+  rank_corr          REAL,
+  payload            TEXT                -- 完整 JSON（来源构成 + 分歧样本）
+);
+
 CREATE TABLE IF NOT EXISTS risk_daily (
   date        TEXT PRIMARY KEY,
   nfi         REAL,

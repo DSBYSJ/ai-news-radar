@@ -88,3 +88,39 @@ test('CATEGORY_MAP：我们的 8 类里只有 other 没有对应口径', () => {
     assert.ok(['ai-models', 'ai-products', 'industry', 'paper', 'tip', 'opinion'].includes(v), `非法目标分类：${v}`)
   }
 })
+
+/* ------------------------------ 每日快照落库 ------------------------------ */
+
+test('saveBenchmark / benchmarkTrend：同一天重跑覆盖，趋势按日期升序', async () => {
+  const { readFileSync } = await import('node:fs')
+  const path = await import('node:path')
+  const { DatabaseSync } = await import('node:sqlite')
+  const { saveBenchmark, benchmarkTrend } = await import('../src/aihot/benchmark.ts')
+
+  const db = new DatabaseSync(':memory:')
+  db.exec(readFileSync(path.join(import.meta.dirname, '../src/schema.sql'), 'utf8'))
+
+  const mk = (matched: number, cov: number) => ({
+    generatedAt: '2026-10-21T00:00:00Z',
+    window: { from: '', to: '', hours: 24 },
+    aihot: { count: 20, categories: {}, bySource: {}, sources: 5, requests: 1, notModified: false },
+    ours: { count: 200, highScore: 100, minScore: 45 },
+    overlap: { matched, onlyAihot: 20 - matched, onlyOurs: 100 - matched, coverageOfAihot: cov, coverageOfOurs: 0.03 },
+    categoryAgreement: 0.5,
+    scoreRankCorrelation: 0.2,
+    samples: { onlyAihot: [], onlyOurs: [], matched: [] },
+    notes: [],
+  })
+
+  saveBenchmark(db, mk(3, 0.15) as never, '2026-10-20')
+  saveBenchmark(db, mk(6, 0.3) as never, '2026-10-21')
+  // 同一天重跑：应覆盖而不是新增
+  saveBenchmark(db, mk(7, 0.35) as never, '2026-10-21')
+
+  const trend = benchmarkTrend(db, 30)
+  assert.equal(trend.length, 2, '同一天只能有一条')
+  assert.deepEqual(trend.map((t) => t.date), ['2026-10-20', '2026-10-21'], '必须按日期升序')
+  assert.equal(trend[1].matched, 7, '重跑应覆盖旧值')
+  assert.equal(trend[1].coverageOfAihot, 0.35)
+  db.close()
+})

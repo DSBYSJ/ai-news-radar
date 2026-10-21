@@ -544,7 +544,10 @@ export function movingBlockBootstrap(
 export interface AblationRow {
   name: string
   change: string
+  /** 目标：纳指回撤 */
   testAuc: number
+  /** 目标：系统性危机（真正关心的那个） */
+  systemicAuc: number
   eventRecall: number
   alertsPerYear: number
   /** 相对完整模型的 AUC 变化（正 = 去掉后更好） */
@@ -577,6 +580,32 @@ const ABLATIONS: { name: string; change: string; patch: (p: RiskParams) => RiskP
     name: '去掉整个指数项',
     change: 'crs.index = 0',
     patch: (p) => ({ ...p, crs: { ...p.crs, index: 0 } }),
+  },
+  // ---- v0.34.0：简化方案（回答"少而精是否更好"）----
+  {
+    name: '简化A：去掉利率项',
+    change: 'nfi30/rates0/credit35/index35',
+    patch: (p) => ({ ...p, crs: { nfi: 30, rates: 0, credit: 35, index: 35 } }),
+  },
+  {
+    name: '简化B：只留指数+信用',
+    change: 'nfi0/rates0/credit50/index50',
+    patch: (p) => ({ ...p, crs: { nfi: 0, rates: 0, credit: 50, index: 50 } }),
+  },
+  {
+    name: '简化C：保留倒挂',
+    change: 'ratesMix全0 + inversion100，nfi20/rates15/credit35/index30',
+    patch: (p) => ({
+      ...p,
+      ratesMix: { level: 0, change: 0, step: 0 },
+      inversionPenalty: 100,
+      crs: { nfi: 20, rates: 15, credit: 35, index: 30 },
+    }),
+  },
+  {
+    name: '极简：只留指数',
+    change: 'nfi0/rates0/credit0/index100',
+    patch: (p) => ({ ...p, crs: { nfi: 0, rates: 0, credit: 0, index: 100 } }),
   },
 ]
 
@@ -825,10 +854,12 @@ function runSplit(db: DatabaseSync, samples: Sample[], spec: SplitSpec, basePara
       (s) => s.date >= spec.testFrom && (spec.testTo === null || s.date <= spec.testTo),
     )
     const m = evaluateEvent(variantTest, 'drawdown20', threshold.value, { years })
+    const sys = evaluateEvent(variantTest, 'systemic', threshold.value, { years })
     ablation.push({
       name: variant.name,
       change: variant.change,
       testAuc: m.auc,
+      systemicAuc: sys.auc,
       eventRecall: m.eventRecall,
       alertsPerYear: m.alertsPerYear,
       deltaAuc: Number((m.auc - baseline.auc).toFixed(3)),

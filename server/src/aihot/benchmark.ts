@@ -303,3 +303,87 @@ export async function runBenchmark(opts: BenchmarkOptions): Promise<BenchmarkRes
     notes,
   }
 }
+
+/* ============================ 每日快照（v0.34.0） ============================ */
+
+/**
+ * 落库：一天一条，重复跑覆盖同一天。
+ *
+ * 为什么存快照而不只跑 CLI：单次对照只能看"今天重合多少"，看不出"改源之后有没有变好"。
+ * 有了日序列，才能回答"这次扩源到底有没有用"——v0.33.0 那次就是从 14% 提到 26%。
+ */
+export function saveBenchmark(db: DatabaseSync, r: BenchmarkResult, date: string): void {
+  db.prepare(
+    `INSERT INTO aihot_benchmark
+       (date, generated_at, aihot_count, ours_count, ours_high, matched,
+        coverage_of_aihot, coverage_of_ours, category_agreement, rank_corr, payload)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(date) DO UPDATE SET
+       generated_at = excluded.generated_at,
+       aihot_count = excluded.aihot_count,
+       ours_count = excluded.ours_count,
+       ours_high = excluded.ours_high,
+       matched = excluded.matched,
+       coverage_of_aihot = excluded.coverage_of_aihot,
+       coverage_of_ours = excluded.coverage_of_ours,
+       category_agreement = excluded.category_agreement,
+       rank_corr = excluded.rank_corr,
+       payload = excluded.payload`,
+  ).run(
+    date,
+    r.generatedAt,
+    r.aihot.count,
+    r.ours.count,
+    r.ours.highScore,
+    r.overlap.matched,
+    r.overlap.coverageOfAihot,
+    r.overlap.coverageOfOurs,
+    r.categoryAgreement,
+    r.scoreRankCorrelation,
+    JSON.stringify(r),
+  )
+}
+
+export interface BenchmarkTrendRow {
+  date: string
+  aihotCount: number
+  oursCount: number
+  oursHigh: number
+  matched: number
+  coverageOfAihot: number | null
+  coverageOfOurs: number | null
+  categoryAgreement: number | null
+  rankCorr: number | null
+}
+
+/** 近 N 天的对照趋势（升序，便于直接画折线） */
+export function benchmarkTrend(db: DatabaseSync, days = 30): BenchmarkTrendRow[] {
+  const rows = db
+    .prepare(
+      `SELECT date, aihot_count, ours_count, ours_high, matched,
+              coverage_of_aihot, coverage_of_ours, category_agreement, rank_corr
+         FROM aihot_benchmark ORDER BY date DESC LIMIT ?`,
+    )
+    .all(days) as unknown as {
+    date: string
+    aihot_count: number
+    ours_count: number
+    ours_high: number
+    matched: number
+    coverage_of_aihot: number | null
+    coverage_of_ours: number | null
+    category_agreement: number | null
+    rank_corr: number | null
+  }[]
+  return rows.reverse().map((r) => ({
+    date: r.date,
+    aihotCount: Number(r.aihot_count),
+    oursCount: Number(r.ours_count),
+    oursHigh: Number(r.ours_high),
+    matched: Number(r.matched),
+    coverageOfAihot: r.coverage_of_aihot === null ? null : Number(r.coverage_of_aihot),
+    coverageOfOurs: r.coverage_of_ours === null ? null : Number(r.coverage_of_ours),
+    categoryAgreement: r.category_agreement === null ? null : Number(r.category_agreement),
+    rankCorr: r.rank_corr === null ? null : Number(r.rank_corr),
+  }))
+}

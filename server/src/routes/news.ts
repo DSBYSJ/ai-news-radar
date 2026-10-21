@@ -10,6 +10,7 @@ import { DEFAULT_PARAMS } from '../risk/calculation.ts'
 import { loadParams, mergeParams, resetParams, saveParams, validateParams } from '../risk/params.ts'
 import { runBackfill } from '../risk/backfill.ts'
 import { runBacktest } from '../risk/backtest.ts'
+import { benchmarkTrend } from '../aihot/benchmark.ts'
 import { deleteAlias, listAliases, listMapping, upsertAlias } from '../entities/alias.ts'
 import { realign } from '../entities/realign.ts'
 import { entityDailySeries } from '../analytics/trend.ts'
@@ -587,6 +588,19 @@ export async function newsRoutes(app: FastifyInstance): Promise<void> {
     const data = runBacktest(getDb())
     backtestCache = { at: Date.now(), data }
     return data
+  })
+
+  /**
+   * AIHOT 外部基准对照的每日趋势（v0.34.0）
+   *
+   * 只读本地快照表，不联网、不触发对照 —— 对照由每天 23:40 的定时任务写入。
+   * 想立刻跑一次用 CLI：`npm run aihot:benchmark -- --save`。
+   */
+  app.get('/api/news/aihot/benchmark', async (req) => {
+    const q = req.query as Query
+    const days = Math.max(1, Math.min(180, num(q.days, 30)))
+    const trend = benchmarkTrend(getDb(), days)
+    return { days, latest: trend.length > 0 ? trend[trend.length - 1] : null, trend }
   })
 
   /**

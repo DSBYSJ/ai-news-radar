@@ -15,6 +15,7 @@ test('schema.sql：可在空库上建出全部表（含 v0.24.0 新增 3 张）'
   assert.deepEqual(
     rows.map((r) => r.name),
     [
+      'aihot_benchmark',
       'article_vectors',
       'articles',
       'burst_detection',

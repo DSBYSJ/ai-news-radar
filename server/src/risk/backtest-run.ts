@@ -97,11 +97,11 @@ function printSplit(s: SplitResult): void {
   console.log('    ⚠️「当前回撤」对「未来回撤」是自指（跌了还会跌），看它对 systemic 那一列才公平')
 
   console.log('\n  逐因子消融（目标：纳指回撤，测试段）')
-  console.log('    变体                 测试AUC   Δ     事件召回  每年误报')
+  console.log('    变体                     回撤AUC  Δ      危机AUC  事件召回  每年误报')
   for (const a of s.ablation) {
     console.log(
-      `    ${a.name.padEnd(20)} ${f3(a.testAuc)}  ${(a.deltaAuc >= 0 ? '+' : '') + f3(a.deltaAuc)}  ` +
-        `${pct(a.eventRecall).padStart(6)}  ${String(a.alertsPerYear).padStart(8)}`,
+      `    ${a.name.padEnd(22)} ${f3(a.testAuc)}  ${((a.deltaAuc >= 0 ? '+' : '') + f3(a.deltaAuc)).padStart(6)}  ` +
+        `${f3(a.systemicAuc)}  ${pct(a.eventRecall).padStart(6)}  ${String(a.alertsPerYear).padStart(8)}`,
     )
   }
 }

@@ -9,7 +9,7 @@
  * ⚠️ AIHOT 是独立第二标准，不是 ground truth —— 只能看一致性，不能算准确率。
  */
 import { getDb } from '../db.ts'
-import { runBenchmark } from './benchmark.ts'
+import { runBenchmark, saveBenchmark } from './benchmark.ts'
 
 const arg = (name: string): number | undefined => {
   const hit = process.argv.find((a) => a.startsWith(`--${name}=`))
@@ -22,6 +22,13 @@ const hours = arg('hours') ?? 24
 const minScore = arg('minScore') ?? 45
 
 const r = await runBenchmark({ db, hours, minScore })
+const save = process.argv.includes('--save')
+if (save) {
+  // 北京时间日期，与定时任务写入的口径一致
+  const date = new Date(Date.now() + 8 * 3_600_000).toISOString().slice(0, 10)
+  saveBenchmark(db, r, date)
+  console.log(`已写入 aihot_benchmark（${date}）`)
+}
 
 if (json) {
   console.log(JSON.stringify(r, null, 2))

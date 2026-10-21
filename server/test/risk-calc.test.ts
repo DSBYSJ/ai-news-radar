@@ -387,3 +387,32 @@ test('computeCrs：概率区间上限不超过 65%（旧实现写成 75%）', ()
   assert.ok(p.high - p.low <= 10, `区间宽度应约为 2×band，实际 ${p.high - p.low}`)
   assert.match(p.note, /不是预测概率/, '必须明确标注非预测')
 })
+
+/* ================================================================== */
+/* v0.34.0：CRS 简化为 3 个核心信号                                     */
+/* ================================================================== */
+
+test('DEFAULT_PARAMS：CRS 已简化为 3 项，权重仍合计 100', () => {
+  const w = DEFAULT_PARAMS.crs
+  assert.equal(w.rates, 0, '利率连续打分权重应为 0（回测显示无增量信息）')
+  assert.equal(w.nfi + w.rates + w.credit + w.index, 100, '权重必须合计 100，否则 validateParams 会拒绝保存')
+  assert.ok(w.credit > 0 && w.index > 0, '信用与指数是回测里唯二有效的宏观项，不能被删')
+})
+
+test('computeCrs：权重为 0 的分项仍出现在结果里，但贡献为 0 且说明原因', () => {
+  const rates = macro('rates', 5.2, Array.from({ length: 100 }, (_, i) => 3 + (i % 20) / 10), { yearAgo: 4.0 })
+  const index = macro('index', 100, Array.from({ length: 100 }, (_, i) => 80 + i * 0.2), { avg200: 95, yearAgo: 80, high52w: 110 })
+  const r = computeCrs({ nfi: 40, rates, credit: null, index, inversion: true }, DEFAULT_PARAMS)
+  const rf = r.factors.find((f) => f.key === 'rates')
+  assert.ok(rf, '利率项不能从结果里消失（否则用户以为没算）')
+  assert.equal(rf!.weight, 0, '简化模式下利率权重为 0')
+  assert.equal(rf!.contribution, 0, '权重 0 → 贡献必须是 0')
+  assert.match(rf!.note, /简化模式/, '必须说明为什么是 0，而不是静默清零')
+})
+
+test('computeCrs：简化后总分只由信用与指数（+NFI）构成', () => {
+  const index = macro('index', 100, Array.from({ length: 100 }, (_, i) => 80 + i * 0.2), { avg200: 95, yearAgo: 80, high52w: 110 })
+  const r = computeCrs({ nfi: null, rates: null, credit: null, index, inversion: null }, DEFAULT_PARAMS)
+  const total = r.factors.reduce((s, f) => s + f.contribution, 0)
+  assert.ok(Math.abs(total - r.score) <= 1, `各分项贡献之和应≈总分：${total} vs ${r.score}`)
+})

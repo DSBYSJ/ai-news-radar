@@ -215,8 +215,15 @@ export interface RiskParams {
   /**
    * 利率分项内部配比（v0.29.0 新增，默认 0.5 / 0.25 / 0.25，和为 1）。
    * 只为了让「逐因子消融实验」能单独关掉某一项，默认值与旧行为完全一致。
+   * 全部设为 0 时利率分只剩"倒挂惩罚"，用于检验"只保留倒挂"的简化方案。
    */
   ratesMix: { level: number; change: number; step: number }
+  /**
+   * 收益率曲线倒挂的加分（v0.34.0 参数化，默认 18 = 旧行为）。
+   * 倒挂是少数在文献里被反复验证的宏观先行信号，简化模型想单独保留它，
+   * 就必须能把它从"利率连续打分"里拆出来。
+   */
+  inversionPenalty: number
   /**
    * 信用分项三个来源的开关（v0.29.0 新增，默认全开）。
    * 关掉后该项不参与 max()，用于检验「自满项」是否真的带来增量信息。
@@ -252,9 +259,25 @@ export interface RiskParams {
 export const DEFAULT_PARAMS: RiskParams = {
   nfi: { money: 22, sentiment: 22, concentration: 18, acceleration: 18, fomo: 20 },
   acceleration: { threshold: 0.35, sharpness: 6, cap: 3 },
-  crs: { nfi: 40, rates: 20, credit: 20, index: 20 },
+  /**
+   * CRS 权重（v0.34.0 简化为 3 个核心信号）
+   *
+   * 依据：回测里「简化A = 去掉利率连续打分」在两个时间切分、两个目标上同时变好
+   *   · 主实验：回撤 AUC 0.599→0.627，危机 0.604→0.619
+   *   · 辅助实验：回撤 0.417→0.482，危机 0.792→0.793
+   * 而「极简（只留指数）」明显更差（0.533/0.419），说明信用项是必要成分。
+   *
+   * ⚠️ 代价：利率项权重归零后，**收益率曲线倒挂**也不再进总分。
+   *    倒挂仍以两个形式保留：① 宏观卡片独立展示；② 「潜在脆弱」子指数里的 20% 权重。
+   *    要恢复完整模型：把 rates 改回 20、nfi 改回 40、credit/index 各 20。
+   *
+   * ⚠️ 局限：回测里没有 NFI（新闻历史不足），所以 30% 的 NFI 权重**无法被验证**。
+   *    保留它是因为它是本项目的差异化信号，不是因为回测支持它。
+   */
+  crs: { nfi: 30, rates: 0, credit: 35, index: 35 },
   steps: { oas: 4.5, rates: 5.0, sharpness: 2.2 },
   ratesMix: { level: 0.5, change: 0.25, step: 0.25 },
+  inversionPenalty: 18,
   creditUse: { stress: true, widening: true, complacency: true },
   dynamic: { drawdown: 0.1, boost: 1.4, band: 0.02 },
   divergence: { optimisticSentiment: 80, downDays: 3, surgeRatio: 2.5, fundingDropRatio: 0.5 },
@@ -579,7 +602,7 @@ function ratesRisk(
   const levelScore = p === null ? scaleLinear(m.value, 3.5, 5.5) : Math.round(p * 100)
   const changeScore = scaleLinear(change, 0, 1.5)
   const step = Math.round(stepResponse(m.value, params.steps.rates, params.steps.sharpness))
-  const inversionPenalty = inversion === true ? 18 : 0
+  const inversionPenalty = inversion === true ? (params.inversionPenalty ?? 18) : 0
   // 内部配比可调（消融实验用）；默认 0.5/0.25/0.25、和为 1，与旧行为一致
   const mix = params.ratesMix ?? { level: 0.5, change: 0.25, step: 0.25 }
   const mixSum = mix.level + mix.change + mix.step
@@ -710,7 +733,12 @@ export function computeCrs(input: CrsInput, params: RiskParams): CrsResult {
       score: f.score,
       weight: Number(normWeight.toFixed(1)),
       contribution: Number(((f.score * normWeight) / 100).toFixed(1)),
-      note: f.note + (boost > 1.001 && f.key !== 'narrative' ? `（动态权重 ×${boost.toFixed(2)}）` : ''),
+      note:
+        f.note +
+        (f.weight === 0
+          ? '　ⓘ 简化模式：本项不参与总分（回测显示其连续打分没有增量信息；倒挂仍在「潜在脆弱」子指数中体现）'
+          : '') +
+        (boost > 1.001 && f.key !== 'narrative' ? `（动态权重 ×${boost.toFixed(2)}）` : ''),
     }
   })
 

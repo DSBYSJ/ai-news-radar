@@ -2,6 +2,8 @@ import type { FastifyInstance } from 'fastify'
 import { generateDailySummary } from './ai/summary.ts'
 import { config } from './config.ts'
 import { runFullPipeline } from './jobs.ts'
+import { getDb } from './db.ts'
+import { runBenchmark, saveBenchmark } from './aihot/benchmark.ts'
 
 const DAY_MS = 86_400_000
 /** 北京时间相对 UTC 的偏移（无夏令时，恒定 +8） */
@@ -71,6 +73,7 @@ export function startScheduler(app: FastifyInstance): void {
   }
 
   startDailySummary(app)
+  startAihotBenchmark(app)
 }
 
 /** 解析 "07:00,10:00" → 当天分钟数数组（去重、升序、忽略非法项）；空串表示不启用 */
@@ -159,6 +162,61 @@ function startDailySummary(app: FastifyInstance): void {
           app.log.info({ date, ok: result.ok, model: result.model }, '每日简报已生成')
         } catch (err) {
           app.log.error({ err, date }, '每日简报生成失败')
+        }
+        scheduleNext()
+      })()
+    }, delay)
+  }
+
+  scheduleNext()
+}
+
+/**
+ * 每日 AIHOT 外部基准对照（v0.34.0）
+ *
+ * 为什么值得每天跑：它是一把**固定的尺子**。单次对照只能看"今天重合多少"，
+ * 看不出"改源之后有没有变好"。有了日序列，扩源/改打分的效果就能被量化
+ * （v0.33.0 补官方博客后，覆盖率从 14% 提到 26% 就是这么测出来的）。
+ *
+ * 成本：一次请求（带 ETag，多数时候 304 不传正文），失败不影响其他定时任务。
+ */
+function startAihotBenchmark(app: FastifyInstance): void {
+  const spec = config.aihotBenchmarkAt.trim().toLowerCase()
+  if (!spec || spec === 'off' || spec === 'false') {
+    app.log.info('AIHOT 对照定时未开启（AIHOT_BENCHMARK_AT=off）')
+    return
+  }
+
+  const match = spec.match(/^(\d{1,2}):(\d{2})$/)
+  const hour = match ? Math.min(23, Math.max(0, Number(match[1]))) : 23
+  const minute = match ? Math.min(59, Math.max(0, Number(match[2]))) : 40
+  if (!match) app.log.warn(`AIHOT_BENCHMARK_AT 格式应为 HH:MM（收到 ${spec}），已回退为 23:40`)
+
+  const scheduleNext = (): void => {
+    const delay = msUntilNextLocal(Date.now(), hour, minute)
+    app.log.info(
+      `AIHOT 对照定时：${new Date(Date.now() + delay).toISOString()}（北京时间 ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}，约 ${(delay / 3_600_000).toFixed(1)} 小时后）`,
+    )
+    setTimeout(() => {
+      void (async () => {
+        const date = localDate(Date.now())
+        try {
+          const db = getDb()
+          const r = await runBenchmark({ db, hours: 24 })
+          saveBenchmark(db, r, date)
+          app.log.info(
+            {
+              date,
+              aihot: r.aihot.count,
+              ours: r.ours.count,
+              matched: r.overlap.matched,
+              coverageOfAihot: r.overlap.coverageOfAihot,
+            },
+            'AIHOT 对照完成',
+          )
+        } catch (err) {
+          // 对照失败不影响采集/简报，静默降级
+          app.log.warn({ err, date }, 'AIHOT 对照失败（不影响其他定时任务）')
         }
         scheduleNext()
       })()

@@ -302,7 +302,19 @@ export async function riskReport(
         formula: `基础权重 NFI ${params.crs.nfi}% / 利率 ${params.crs.rates}% / 信用 ${params.crs.credit}% / 指数 ${params.crs.index}%，再加交叉项（利率×信用）最多 +8 分`,
         detail:
           `宏观指标用历史分位数化（point-in-time，只用当天及以前的观测）；OAS > ${params.steps.oas}% 阶跃跳升；` +
-          `纳指回撤跨过 ${(params.dynamic.drawdown * 100).toFixed(0)}% 时宏观权重平滑升至 ×${params.dynamic.boost}（±${((params.dynamic.band ?? 0.02) * 100).toFixed(0)}pp 过渡带）；倒挂为二值触发。`,
+          `纳指回撤跨过 ${(params.dynamic.drawdown * 100).toFixed(0)}% 时宏观权重平滑升至 ×${params.dynamic.boost}（±${((params.dynamic.band ?? 0.02) * 100).toFixed(0)}pp 过渡带）。` +
+          (params.crs.rates === 0
+            ? '　ⓘ 当前为**简化模式**：利率连续打分权重为 0，倒挂改在「潜在脆弱」子指数里体现。'
+            : ''),
+      },
+      {
+        key: 'simplify',
+        title: '为什么简化（v0.34.0）',
+        formula: 'CRS 由 4 项（NFI 40 / 利率 20 / 信用 20 / 指数 20）改为 3 项（NFI 30 / 信用 35 / 指数 35）',
+        detail:
+          '依据是回测消融：去掉利率连续打分后，两个时间切分、两个预测目标同时变好' +
+          '（回撤 AUC 0.599→0.627 与 0.417→0.482）；而只留指数会明显变差（0.533/0.419），说明信用项必需。' +
+          '⚠️ 代价：倒挂不再进总分，只在子指数里体现。⚠️ 局限：回测不含 NFI，30% 的叙事权重无法被验证。',
       },
       {
         key: 'subIndices',
