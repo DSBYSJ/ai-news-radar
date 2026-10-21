@@ -51,7 +51,9 @@ const RULES = [
 const FORBIDDEN_PATHS = [
   { re: /^docs\//, desc: '内部文档目录 docs/' },
   { re: /^启动提示词\.md$/, desc: '内部启动提示词' },
-  { re: /^server\/\.env(\..+)?$/, desc: '后端环境变量（含密钥）' },
+  // 放行 .env.example：它是"需要哪些变量"的模板，本来就应该进仓库；
+  // 真值只写在 .env（已 gitignore）。之前一刀切导致模板无法更新。
+  { re: /^server\/\.env(?!\.example$)(\..+)?$/, desc: '后端环境变量（含密钥）' },
   { re: /^server\/scripts\//, desc: '运维脚本目录' },
   { re: /^server\/README\.md$/, desc: '服务器说明' },
   { re: /(^|\/)\.env\.local$/, desc: '本地环境变量' },

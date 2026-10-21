@@ -15,6 +15,7 @@ import type {
   OverviewResponse,
   RiskReport,
   RiskBacktest,
+  MarketOverview,
   RiskParams,
   RiskHistoryPoint,
   AliasRule,
@@ -115,6 +116,8 @@ export const api = {
   risk: (days = 30) => get<RiskReport>('/risk', { days }),
   /** 历史回测：模型有没有区分能力（只读宏观历史，不联网） */
   riskBacktest: () => get<RiskBacktest>('/risk/backtest'),
+  /** 美股 AI 产业链估值看板（只读本地表，不联网） */
+  marketOverview: () => get<MarketOverview>('/market/overview'),
   volume: (days: number) => get<{ days: number; points: DailyPoint[] }>('/trend/volume', { days }),
   category: (days: number) => get<{ days: number; points: CategoryRatioPoint[] }>('/trend/category', { days }),
   velocity: (days: number, category?: string) => get<VelocityResponse>('/trend/velocity', { days, category }),

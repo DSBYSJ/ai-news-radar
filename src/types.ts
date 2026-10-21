@@ -463,6 +463,52 @@ export interface RiskQuality {
   notes: string[]
 }
 
+/** 美股 AI 产业链估值看板（v0.38.0） */
+export interface MarketCompanyRow {
+  symbol: string
+  name: string
+  segment: string
+  segmentLabel: string
+  role: string
+  fiscalEnd: string | null
+  revenue: number | null
+  netIncome: number | null
+  revenueGrowth: number | null
+  netMargin: number | null
+  roe: number | null
+  stale: boolean
+  close: number | null
+  marketCap: number | null
+  ps: number | null
+  psPercentile: number | null
+  pe: number | null
+  pePercentile: number | null
+  points: number
+  missingValuation: string | null
+}
+
+export interface MarketSegmentRow {
+  segment: string
+  label: string
+  companies: number
+  covered: number
+  revenue: number
+  netIncome: number
+  netMargin: number | null
+  marginCovered: number
+  revenueGrowth: number | null
+  psMedian: number | null
+  percentileMedian: number | null
+  valuationCovered: number
+}
+
+export interface MarketOverview {
+  generatedAt: string
+  coverage: { total: number; priced: number; valued: number; note: string }
+  segments: MarketSegmentRow[]
+  companies: MarketCompanyRow[]
+}
+
 /** 回测：事件级指标（v0.29.0） */
 export interface BacktestEventDetail {
   label: string

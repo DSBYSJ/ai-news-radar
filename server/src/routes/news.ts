@@ -11,6 +11,7 @@ import { loadParams, mergeParams, resetParams, saveParams, validateParams } from
 import { runBackfill } from '../risk/backfill.ts'
 import { runBacktest } from '../risk/backtest.ts'
 import { benchmarkTrend } from '../aihot/benchmark.ts'
+import { buildMarketOverview } from '../market/overview.ts'
 import { deleteAlias, listAliases, listMapping, upsertAlias } from '../entities/alias.ts'
 import { realign } from '../entities/realign.ts'
 import { entityDailySeries } from '../analytics/trend.ts'
@@ -587,6 +588,20 @@ export async function newsRoutes(app: FastifyInstance): Promise<void> {
     if (backtestCache && Date.now() - backtestCache.at < 10 * 60_000) return backtestCache.data
     const data = runBacktest(getDb())
     backtestCache = { at: Date.now(), data }
+    return data
+  })
+
+  /**
+   * 美股 AI 产业链估值看板（v0.38.0）
+   *
+   * 只读本地表（company_fundamentals / equity_daily），不联网。
+   * 数据由 `npm run market:sync` 定时写入。
+   */
+  let marketCache: { at: number; data: unknown } | null = null
+  app.get('/api/news/market/overview', async () => {
+    if (marketCache && Date.now() - marketCache.at < 5 * 60_000) return marketCache.data
+    const data = buildMarketOverview(getDb())
+    marketCache = { at: Date.now(), data }
     return data
   })
 

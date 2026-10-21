@@ -6,6 +6,7 @@ import { useBurstFeed } from './hooks/useBurstFeed.ts'
 import ListPage from './pages/ListPage.tsx'
 import HotPage from './pages/HotPage.tsx'
 import RiskPage from './pages/RiskPage.tsx'
+import MarketPage from './pages/MarketPage.tsx'
 import SettingsPage from './pages/SettingsPage.tsx'
 import CommandPalette from './components/CommandPalette.tsx'
 import OverviewPage from './pages/OverviewPage.tsx'
@@ -14,7 +15,7 @@ import TrendPage from './pages/TrendPage.tsx'
 import type { Health, SourceItem } from './types.ts'
 import { CATEGORY_LABELS } from './utils/format.ts'
 
-type Tab = 'overview' | 'list' | 'hot' | 'trend' | 'risk' | 'settings' | 'summary'
+type Tab = 'overview' | 'list' | 'hot' | 'trend' | 'risk' | 'market' | 'settings' | 'summary'
 type Theme = 'light' | 'dark'
 
 function initialTheme(): Theme {
@@ -72,6 +73,7 @@ const TABS: [Tab, string][] = [
   ['list', '资讯'],
   ['trend', '趋势'],
   ['risk', '风险'],
+  ['market', '估值'],
   ['settings', '后台'],
   ['summary', '简报'],
 ]
