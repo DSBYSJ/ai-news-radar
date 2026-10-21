@@ -61,11 +61,6 @@ export default function MacroCard({ data, onDrill }: { data: MacroCardData; onDr
       onClick={onDrill}
       className="group relative overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 text-left transition hover:border-white/15 hover:bg-white/[0.05]"
     >
-      {/* 背景迷你趋势 */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 opacity-40">
-        <Sparkline values={data.spark} width={220} height={34} color={color} />
-      </div>
-
       <div className="relative flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="text-[10px] tracking-[0.08em] text-slate-500">{data.label}</p>
@@ -88,6 +83,12 @@ export default function MacroCard({ data, onDrill }: { data: MacroCardData; onDr
           className="absolute inset-y-0 left-0 rounded-full"
           style={{ width: `${Math.min(100, (data.percentile ?? 0) * 100)}%`, backgroundColor: color }}
         />
+      </div>
+
+      {/* 近 30 天走势（独立一行，不压文字） */}
+      <div className="mt-1.5 flex items-center gap-2">
+        <Sparkline values={data.spark} width={150} height={22} color={color} />
+        <span className="text-[9px] text-slate-600">近 30 天</span>
       </div>
     </button>
   )

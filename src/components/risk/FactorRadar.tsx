@@ -13,8 +13,17 @@ interface Props {
   onFactorHover?: (key: string | null) => void
 }
 
-const CENTER = 110
-const R = 78
+const CENTER = 120
+const R = 72
+
+/** 展示用短标签（避免长名称压线） */
+const SHORT: Record<string, string> = {
+  money: '融资密度',
+  sentiment: '情绪偏正',
+  concentration: '叙事集中',
+  acceleration: '热度加速',
+  fomo: 'FOMO',
+}
 
 function pointAt(index: number, total: number, r: number): { x: number; y: number } {
   const angle = -Math.PI / 2 + (index * 2 * Math.PI) / total
@@ -66,7 +75,10 @@ export default function FactorRadar({ factors, size = 220, onFactorHover }: Prop
         {/* 数据点 + 标签 */}
         {dataPoints.map((p, i) => {
           const extreme = (p.score ?? 0) >= 95
-          const labelPoint = pointAt(i, n, R + 18)
+          const labelPoint = pointAt(i, n, R + 26)
+          // 按方位决定对齐：左半边右对齐、右半边左对齐、上下居中 —— 标签不会被画布裁掉
+          const angleDeg = (-90 + (i * 360) / n + 360) % 360
+          const anchor = angleDeg > 200 || angleDeg < 160 ? (angleDeg > 180 ? 'end' : angleDeg < 20 || angleDeg > 340 ? 'middle' : 'start') : 'middle'
           return (
             <g
               key={p.key}
@@ -85,19 +97,19 @@ export default function FactorRadar({ factors, size = 220, onFactorHover }: Prop
               <text
                 x={labelPoint.x}
                 y={labelPoint.y}
-                textAnchor="middle"
+                textAnchor={anchor}
                 dominantBaseline="middle"
                 className="fill-slate-400"
-                style={{ fontSize: 9 }}
+                style={{ fontSize: 9.5 }}
               >
-                {p.label}
+                {SHORT[p.key] ?? p.label}
               </text>
               <text
                 x={labelPoint.x}
-                y={labelPoint.y + 9}
-                textAnchor="middle"
+                y={labelPoint.y + 11}
+                textAnchor={anchor}
                 className={extreme ? 'fill-[#e5484d]' : 'fill-slate-500'}
-                style={{ fontSize: 8.5, fontVariantNumeric: 'tabular-nums' }}
+                style={{ fontSize: 9, fontVariantNumeric: 'tabular-nums' }}
               >
                 {p.score ?? '—'}
               </text>

@@ -95,20 +95,28 @@ export default function GaugeArc({
         {marks.map((m) => {
           const deg = 180 - (m.score / 100) * 180
           const inner = polar(R_OUT + 2, deg)
-          const outer = polar(R_OUT + 10, deg)
-          const text = polar(R_OUT + 16, deg)
+          const outer = polar(R_OUT + 11, deg)
+          const text = polar(R_OUT + 15, deg)
           return (
             <g key={m.year + m.label}>
               <line x1={inner.x} y1={inner.y} x2={outer.x} y2={outer.y} stroke="rgba(229,72,77,0.8)" strokeWidth="1.4" />
               <text
                 x={text.x}
-                y={text.y}
-                textAnchor={deg > 90 ? 'end' : deg < 90 ? 'start' : 'middle'}
-                dominantBaseline="middle"
+                y={text.y - 3}
+                textAnchor={deg > 100 ? 'end' : deg < 80 ? 'start' : 'middle'}
                 className="fill-[#e5484d]"
-                style={{ fontSize: 7.5, letterSpacing: 0.2 }}
+                style={{ fontSize: 8 }}
               >
-                {m.year} {m.label}
+                {m.year}
+              </text>
+              <text
+                x={text.x}
+                y={text.y + 7}
+                textAnchor={deg > 100 ? 'end' : deg < 80 ? 'start' : 'middle'}
+                className="fill-[#e5484d] opacity-80"
+                style={{ fontSize: 7 }}
+              >
+                {m.label}
               </text>
             </g>
           )
@@ -127,34 +135,38 @@ export default function GaugeArc({
               strokeLinecap="round"
               style={{ filter: glow }}
             />
-            <circle cx={CX} cy={CY} r="5.5" fill="#0d1117" stroke={color} strokeWidth="2.5" />
+            <circle cx={CX} cy={CY} r="4.2" fill="#0d1117" stroke={color} strokeWidth="2" />
           </g>
         )}
       </svg>
 
-      {/* 中心数字（HTML 覆盖层：字体与动画更好控） */}
-      <div className="pointer-events-none absolute inset-x-0 top-[38%] flex flex-col items-center">
+      {/* 中心数字：只放「数值 + 单位」，位置在弧顶下方，避开指针轴心 */}
+      <div className="pointer-events-none absolute inset-x-0 top-[26%] flex flex-col items-center">
         <span
-          className="text-[38px] font-semibold leading-none"
+          className="text-[36px] font-semibold leading-none"
           style={{ color, textShadow: band === 'critical' ? '0 0 18px rgba(229,72,77,0.5)' : 'none' }}
         >
           <CountUp value={v} placeholder="—" />
         </span>
-        <span className="mt-1 text-[11px] tracking-[0.14em] text-slate-400">{label}</span>
+        <span className="mt-1.5 text-[9px] tracking-[0.22em] text-slate-500">{label}</span>
+      </div>
+
+      {/* 字幕区：分档徽章 + 副信息（统一放在图下，避免压住轴心） */}
+      <div className="mt-1 flex flex-col items-center gap-1">
         {bandLabel && (
           <span
-            className="mt-1 rounded-full px-2 py-0.5 text-[10px]"
+            className="rounded-full px-2 py-0.5 text-[10px]"
             style={{ color, backgroundColor: `${color}1f` }}
           >
             {bandLabel}
           </span>
         )}
-        {sub && <span className="num mt-1 text-[9.5px] text-slate-500">{sub}</span>}
+        {sub && <span className="num text-[9.5px] text-slate-500">{sub}</span>}
       </div>
 
       {/* 未来 12 个月概率区间阴影带 */}
       {probability && (
-        <div className="mt-1 flex flex-col items-center">
+        <div className="mt-1.5 flex flex-col items-center">
           <div className="relative h-1.5 w-[70%] overflow-hidden rounded-full bg-slate-800">
             <div
               className="absolute inset-y-0 rounded-full"

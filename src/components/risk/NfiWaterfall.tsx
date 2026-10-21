@@ -10,6 +10,15 @@ import { colorOf } from './riskColors.ts'
  *   - hover 柱子时向上传 `onFactorHover`，联动历史折线高亮
  */
 
+/** 展示用短标签（tooltip 里仍显示全称） */
+const SHORT: Record<string, string> = {
+  money: '融资密度',
+  sentiment: '情绪偏正',
+  concentration: '叙事集中',
+  acceleration: '热度加速',
+  fomo: 'FOMO',
+}
+
 export interface WaterfallFactor {
   key: string
   label: string
@@ -104,7 +113,7 @@ export default function NfiWaterfall({ factors, total, height = 210, onFactorHov
                 className={isHover ? 'fill-slate-200' : 'fill-slate-400'}
                 style={{ fontSize: 9.5 }}
               >
-                {b.label.length > 5 ? `${b.label.slice(0, 5)}…` : b.label}
+                {SHORT[b.key] ?? b.label}
               </text>
               {isExtreme && (
                 <text
