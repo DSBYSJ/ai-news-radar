@@ -2,6 +2,44 @@
 
 版本号唯一来源：各 `package.json`。发布前照「升版本 → 写 changelog → 跑验证 → 推送部署」四步走。
 
+## 0.27.0（2026-10-21）
+
+**风险看板 UI/UX 全面重构（终端风 + 全套定制图表）**
+
+技术决策：**不引 ECharts**（项目约定手写 SVG，且上周刚为安卓 WebView 做过性能优化；
+ECharts gzip 后 ~300KB 会让滑动重新变卡）。用 SVG 实现全部视觉目标，gzip 仅 +5KB（91.6 → 97.1KB）。
+
+### 组件树
+```
+src/components/risk/
+  riskColors.ts    全局风险色映射（0-30 冷灰 / 30-50 荧光蓝 / 50-70 橙黄 / 70+ 猩红）
+  CountUp.tsx      数字滚动（easeOutExpo + rAF，respect reduced-motion）
+  GaugeArc.tsx     半环仪表盘（四段色带 + 辉光进度弧 + 灾难刻度 + 概率区间带）
+  NfiWaterfall.tsx 归因瀑布（透明底柱 + tooltip 收纳长文 + 满格呼吸警示）
+  FactorRadar.tsx  多因子雷达（5 维，顶破边缘=畸形 + 呼吸红点）
+  MacroCard.tsx    宏观卡片（Sparkline 背景 + 分位着色 + 分位刻度条）
+  MacroDrawer.tsx  下钻抽屉（长周期走势 + 传导逻辑文案）
+  HistoryLine.tsx  历史折线（十字准星 + 因子联动叠加曲线）
+  ScatterMatrix.tsx 宏观-微观交叉矩阵（气泡 + 危险区高亮）
+  RiskTicker.tsx   背离跑马灯（hover 暂停 + 渐隐遮罩）
+```
+
+### 全局视觉
+- 暗色终端风：`.risk-panel`（微光渐变分层，无硬边框）+ 辉光（CSS drop-shadow，不用 SVG 滤镜）
+- 数字滚动、呼吸灯（`.risk-breath`）、冷静脉冲（`.risk-pulse`）、跑马灯（`.ticker-track`）
+- 全部动效遵守 `prefers-reduced-motion`
+
+### 交互
+- **跨图联动**：hover 瀑布/雷达的因子 → 历史折线叠加该因子的分数曲线（新增 `/risk/history?details=1`）
+- **下钻**：点宏观卡片 → 右侧抽屉（长周期走势 + 对 AI 估值/融资的传导逻辑）
+- **极端值高亮**：FOMO=100 等满格柱加呼吸警示；散点危险区（高脆弱×高热度）飘红发光
+
+### 响应式
+- 宽屏 `lg:grid-cols-3`（主区 2 + 辅区 1）→ 窄屏单列；宏观卡片 `grid-cols-2 → lg:grid-cols-4`
+- SVG 全部 `viewBox` + `w-full`，矢量缩放不糊
+
+兼容：数据结构与 API 保持不变（`/risk/history` 仅新增可选 `factors` 字段）。
+
 ## 0.26.2 / 0.26.3（2026-10-21）
 
 **修上一版 3 个 bug（历史回溯图）**

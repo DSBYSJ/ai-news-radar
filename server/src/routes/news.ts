@@ -555,9 +555,23 @@ export async function newsRoutes(app: FastifyInstance): Promise<void> {
     const days = Math.max(7, Math.min(400, num(q.days, 180)))
     const db = getDb()
     const rows = db
-      .prepare('SELECT date, nfi, crs FROM risk_daily ORDER BY date DESC LIMIT ?')
-      .all(days) as unknown as { date: string; nfi: number | null; crs: number | null }[]
-    return { days, items: rows.reverse() }
+      .prepare('SELECT date, nfi, crs, nfi_factors FROM risk_daily ORDER BY date DESC LIMIT ?')
+      .all(days) as unknown as { date: string; nfi: number | null; crs: number | null; nfi_factors: string | null }[]
+    const items = rows.reverse().map((r) => {
+      // details=1 时附带 NFI 分项历史（供图表联动高亮）；旧字段不受影响
+      let factors: Record<string, number | null> | undefined
+      if (q.details === '1' && r.nfi_factors) {
+        try {
+          const parsed = JSON.parse(r.nfi_factors) as { key: string; score: number | null }[]
+          factors = {}
+          for (const f of parsed) factors[f.key] = f.score
+        } catch {
+          factors = undefined
+        }
+      }
+      return { date: r.date, nfi: r.nfi, crs: r.crs, factors }
+    })
+    return { days, items }
   })
 
   /**

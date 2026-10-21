@@ -96,6 +96,12 @@ export const api = {
 
   // v0.26.0 风险模块
   riskHistory: (days = 180) => get<{ days: number; items: RiskHistoryPoint[] }>('/risk/history', { days }),
+  /** 带 NFI 分项历史（供图表联动高亮） */
+  riskHistoryDetailed: (days = 180) =>
+    get<{ days: number; items: (RiskHistoryPoint & { factors?: Record<string, number | null> })[] }>(
+      '/risk/history',
+      { days, details: 1 },
+    ),
   riskParams: () => get<{ params: RiskParams; defaults: RiskParams }>('/risk/params'),
   riskSaveParams: (params: unknown) =>
     post<{ ok: boolean; params?: RiskParams; errors?: string[] }>('/risk/params', { params }),
