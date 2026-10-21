@@ -177,15 +177,28 @@ function daysBetween(a?: string, b?: string): number {
  * 直接把"算力芯片"板块营收虚增约 90%。XBRL 的 units 字段能区分，但默认取第一个 unit 就会中招。
  * 没有汇率源之前，非美元一律跳过 —— 宁可缺，不能错。
  */
-function usdUnits(units: Record<string, Fact[]>): Fact[] {
-  return units['USD'] ?? units['USD/shares'] ?? []
+function pickUnits(units: Record<string, Fact[]>, keys: string[]): Fact[] {
+  for (const k of keys) if (units[k]) return units[k]
+  return []
 }
 
+const USD_UNITS = ['USD', 'USD/shares']
+/**
+ * ⚠️ 股本的单位是 `shares`，不是 USD。
+ *    曾经为了过滤"新台币营收"加了一刀"只收 USD"，结果把股本也一起过滤掉了，
+ *    表现为"估值全部缺股本"。所以单位必须按字段类型分开给。
+ */
+const SHARE_UNITS = ['shares']
+
 /** 取某一标签的"年度"事实：优先 10-K/20-F，且期间长度 350~380 天 */
-function annualFacts(facts: Record<string, { units: Record<string, Fact[]> }>, tag: string): Fact[] {
+function annualFacts(
+  facts: Record<string, { units: Record<string, Fact[]> }>,
+  tag: string,
+  unitKeys: string[] = USD_UNITS,
+): Fact[] {
   const f = facts[tag]
   if (!f) return []
-  const arr = usdUnits(f.units)
+  const arr = pickUnits(f.units, unitKeys)
   const annual = arr.filter((x) => {
     const d = daysBetween(x.start, x.end)
     return (x.form === '10-K' || x.form === '20-F') && d >= 350 && d <= 380
@@ -200,10 +213,14 @@ function annualFacts(facts: Record<string, { units: Record<string, Fact[]> }>, t
 }
 
 /** 时点型事实（权益/股本）：不限期间长度，取该日期最近申报 */
-function instantFacts(facts: Record<string, { units: Record<string, Fact[]> }>, tag: string): Fact[] {
+function instantFacts(
+  facts: Record<string, { units: Record<string, Fact[]> }>,
+  tag: string,
+  unitKeys: string[] = USD_UNITS,
+): Fact[] {
   const f = facts[tag]
   if (!f) return []
-  const arr = usdUnits(f.units)
+  const arr = pickUnits(f.units, unitKeys)
   const byEnd = new Map<string, Fact>()
   for (const x of arr) {
     const prev = byEnd.get(x.end)
@@ -256,8 +273,8 @@ export async function fetchCompanyFundamentals(cik: string): Promise<CompanyFact
     () => instantFacts(ifrs, 'Equity'),
   ])
   const shares = firstNonEmpty([
-    () => instantFacts(gaap, 'CommonStockSharesOutstanding'),
-    () => instantFacts(gaap, 'EntityCommonStockSharesOutstanding'),
+    () => instantFacts(gaap, 'CommonStockSharesOutstanding', SHARE_UNITS),
+    () => instantFacts(gaap, 'EntityCommonStockSharesOutstanding', SHARE_UNITS),
   ])
 
   const map = <T>(arr: T[], key: (x: T) => string): Map<string, T> => new Map(arr.map((x) => [key(x), x]))

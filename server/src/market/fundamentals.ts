@@ -44,6 +44,7 @@ export async function syncFundamentals(
 
   const skipped: SyncReport['skipped'] = []
   let rows = 0
+  let inTx = false
   const now = new Date().toISOString()
 
   for (const c of list) {
@@ -59,6 +60,7 @@ export async function syncFundamentals(
         continue
       }
       db.exec('BEGIN')
+      inTx = true
       for (const a of facts.annual) {
         upsert.run(
           c.symbol,
@@ -75,8 +77,18 @@ export async function syncFundamentals(
         rows += 1
       }
       db.exec('COMMIT')
+      inTx = false
     } catch (err) {
-      db.exec('ROLLBACK')
+      // 只有真的开了事务才回滚：否则 ROLLBACK 会抛 "no transaction is active"，
+      // 把真正的错误（网络/参数）盖掉，排查时完全看不到原因
+      if (inTx) {
+        try {
+          db.exec('ROLLBACK')
+        } catch {
+          /* 忽略回滚失败 */
+        }
+        inTx = false
+      }
       skipped.push({ symbol: c.symbol, reason: String(err).slice(0, 120) })
     }
   }

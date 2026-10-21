@@ -197,6 +197,29 @@ CREATE TABLE IF NOT EXISTS company_fundamentals (
   PRIMARY KEY (symbol, fiscal_end)
 );
 
+-- 美股日线收盘价（v0.37.0，来源 FMP stable/historical-price-eod/light）
+-- 免费档只给近 5 年，所以这里不会覆盖 2008 那种长周期回测
+CREATE TABLE IF NOT EXISTS equity_daily (
+  symbol TEXT NOT NULL,
+  date   TEXT NOT NULL,
+  close  REAL NOT NULL,
+  volume REAL,
+  PRIMARY KEY (symbol, date)
+);
+
+-- 年度估值比率（v0.37.0，来源 FMP /stable/ratios；FMP 已按各期财报口径算好）
+CREATE TABLE IF NOT EXISTS company_ratios (
+  symbol              TEXT NOT NULL,
+  fiscal_end          TEXT NOT NULL,
+  pe                  REAL,
+  ps                  REAL,
+  pb                  REAL,
+  revenue_per_share   REAL,
+  net_income_per_share REAL,
+  updated_at          TEXT NOT NULL,
+  PRIMARY KEY (symbol, fiscal_end)
+);
+
 -- AIHOT 外部基准对照的每日快照（v0.34.0）：只存统计与样本，不存对方正文
 CREATE TABLE IF NOT EXISTS aihot_benchmark (
   date               TEXT PRIMARY KEY,   -- 北京时间日期
