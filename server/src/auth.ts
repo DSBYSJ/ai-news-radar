@@ -37,10 +37,40 @@ export function verifySessionToken(token: string, secret: string): { email: stri
   return { email: claims.email }
 }
 
+/**
+ * 鉴权配置校验（fail-closed）
+ *
+ * 旧行为是 fail-open：JWT_SECRET 没配就**完全不注册鉴权钩子**，所有 /api/* 敞开。
+ * 本地开发方便，但生产环境一旦漏配环境变量（换机器、重装、.env 没带过来），
+ * 接口会静默对公网开放 —— 而页面上一切正常，没人会发现。
+ *
+ * 所以：生产环境没密钥 → **直接抛错、拒绝启动**。
+ * 宁可站点 502（一眼看出问题），也不要"看起来正常但数据全裸"。
+ */
+export function assertAuthConfig(opts: { nodeEnv: string; jwtSecret: string }): void {
+  if (opts.jwtSecret.trim().length > 0) return
+  if (opts.nodeEnv === 'production') {
+    throw new Error(
+      '生产环境必须配置 JWT_SECRET（fail-closed）：未配置时拒绝启动。' +
+        '请检查 server/.env 是否随部署一起带上。',
+    )
+  }
+}
+
 export function registerAuth(app: FastifyInstance): void {
+  assertAuthConfig({ nodeEnv: config.nodeEnv, jwtSecret: config.jwtSecret })
+
   if (!config.jwtSecret) {
-    app.log.warn('JWT_SECRET 未配置 —— 鉴权已关闭，仅供本地开发；上线前必须配置')
+    app.log.warn('JWT_SECRET 未配置 —— 鉴权已关闭，仅供本地开发；生产环境会拒绝启动')
     return
+  }
+
+  if (config.nodeEnv === 'production' && config.allowedEmails.length === 0) {
+    // 不阻断启动：共享同一套登录态的账号本来就可能只有自己。但要提醒。
+    app.log.warn(
+      'ALLOWED_EMAILS 为空 —— 任何持有有效 cd_session 的账号都能访问本站数据。' +
+        '若骑行看板有多个用户，建议配置白名单。',
+    )
   }
 
   app.addHook('onRequest', async (req, reply) => {

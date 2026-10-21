@@ -28,12 +28,19 @@ export interface ValuationPoint {
   manual?: boolean
 }
 
-/** 取 t 日"已经能看到"的最近一期财报（fiscalEnd <= t） */
+/**
+ * 取 t 日"已经能看到"的最近一期财报。
+ *
+ * ⚠️ 门槛必须是 **申报日（filedAt）**，不是财年结束日（fiscalEnd）。
+ *    10-K 通常在财年结束后 1~3 个月才提交：FY2026 结束于 2026-01-25、
+ *    2026-02-25 才申报，那么 2026-02-01 这天**还看不到** FY2026 的营收。
+ *    用 fiscalEnd 判断等于提前一个月知道财报 —— 典型的 look-ahead bias。
+ */
 function fundamentalsAt(rows: FundamentalsRow[], date: string): FundamentalsRow | null {
   let best: FundamentalsRow | null = null
   for (const r of rows) {
-    if (r.fiscalEnd <= date) best = r
-    else break
+    const available = (r.filedAt ?? r.fiscalEnd) <= date
+    if (available) best = r
   }
   return best
 }

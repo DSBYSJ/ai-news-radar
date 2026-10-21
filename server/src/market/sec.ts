@@ -116,6 +116,7 @@ export interface AnnualFundamentals {
   epsDiluted: number | null
   /** 用于计算市值；SEC 只给"某一时点"的股本，取最近一次申报值 */
   shares: number | null
+  /** 首次申报日（不是财年结束日）—— point-in-time 判断"这天能不能看到这份财报"必须用它 */
   filedAt: string
 }
 
@@ -203,11 +204,16 @@ function annualFacts(
     const d = daysBetween(x.start, x.end)
     return (x.form === '10-K' || x.form === '20-F') && d >= 350 && d <= 380
   })
-  // 同一 fiscalEnd 可能被多年年报重复引用 → 取最后申报的那条
+  /*
+   * 同一 fiscalEnd 会被后续年报当"比较期"重复引用，所以每年都有多条。
+   * 取**最早申报**的那条 = 首次披露时市场看到的值，这才是 point-in-time 正确的口径。
+   * （之前取的是最晚申报，等于用了重述后的数字，而且 filed 日期晚一年，
+   *   会让"可用性门槛"失效 —— 这是估值序列里最隐蔽的一处未来数据泄漏。）
+   */
   const byEnd = new Map<string, Fact>()
   for (const x of annual) {
     const prev = byEnd.get(x.end)
-    if (!prev || x.filed > prev.filed) byEnd.set(x.end, x)
+    if (!prev || x.filed < prev.filed) byEnd.set(x.end, x)
   }
   return [...byEnd.values()].sort((a, b) => a.end.localeCompare(b.end))
 }
@@ -221,10 +227,11 @@ function instantFacts(
   const f = facts[tag]
   if (!f) return []
   const arr = pickUnits(f.units, unitKeys)
+  // 时点型事实同理：取最早申报，代表"当时可知"
   const byEnd = new Map<string, Fact>()
   for (const x of arr) {
     const prev = byEnd.get(x.end)
-    if (!prev || x.filed > prev.filed) byEnd.set(x.end, x)
+    if (!prev || x.filed < prev.filed) byEnd.set(x.end, x)
   }
   return [...byEnd.values()].sort((a, b) => a.end.localeCompare(b.end))
 }

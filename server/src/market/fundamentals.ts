@@ -100,6 +100,8 @@ export async function syncFundamentals(
 
 export interface FundamentalsRow {
   fiscalEnd: string
+  /** 首次申报日；为空时退回 fiscalEnd（老数据） */
+  filedAt?: string | null
   revenue: number | null
   netIncome: number | null
   equity: number | null
@@ -130,7 +132,7 @@ export interface DerivedMetrics {
 export function loadFundamentals(db: DatabaseSync, symbol: string): FundamentalsRow[] {
   return db
     .prepare(
-      `SELECT fiscal_end AS fiscalEnd, revenue, net_income AS netIncome, equity,
+      `SELECT fiscal_end AS fiscalEnd, filed_at AS filedAt, revenue, net_income AS netIncome, equity,
               eps_diluted AS epsDiluted, shares
          FROM company_fundamentals WHERE symbol = ? ORDER BY fiscal_end`,
     )

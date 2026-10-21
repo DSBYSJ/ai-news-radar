@@ -120,3 +120,47 @@ test('saveManualPrice：拒绝非法价格与日期格式', async () => {
   assert.throws(() => saveManualPrice(db, { symbol: 'X', date: '2026/10/20', close: 10 }), /YYYY-MM-DD/)
   db.close()
 })
+
+/* ------------------------------ 估值时点正确性（v0.40.0） ------------------------------ */
+
+test('buildDailyValuation：财报未申报前不得使用该期数据（look-ahead 防护）', async () => {
+  const { buildDailyValuation } = await import('../src/market/valuation.ts')
+  const fundamentals = [
+    // FY2025 于 2025-02-20 申报
+    { fiscalEnd: '2025-01-26', filedAt: '2025-02-20', revenue: 1000, netIncome: 100, equity: 500, epsDiluted: 1, shares: 100 },
+    // FY2026 财年结束 2026-01-25，但 2026-02-25 才申报
+    { fiscalEnd: '2026-01-25', filedAt: '2026-02-25', revenue: 2000, netIncome: 200, equity: 900, epsDiluted: 2, shares: 100 },
+  ]
+  const prices = [
+    { date: '2026-02-01', close: 50 }, // 财报已结束但未申报
+    { date: '2026-03-01', close: 60 }, // 已申报
+  ]
+  const series = buildDailyValuation(prices, fundamentals)
+  const before = series.find((p) => p.date === '2026-02-01')!
+  const after = series.find((p) => p.date === '2026-03-01')!
+
+  // 2026-02-01：只能用 FY2025 的营收 1000 → 市值 50*100=5000 → P/S 5.0
+  assert.ok(Math.abs((before.ps as number) - 5) < 1e-9, `未申报前应沿用上一年，实际 ${before.ps}`)
+  // 2026-03-01：可用 FY2026 营收 2000 → 6000/2000 = 3.0
+  assert.ok(Math.abs((after.ps as number) - 3) < 1e-9, `申报后应用新一期，实际 ${after.ps}`)
+})
+
+test('buildDailyValuation：缺 filedAt 的老数据退回 fiscalEnd，不整段失效', async () => {
+  const { buildDailyValuation } = await import('../src/market/valuation.ts')
+  const series = buildDailyValuation(
+    [{ date: '2026-02-01', close: 10 }],
+    [{ fiscalEnd: '2026-01-25', filedAt: null, revenue: 100, netIncome: 10, equity: 50, epsDiluted: 1, shares: 10 }],
+  )
+  assert.equal(series.length, 1, '有 fiscalEnd 就应能算')
+  assert.ok(Math.abs((series[0].ps as number) - 1) < 1e-9)
+})
+
+test('assertAuthConfig：生产环境缺密钥必须抛错（fail-closed）', async () => {
+  const { assertAuthConfig } = await import('../src/auth.ts')
+  assert.throws(() => assertAuthConfig({ nodeEnv: 'production', jwtSecret: '' }), /拒绝启动/)
+  assert.throws(() => assertAuthConfig({ nodeEnv: 'production', jwtSecret: '   ' }), /拒绝启动/)
+  // 开发环境放行（本地无 .env 也能跑）
+  assert.doesNotThrow(() => assertAuthConfig({ nodeEnv: 'development', jwtSecret: '' }))
+  // 配了密钥都放行
+  assert.doesNotThrow(() => assertAuthConfig({ nodeEnv: 'production', jwtSecret: 'x' }))
+})

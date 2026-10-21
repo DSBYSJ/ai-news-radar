@@ -14,7 +14,14 @@ const rootDir = path.resolve(import.meta.dirname, '..')
 const pkg = JSON.parse(readFileSync(path.join(rootDir, 'package.json'), 'utf8')) as { version: string }
 
 export const config = {
-  nodeEnv: process.env.NODE_ENV ?? 'development',
+  /*
+   * ⚠️ 默认值是 production，不是 development。
+   * 为什么：fail-closed 的判据不能依赖一个可能丢失的文件 ——
+   * 如果默认 development，那么"部署时 .env 没带上"会让鉴权静默关闭，
+   * 而站点看起来完全正常。默认 production 才能让"配置缺失"变成"启动失败"。
+   * 本地开发请在 .env 里显式写 NODE_ENV=development。
+   */
+  nodeEnv: process.env.NODE_ENV ?? 'production',
   host: process.env.HOST ?? '127.0.0.1',
   port: Number(process.env.PORT ?? 3001),
   databasePath: path.resolve(rootDir, process.env.DATABASE_PATH ?? './data/ai-news.db'),
