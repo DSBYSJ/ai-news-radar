@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite'
-import { computeCrs, type RiskParams } from './calculation.ts'
+import { computeCrs, DEFAULT_PARAMS, type RiskParams } from './calculation.ts'
 import { buildMacroInput, indexAt, inversionAt, loadSeries, valueAt } from './macroHistory.ts'
 import { loadParams } from './params.ts'
 
@@ -40,10 +40,22 @@ export const EVENT_LABELS: Record<EventKey, string> = {
  * 让"预警能力"看起来虚高。目前只有 3 个事件，统计上依然很弱 —— 报告里必须写明。
  */
 export const SYSTEMIC_EVENTS = [
-  { date: '2008-09-15', label: '2008 雷曼破产' },
-  { date: '2020-02-24', label: '2020 COVID 熔断潮' },
-  { date: '2023-03-08', label: '2023 硅谷银行事件' },
+  { date: '2008-09-15', label: '2008 雷曼破产', kind: 'banking' as const },
+  { date: '2020-02-24', label: '2020 COVID 熔断潮', kind: 'market' as const },
+  { date: '2023-03-08', label: '2023 硅谷银行事件', kind: 'banking' as const },
 ]
+
+/**
+ * 事件日期的选择（会影响提前量，必须写清楚）
+ *
+ * - 2008-09-15：雷曼申请破产保护。更早的起点是 2007-08（BNP 冻结基金）或 2007-10（纳指见顶），
+ *   但那两个日期距"市场真正崩"还有 11 个月，用它会把提前量算得更漂亮，属于挑数据。
+ * - 2020-02-24：欧美疫情扩散、指数开始连续暴跌的第一个交易日。
+ * - 2023-03-08：硅谷银行宣布融资失败（倒闭前 2 天）。
+ *
+ * ⚠️ 事件只有 3 个，且 2008 落在两个切分的**训练期**、不参与评估 ——
+ * 所以实际被检验的独立事件只有 2 个（2020 / 2023）。报告里必须分开写，否则会误以为 3 个都被验证过。
+ */
 
 export interface SplitSpec {
   name: string
@@ -152,6 +164,7 @@ export function aucOf(pos: number[], neg: number[]): number {
 
 function shiftMonths(date: string, months: number): string {
   const d = new Date(`${date}T00:00:00Z`)
+  if (Number.isNaN(d.getTime())) return date
   d.setUTCMonth(d.getUTCMonth() + months)
   return d.toISOString().slice(0, 10)
 }
@@ -358,11 +371,17 @@ export function evaluateEvent(
   testRows: Sample[],
   event: EventKey,
   threshold: number,
-  opts: { cooldownMonths?: number; years?: number } = {},
+  opts: {
+    cooldownMonths?: number
+    years?: number
+    /** 用哪个分数评估（默认 CRS；基线对比时传别的） */
+    scoreOf?: (s: Sample) => number | null
+  } = {},
 ): EventMetrics {
+  const scoreOf = opts.scoreOf ?? ((s: Sample) => s.features.crs)
   const rows = testRows
-    .map((s) => ({ date: s.date, score: s.features.crs, y: s.labels[event] }))
-    .filter((r): r is { date: string; score: number; y: 0 | 1 } => r.y !== null)
+    .map((s) => ({ date: s.date, score: scoreOf(s), y: s.labels[event] }))
+    .filter((r): r is { date: string; score: number; y: 0 | 1 } => r.y !== null && r.score !== null && Number.isFinite(r.score))
 
   const pos = rows.filter((r) => r.y === 1).map((r) => r.score)
   const neg = rows.filter((r) => r.y === 0).map((r) => r.score)
@@ -433,7 +452,12 @@ export function evaluateEvent(
 export function chooseThreshold(
   trainRows: Sample[],
   event: EventKey = 'drawdown20',
-  opts: { maxAlertsPerYear?: number; cooldownMonths?: number; years?: number } = {},
+  opts: {
+    maxAlertsPerYear?: number
+    cooldownMonths?: number
+    years?: number
+    scoreOf?: (s: Sample) => number | null
+  } = {},
 ): { value: number; rule: string; maxAlertsPerYear: number } {
   const budget = opts.maxAlertsPerYear ?? 1
   const years = opts.years ?? Math.max(1, trainRows.length / 12)
@@ -441,7 +465,11 @@ export function chooseThreshold(
   let fallback: { value: number; recall: number; alerts: number } | null = null
 
   for (let t = 20; t <= 95; t += 5) {
-    const m = evaluateEvent(trainRows, event, t, { cooldownMonths: opts.cooldownMonths, years })
+    const m = evaluateEvent(trainRows, event, t, {
+      cooldownMonths: opts.cooldownMonths,
+      years,
+      scoreOf: opts.scoreOf,
+    })
     const cand = { value: t, recall: m.eventRecall, alerts: m.alertsPerYear }
     // 记录"最省告警"的方案作为无可行解时的兜底
     if (!fallback || cand.alerts < fallback.alerts || (cand.alerts === fallback.alerts && cand.recall > fallback.recall)) {
@@ -560,26 +588,98 @@ export interface LeakCheck {
   detail: string
 }
 
-/** 特征不得使用未来数据：同一天的输入，用全量序列算 vs 截断到当天算，必须完全一致 */
-function checkNoFutureLeak(db: DatabaseSync, dates: string[]): LeakCheck {
-  const nasdaq = loadSeries(db, 'nasdaq')
+/** 取一个输入的「指纹」：标量 + 长度 + 末值，避免每次序列化几千个数 */
+function inputSignature(p: ReturnType<typeof buildMacroInput>): string {
+  if (!p) return 'null'
+  return [p.value, p.yearAgo, p.avg200, p.high52w, p.history.length, p.history[p.history.length - 1]].join('|')
+}
+
+/**
+ * 特征不得使用未来数据：同一天的输入，用「全量序列」算 vs 用「截断到当天」算，必须完全一致。
+ *
+ * v0.29.0 只抽查了 nasdaq 的 4 个日期 —— 覆盖太窄（rates/credit 完全没查）。
+ * 现在对 **4 个序列 × 全部样本日期** 逐一比对（964 次），再对 4 个日期做完整 JSON 比对。
+ */
+function checkNoFutureLeak(db: DatabaseSync, dates: string[], fullJsonDates: string[]): LeakCheck {
+  const keys = ['nasdaq', 'rates10y', 'rates2y', 'creditSpreadLong']
   const bad: string[] = []
-  for (const date of dates) {
-    const i = indexAt(nasdaq, date)
+  let checked = 0
+
+  for (const key of keys) {
+    const s = loadSeries(db, key)
+    if (s.dates.length === 0) continue
+    for (const date of dates) {
+      const i = indexAt(s, date)
+      if (i < 0) continue
+      checked += 1
+      const full = buildMacroInput(s, date, key, key)
+      const truncated = buildMacroInput(
+        { dates: s.dates.slice(0, i + 1), values: s.values.slice(0, i + 1) },
+        date,
+        key,
+        key,
+      )
+      if (inputSignature(full) !== inputSignature(truncated)) bad.push(`${key}@${date}`)
+    }
+  }
+
+  // 再抽 4 个日期做完整序列比对（含 history 数组本身）
+  for (const date of fullJsonDates) {
+    const s = loadSeries(db, 'nasdaq')
+    const i = indexAt(s, date)
     if (i < 0) continue
-    const full = buildMacroInput(nasdaq, date, 'index', 'NASDAQ')
+    const full = buildMacroInput(s, date, 'index', 'NASDAQ')
     const truncated = buildMacroInput(
-      { dates: nasdaq.dates.slice(0, i + 1), values: nasdaq.values.slice(0, i + 1) },
+      { dates: s.dates.slice(0, i + 1), values: s.values.slice(0, i + 1) },
       date,
       'index',
       'NASDAQ',
     )
-    if (JSON.stringify(full) !== JSON.stringify(truncated)) bad.push(date)
+    if (JSON.stringify(full) !== JSON.stringify(truncated)) bad.push(`fullJSON@${date}`)
   }
+
   return {
-    name: '特征不使用未来数据（全量 vs 截断重算）',
+    name: '特征不使用未来数据（4 序列 × 全部样本日期，全量 vs 截断重算）',
     ok: bad.length === 0,
-    detail: bad.length === 0 ? `抽查 ${dates.length} 个日期，结果完全一致` : `以下日期不一致：${bad.join(', ')}`,
+    detail: bad.length === 0 ? `比对 ${checked} 组，结果完全一致` : `以下位置不一致：${bad.slice(0, 5).join(', ')}`,
+  }
+}
+
+/**
+ * 有标签的样本，其前向窗口必须在数据范围内（否则标签是"半截"的）。
+ * 用**观测下标**判断而不是日历月：交易日 252 个 ≈ 12 个月，但合成序列可能不是日频，
+ * 用日历比较会误报。
+ */
+function checkLabelInBounds(db: DatabaseSync, samples: Sample[]): LeakCheck {
+  const nasdaq = loadSeries(db, 'nasdaq')
+  const horizon = 252
+  const bad = samples
+    .filter((s) => {
+      if (s.labels.drawdown20 === null) return false
+      const i = indexAt(nasdaq, s.date)
+      return i < 0 || i + horizon >= nasdaq.dates.length
+    })
+    .map((s) => s.date)
+  return {
+    name: '标签窗口不越界（有标签 ⇒ 未来 252 个观测齐全）',
+    ok: bad.length === 0,
+    detail: bad.length === 0 ? `数据 ${nasdaq.dates.length} 个观测，无越界样本` : `越界样本：${bad.slice(0, 5).join(', ')}`,
+  }
+}
+
+/**
+ * 参数来源检查。
+ * 如果参数是在**全历史**上调出来的（而不是训练段），那回测就会偏乐观 —— 这一步查不出来，
+ * 只能靠"用默认参数"来保证。所以这里只做提示，不假装能验证。
+ */
+function checkParamsProvenance(params: RiskParams): LeakCheck {
+  const isDefault = JSON.stringify(params) === JSON.stringify(DEFAULT_PARAMS)
+  return {
+    name: '参数来源（未在全历史上调参）',
+    ok: isDefault,
+    detail: isDefault
+      ? '当前使用默认参数，未针对历史数据调优'
+      : '⚠️ 当前参数与默认值不同：若这些参数是在全历史上调出来的，回测结论会偏乐观，请用默认参数复核',
   }
 }
 
@@ -617,11 +717,40 @@ export interface SplitResult {
   purgeCutoff: string
   trainSamples: number
   testSamples: number
+  /** 落在训练期的事件（只用于选阈值，不参与评估） */
+  eventsInTrain: string[]
+  /** 落在测试期的事件（真正被检验的独立事件） */
+  eventsInTest: string[]
   threshold: { value: number; rule: string; maxAlertsPerYear: number }
   events: Record<EventKey, EventMetrics>
+  /**
+   * 简单基线：用同一阈值规则各自选阈值，再在同一测试期评估。
+   * 按事件分开算 —— 因为「当前回撤」对「未来回撤」是自指的（跌了还会跌），
+   * 拿它去预测"危机"才是更公平的比较。
+   */
+  baselines: Record<'drawdown20' | 'systemic', BaselineRow[]>
   bootstrap: Record<EventKey, BootstrapRow[]>
   ablation: AblationRow[]
 }
+
+/** 简单基线：只用一个指标，看复杂 CRS 是否真的比它强 */
+export interface BaselineRow {
+  name: string
+  /** 该基线按同一规则（误报预算）在训练段选出的阈值 */
+  threshold: number
+  auc: number
+  eventRecall: number
+  alertsPerYear: number
+  /** 中位提前天数 —— AUC 高但提前量为 0 的基线，对"预警"没用 */
+  medianLeadDays: number | null
+}
+
+const BASELINES: { name: string; scoreOf: (s: Sample) => number | null }[] = [
+  // 分位与回撤都放大到 0~100 区间，让阈值搜索范围（20~95）与 CRS 可比
+  { name: '信用利差分位', scoreOf: (s) => (s.features.oasPct === null ? null : s.features.oasPct * 100) },
+  { name: '当前回撤深度', scoreOf: (s) => (s.features.drawdown === null ? null : -s.features.drawdown * 100) },
+  { name: '10Y 利率水平', scoreOf: (s) => (s.features.rates === null ? null : s.features.rates * 10) },
+]
 
 export interface BacktestReport {
   generatedAt: string
@@ -655,6 +784,37 @@ function runSplit(db: DatabaseSync, samples: Sample[], spec: SplitSpec, basePara
     bootstrap[key] = [12, 24, 36].map((b) => movingBlockBootstrap(test, key, b))
   }
 
+  // 简单基线：同一套阈值规则（误报预算）各自在训练段选阈值，再在同一测试期评估
+  const buildBaselines = (event: 'drawdown20' | 'systemic'): BaselineRow[] =>
+    BASELINES.map((b) => {
+      const t = chooseThreshold(train, event, { maxAlertsPerYear: 1, scoreOf: b.scoreOf })
+      const m = evaluateEvent(test, event, t.value, { years, scoreOf: b.scoreOf })
+      return {
+        name: b.name,
+        threshold: t.value,
+        auc: m.auc,
+        eventRecall: m.eventRecall,
+        alertsPerYear: m.alertsPerYear,
+        medianLeadDays: m.medianLeadDays,
+      }
+    })
+  const baselines = { drawdown20: buildBaselines('drawdown20'), systemic: buildBaselines('systemic') }
+
+  // 事件落在哪一段：训练期事件只用于选阈值，不参与评估 —— 必须分开报，否则会误以为都被验证过
+  const trainFromDate = train[0]?.date ?? spec.trainFrom
+  const trainToDate = train[train.length - 1]?.date ?? spec.trainTo
+  const testFromDate = test[0]?.date ?? spec.testFrom
+  const testToDate = test[test.length - 1]?.date ?? spec.testTo ?? '—'
+  const eventsInTrain = SYSTEMIC_EVENTS.filter((e) => e.date >= trainFromDate && e.date <= trainToDate).map(
+    (e) => `${e.label}（${e.date}）`,
+  )
+  const eventsInTest =
+    test.length === 0
+      ? []
+      : SYSTEMIC_EVENTS.filter(
+          (e) => e.date >= testFromDate && e.date <= shiftMonths(testToDate, HORIZON_MONTHS),
+        ).map((e) => `${e.label}（${e.date}）`)
+
   // 消融：每个变体重算一遍样本（分数会变），再在测试期评估
   const ablation: AblationRow[] = []
   const baseline = events.drawdown20
@@ -684,8 +844,11 @@ function runSplit(db: DatabaseSync, samples: Sample[], spec: SplitSpec, basePara
     purgeCutoff,
     trainSamples: train.length,
     testSamples: test.length,
+    eventsInTrain,
+    eventsInTest,
     threshold,
     events,
+    baselines,
     bootstrap,
     ablation,
   }
@@ -698,16 +861,19 @@ export function runBacktest(db: DatabaseSync, opts: { params?: RiskParams } = {}
   const main = runSplit(db, samples, MAIN_SPLIT, params)
   const aux = runSplit(db, samples, AUX_SPLIT, params)
 
-  // 泄漏检查用样本序列上的 4 个日期抽查
+  // 泄漏检查：全部样本日期 × 4 个序列，而不是抽查几个点
+  const allDates = samples.map((s) => s.date)
   const probeDates = [0.25, 0.5, 0.75, 0.95]
     .map((p) => samples[Math.floor(p * (samples.length - 1))]?.date)
     .filter((d): d is string => Boolean(d))
 
   const leakChecks = [
-    checkNoFutureLeak(db, probeDates),
+    checkNoFutureLeak(db, allDates, probeDates),
+    checkLabelInBounds(db, samples),
     checkPurge(main),
     checkPurge(aux),
     checkPercentileGrowth(db, probeDates),
+    checkParamsProvenance(params),
   ]
 
   const coverage = db

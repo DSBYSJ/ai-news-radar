@@ -44,6 +44,13 @@ function printSplit(s: SplitResult): void {
       `　→ 测试 ${s.testFrom} ~ ${s.testTo}（${s.testSamples} 样本）`,
   )
   console.log(`阈值 CRS ≥ ${s.threshold.value}　规则：${s.threshold.rule}`)
+  console.log(
+    `事件分布：训练期 ${s.eventsInTrain.length} 个${s.eventsInTrain.length ? `（${s.eventsInTrain.join('、')}）` : ''}` +
+      `　**测试期 ${s.eventsInTest.length} 个**${s.eventsInTest.length ? `（${s.eventsInTest.join('、')}）` : ''}`,
+  )
+  if (s.eventsInTrain.length > 0) {
+    console.log('  ⚠️ 训练期事件只用于选阈值，不参与评估 —— 别把它算进"被验证的事件数"')
+  }
 
   for (const key of Object.keys(EVENT_LABELS) as EventKey[]) {
     const m = s.events[key]
@@ -68,6 +75,26 @@ function printSplit(s: SplitResult): void {
       )
     }
   }
+
+  for (const ev of ['drawdown20', 'systemic'] as const) {
+    console.log(`\n  与简单基线对比（目标：${EVENT_LABELS[ev]}，同一误报预算规则）`)
+    console.log('    模型                 阈值   AUC    事件召回  每年误报  中位提前')
+    const self = s.events[ev]
+    console.log(
+      `    ${'完整 CRS'.padEnd(18)} ${String(s.threshold.value).padStart(4)}  ${f3(self.auc)}  ` +
+        `${pct(self.eventRecall).padStart(6)}  ${String(self.alertsPerYear).padStart(8)}  ` +
+        `${self.medianLeadDays === null ? '—' : `${self.medianLeadDays} 天`}`,
+    )
+    for (const b of s.baselines[ev]) {
+      const better = b.auc > self.auc + 0.02
+      console.log(
+        `    ${b.name.padEnd(18)} ${String(b.threshold).padStart(4)}  ${f3(b.auc)}  ` +
+          `${pct(b.eventRecall).padStart(6)}  ${String(b.alertsPerYear).padStart(8)}  ` +
+          `${(b.medianLeadDays === null ? '—' : `${b.medianLeadDays} 天`).padEnd(8)}${better ? '← AUC 更高' : ''}`,
+      )
+    }
+  }
+  console.log('    ⚠️「当前回撤」对「未来回撤」是自指（跌了还会跌），看它对 systemic 那一列才公平')
 
   console.log('\n  逐因子消融（目标：纳指回撤，测试段）')
   console.log('    变体                 测试AUC   Δ     事件召回  每年误报')

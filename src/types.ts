@@ -509,6 +509,15 @@ export interface BacktestAblation {
   deltaAuc: number
 }
 
+export interface BacktestBaseline {
+  name: string
+  threshold: number
+  auc: number
+  eventRecall: number
+  alertsPerYear: number
+  medianLeadDays: number | null
+}
+
 export interface BacktestSplit {
   name: string
   trainFrom: string
@@ -518,8 +527,14 @@ export interface BacktestSplit {
   purgeCutoff: string
   trainSamples: number
   testSamples: number
+  /** 落在训练期的事件（只用于选阈值，不参与评估） */
+  eventsInTrain: string[]
+  /** 落在测试期的事件（真正被检验的） */
+  eventsInTest: string[]
   threshold: { value: number; rule: string; maxAlertsPerYear: number }
   events: Record<string, BacktestEventMetrics>
+  /** 简单基线，按事件分开 */
+  baselines: Record<'drawdown20' | 'systemic', BacktestBaseline[]>
   bootstrap: Record<string, BacktestBootstrap[]>
   ablation: BacktestAblation[]
 }

@@ -206,3 +206,61 @@ test('runBacktest：泄漏检查全部通过，且两个切分都输出', () => 
   assert.match(r.positioning, /不含 NFI/, '必须标明回测不包含 NFI')
   db.close()
 })
+
+/* ================================================================== */
+/* v0.31.0：基线对比 / 事件归属 / 参数来源检查                          */
+/* ================================================================== */
+
+test('runBacktest：训练期事件与测试期事件必须分开报', () => {
+  const db = setup()
+  seedSeries(db)
+  const r = runBacktest(db)
+  const main = r.splits.main
+  // 2008 在主实验训练期 → 不能出现在测试期事件里
+  assert.ok(
+    main.eventsInTrain.some((e) => e.includes('2008')),
+    `2008 应归入训练期事件，实际：${main.eventsInTrain.join('、')}`,
+  )
+  assert.ok(
+    !main.eventsInTest.some((e) => e.includes('2008')),
+    '2008 不得同时出现在测试期（会重复使用同一事件）',
+  )
+  db.close()
+})
+
+test('runBacktest：基线与 CRS 用同一阈值规则，且按事件分开', () => {
+  const db = setup()
+  seedSeries(db)
+  const r = runBacktest(db)
+  const b = r.splits.main.baselines
+  assert.ok(b.drawdown20.length >= 3, '至少 3 条简单基线')
+  assert.ok(b.systemic.length >= 3, '系统性危机也要有基线')
+  for (const row of b.drawdown20) {
+    assert.ok(row.threshold >= 20 && row.threshold <= 95, `基线阈值应在搜索范围内：${row.threshold}`)
+    assert.ok(row.auc >= 0 && row.auc <= 1)
+  }
+  db.close()
+})
+
+test('runBacktest：参数被改过时，参数来源检查会如实报警', () => {
+  const db = setup()
+  seedSeries(db)
+  const tweaked = { ...DEFAULT_PARAMS, crs: { ...DEFAULT_PARAMS.crs, rates: 30, nfi: 30 } }
+  const r = runBacktest(db, { params: tweaked })
+  const check = r.leakChecks.find((c) => c.name.includes('参数来源'))
+  assert.ok(check, '必须有参数来源检查')
+  assert.equal(check!.ok, false, '非默认参数应标记为未通过（可能在全历史上调过）')
+  assert.match(check!.detail, /偏乐观/)
+  db.close()
+})
+
+test('runBacktest：泄漏检查覆盖全部样本日期 × 4 个序列', () => {
+  const db = setup()
+  seedSeries(db)
+  const r = runBacktest(db)
+  const check = r.leakChecks.find((c) => c.name.includes('特征不使用未来数据'))
+  assert.ok(check?.ok)
+  const n = Number((check!.detail.match(/比对 (\d+) 组/) ?? [])[1] ?? 0)
+  assert.ok(n >= 40, `应覆盖全部样本日期 × 4 序列，实际只比对 ${n} 组（抽查几个点不算）`)
+  db.close()
+})

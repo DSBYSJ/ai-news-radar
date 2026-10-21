@@ -138,10 +138,17 @@ function SplitTable({ split }: { split: BacktestSplit }) {
   const rows = Object.values(split.events)
   return (
     <div className="mt-2">
-      <p className="text-[10px] text-slate-500">
+      <p className="mt-1 text-[10px] text-slate-500">
         <b className="text-slate-400">{split.name}</b>　训练 {split.trainFrom}~{split.trainTo}
         （purging 后实际截止 <span className="num">{split.purgeCutoff}</span>，{split.trainSamples} 样本）→ 测试{' '}
         {split.testFrom}~{split.testTo}（{split.testSamples} 样本）　告警阈值 <span className="num">CRS ≥ {split.threshold.value}</span>
+      </p>
+      <p className="mt-0.5 text-[9.5px] text-slate-500">
+        事件归属：训练期 {split.eventsInTrain.length} 个
+        {split.eventsInTrain.length > 0 && `（${split.eventsInTrain.join('、')}）`}　·　
+        <b className="text-slate-400">测试期 {split.eventsInTest.length} 个</b>
+        {split.eventsInTest.length > 0 && `（${split.eventsInTest.join('、')}）`}
+        {split.eventsInTrain.length > 0 && '　⚠️ 训练期事件只用于选阈值，不算"被验证"'}
       </p>
       <div className="mt-1 overflow-x-auto">
         <table className="w-full text-[10px]">
@@ -204,6 +211,59 @@ function SplitTable({ split }: { split: BacktestSplit }) {
   )
 }
 
+/** 与简单基线对比（用系统性危机这个目标，避免"回撤预测回撤"的自指） */
+function BaselineTable({ split }: { split: BacktestSplit }) {
+  const self = split.events.systemic
+  const rows = split.baselines.systemic ?? []
+  if (!self) return null
+  return (
+    <div className="mt-2 overflow-x-auto">
+      <p className="text-[9.5px] text-slate-500">
+        {split.name}·目标：系统性危机　同一误报预算规则各自选阈值
+      </p>
+      <table className="mt-1 w-full text-[9.5px]">
+        <thead>
+          <tr className="text-slate-500">
+            <th className="py-0.5 pr-2 text-left font-normal">模型</th>
+            <th className="py-0.5 px-1.5 text-right font-normal">AUC</th>
+            <th className="py-0.5 px-1.5 text-right font-normal">事件召回</th>
+            <th className="py-0.5 px-1.5 text-right font-normal">每年误报</th>
+            <th className="py-0.5 pl-1.5 text-right font-normal">中位提前</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr className="border-t border-white/[0.06]">
+            <td className="py-1 pr-2 text-slate-200">完整 CRS</td>
+            <td className="num py-1 px-1.5 text-right text-slate-200">{self.auc.toFixed(2)}</td>
+            <td className="num py-1 px-1.5 text-right text-slate-300">{(self.eventRecall * 100).toFixed(0)}%</td>
+            <td className="num py-1 px-1.5 text-right text-slate-400">{self.alertsPerYear.toFixed(2)}</td>
+            <td className="num py-1 pl-1.5 text-right text-slate-400">
+              {self.medianLeadDays === null ? '—' : `${self.medianLeadDays}d`}
+            </td>
+          </tr>
+          {rows.map((b) => {
+            const better = b.auc > self.auc + 0.02
+            return (
+              <tr key={b.name} className="border-t border-white/[0.06]">
+                <td className="py-1 pr-2 text-slate-400">
+                  {b.name}
+                  {better && <span className="ml-1 text-[9px] text-amber-400">AUC 更高</span>}
+                </td>
+                <td className="num py-1 px-1.5 text-right text-slate-400">{b.auc.toFixed(2)}</td>
+                <td className="num py-1 px-1.5 text-right text-slate-500">{(b.eventRecall * 100).toFixed(0)}%</td>
+                <td className="num py-1 px-1.5 text-right text-slate-500">{b.alertsPerYear.toFixed(2)}</td>
+                <td className="num py-1 pl-1.5 text-right text-slate-500">
+                  {b.medianLeadDays === null ? '—' : `${b.medianLeadDays}d`}
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 /** 回测结论：定位 + 泄漏检查 + 两个切分 + 消融 */
 export function BacktestCard({ data }: { data: RiskBacktest }) {
   const [open, setOpen] = useState(false)
@@ -238,6 +298,14 @@ export function BacktestCard({ data }: { data: RiskBacktest }) {
 
       <SplitTable split={main} />
       <SplitTable split={aux} />
+
+      <div className="mt-2 grid gap-2 lg:grid-cols-2">
+        <BaselineTable split={main} />
+        <BaselineTable split={aux} />
+      </div>
+      <p className="mt-1 text-[9px] text-slate-500">
+        「当前回撤」对「未来回撤」是自指的（跌了还会跌），所以这里用系统性危机作目标比较
+      </p>
 
       <p
         className="mt-2.5 rounded-lg px-2.5 py-1.5 text-[10px] leading-relaxed"
