@@ -42,3 +42,6 @@ data/
 .idea/
 .DS_Store
 Thumbs.db
+
+# 演示登录页含演示账号凭据：本地与服务端保留，不进公开仓库
+public/login.html

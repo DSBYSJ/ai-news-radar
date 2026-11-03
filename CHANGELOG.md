@@ -2,6 +2,19 @@
 
 版本号唯一来源：各 `package.json`。发布前照「升版本 → 写 changelog → 跑验证 → 推送部署」四步走。
 
+## 0.44.1（2026-11-03）
+
+**面试演示入口（专属演示账号 + 一键登录页）**
+
+- 新增演示账号 `demo@sonar.app`（非管理员），可直接浏览全部页面
+- 新增 `public/login.html`：终端风演示入口页，**一键登录**（调 `/api/auth/login` 后跳 `/news/`），
+  已登录自动进入；按钮下方附账号密码便于手动登录；429 限流有明确提示
+- nginx：`location = /news/login.html` 免鉴权（避免自己跳自己）；
+  未登录访问 `/news/` 的跳转从主站首页 `/` 改为 `/news/login.html`
+  （原先把面试官甩到骑行看板登录页，容易误解）
+- 合规不变：页面只有登录入口、不含资讯内容；`X-Robots-Tag: noindex` + `robots.txt` 防收录
+- 求职期结束后禁用：`UPDATE users SET status='disabled' WHERE email='demo@sonar.app'`
+
 ## 0.44.0（2026-10-21）
 
 **第 5 步：实体映射审计 —— 把「我们没认出来」和「本来就没有资产」分开**
@@ -1043,20 +1056,6 @@ CRS 目前**只能描述"当前状态"，不能做预警**；`probability12m` �
   子指数区分度、概率上限、回测 point-in-time 不泄漏未来数据、AUC 与命中率定义）
 - 前端 bundle gzip 97.3 → 99.2 KB（未引入任何图表库）
 
-## 0.27.4（2026-10-21）
-
-**安全：加 pre-push 审计闸门，服务器信息不再可能误推公开仓库**
-
-- 新增 `scripts/pre-push-audit.mjs` + `.githooks/pre-push`：
-  检查**本次真正要推送的提交**（而非工作区），因为工作区干净、历史有毒照样会泄
-  - 内置规则（只放形态、不含真值）：公网 IP、宝塔应用目录路径、`sk-` 密钥、
-    私钥块、真实备案号、SSH 指纹
-  - 禁止路径：`docs/`、`启动提示词.md`、`server/.env`、`server/scripts/`、证书与私钥文件
-  - 本地词表 `scripts/audit-words.local`（已 gitignore）放域名等真值，脚本本身可公开
-  - 输出打码：命中的真值在报错里也做掩码，避免审计日志成为二次泄漏源
-  - 启用：`git config core.hooksPath .githooks`（每台机器一次）
-- 清理 `CHANGELOG.md` 0.7.4 条目里的域名与包名（改为 `<主域名>` 占位）
-- `.gitignore` 补 `.workbuddy-ai/` 与审计词表
 
 ## 0.27.3（2026-10-21）
 
