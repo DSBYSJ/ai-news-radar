@@ -46,10 +46,11 @@
   --accent-line: rgba(23, 107, 117, 0.38);
   --ring: rgba(23, 107, 117, 0.35);
 
-  /* 语义色 */
+  /* 语义色（-soft 为同色浅底，供徽章/胶囊用） */
   --up: #b3402a;
   --down: #2f7d5a;
   --warn: #b8873a;
+  --warn-soft: rgba(184, 135, 58, 0.12);
 
   /* 阴影：三层，越往上越"飘" */
   /* 三层 elevation：比之前更"实"，因为画布变深了，阴影必须更锐利才立得住 */
@@ -72,54 +73,60 @@
   --hot-soft: rgba(179, 64, 42, 0.08);
 }
 
+/* --------------------------------------------------------------------------
+   暗色主题「深海声呐」（v0.45.0 重做）
+   与亮色的「纸 + 墨 + 青绿」同一血统：深海蓝黑画布 + 声呐青主色 + 琥珀警示。
+   层级靠实底表面 + 发丝描边 + 克制阴影，不再依赖半透明玻璃与彩色极光。
+   -------------------------------------------------------------------------- */
 .dark {
-  --chart-grid: #202634;
-  --chart-axis: #78839a;
-  --chart-baseline: #414a5c;
-  --chart-dot-stroke: #0b0e15;
-  --chart-sep: #0f1319;
+  --chart-grid: #16222e;
+  --chart-axis: #64809a;
+  --chart-baseline: #2c4257;
+  --chart-dot-stroke: #0d1520;
+  --chart-sep: #0d1520;
 
-  --bg: #07080d;
-  --bg-glow: rgba(124, 58, 237, 0.20);
-  --bg-glow-2: rgba(14, 165, 233, 0.07);
-  --bg-glow-3: rgba(236, 72, 153, 0.05);
+  --bg: #05090f;
+  --bg-glow: rgba(45, 212, 191, 0);
+  --bg-glow-2: rgba(56, 189, 248, 0);
+  --bg-glow-3: rgba(45, 212, 191, 0);
 
-  --surface: #101319;
-  --surface-2: #141822;
-  --surface-sunk: #0b0e14;
+  --surface: #0d1520;
+  --surface-2: #121c29;
+  --surface-sunk: #080e16;
 
-  --line: rgba(255, 255, 255, 0.085);
-  --line-soft: rgba(255, 255, 255, 0.05);
-  --line-strong: rgba(255, 255, 255, 0.16);
+  --line: rgba(148, 190, 215, 0.11);
+  --line-soft: rgba(148, 190, 215, 0.06);
+  --line-strong: rgba(148, 190, 215, 0.22);
 
-  --ink: #f2f5fb;
-  --ink-2: #c3cad8;
-  --ink-muted: #8b95a8;
-  --ink-faint: #6a7488;
+  --ink: #e9f1f7;
+  --ink-2: #c6d4e0;
+  --ink-muted: #8ba1b4;
+  --ink-faint: #5d7488;
 
-  --accent: #a78bfa;
-  --accent-2: #818cf8;
-  --accent-soft: rgba(167, 139, 250, 0.12);
-  --accent-line: rgba(167, 139, 250, 0.55);
-  --ring: rgba(167, 139, 250, 0.5);
+  --accent: #2dd4bf;         /* 声呐青：深海里唯一的主信号 */
+  --accent-2: #5eead4;
+  --accent-soft: rgba(45, 212, 191, 0.1);
+  --accent-line: rgba(94, 234, 212, 0.5);
+  --ring: rgba(45, 212, 191, 0.45);
 
-  --up: #f87171;
+  --up: #fb7185;
   --down: #34d399;
   --warn: #fbbf24;
+  --warn-soft: rgba(251, 191, 36, 0.14);
 
-  --shadow-1: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 1px 2px rgba(0, 0, 0, 0.6);
-  --shadow-2: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 16px 36px -22px rgba(0, 0, 0, 0.95);
-  --shadow-3: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 30px 60px -30px rgba(0, 0, 0, 1);
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-2: 0 1px 2px rgba(0, 0, 0, 0.4), 0 14px 34px -20px rgba(0, 0, 0, 0.75);
+  --shadow-3: 0 2px 6px rgba(0, 0, 0, 0.45), 0 26px 52px -26px rgba(0, 0, 0, 0.85);
 
-  --hot: #f87171;
-  --hot-soft: rgba(248, 113, 113, 0.14);
+  --hot: #fb7185;
+  --hot-soft: rgba(251, 113, 133, 0.12);
 
-  /* 暗色下标志略提亮，避免糊在黑底里 */
-  --brand: #1c8490;
+  /* 标志与主色同源：声呐青 */
+  --brand: #2dd4bf;
   --shadow-card: var(--shadow-2);
 
-  --bevel: inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  --grain-opacity: 0.035;
+  --bevel: inset 0 1px 0 rgba(255, 255, 255, 0.045);
+  --grain-opacity: 0.028;
 }
 
 html,
@@ -371,6 +378,26 @@ body::after {
   }
 }
 
+/* 图表语义徽标（基线/构成/趋势/异常/情绪/实体）：
+   颜色是"这张卡在回答什么问题"的指纹，深浅两套都保持色相可辨。
+   亮色用饱和实底 + 白字；暗色用半透明深底 + 亮字（避免大色块抢视线）。 */
+.chart-tone {
+  color: #fff;
+}
+.chart-tone-base { background-image: linear-gradient(180deg, #64748b, #475569); }
+.chart-tone-mix { background-image: linear-gradient(180deg, #0ea5e9, #0284c7); }
+.chart-tone-trend { background-image: linear-gradient(180deg, #8b5cf6, #7c3aed); }
+.chart-tone-alert { background-image: linear-gradient(180deg, #f59e0b, #ea580c); }
+.chart-tone-mood { background-image: linear-gradient(180deg, #10b981, #059669); }
+.chart-tone-entity { background-image: linear-gradient(180deg, #14b8a6, #0891b2); }
+
+html.dark .chart-tone-base { background-image: none; background-color: rgba(126, 150, 171, 0.18); color: #a7bccd; box-shadow: inset 0 0 0 1px rgba(126, 150, 171, 0.3); }
+html.dark .chart-tone-mix { background-image: none; background-color: rgba(56, 189, 248, 0.14); color: #7dd3fc; box-shadow: inset 0 0 0 1px rgba(56, 189, 248, 0.3); }
+html.dark .chart-tone-trend { background-image: none; background-color: rgba(45, 212, 191, 0.14); color: #5eead4; box-shadow: inset 0 0 0 1px rgba(45, 212, 191, 0.32); }
+html.dark .chart-tone-alert { background-image: none; background-color: rgba(251, 191, 36, 0.13); color: #fcd34d; box-shadow: inset 0 0 0 1px rgba(251, 191, 36, 0.3); }
+html.dark .chart-tone-mood { background-image: none; background-color: rgba(52, 211, 153, 0.13); color: #6ee7b7; box-shadow: inset 0 0 0 1px rgba(52, 211, 153, 0.3); }
+html.dark .chart-tone-entity { background-image: none; background-color: rgba(34, 211, 238, 0.13); color: #67e8f9; box-shadow: inset 0 0 0 1px rgba(34, 211, 238, 0.3); }
+
 /* 图表公共样式（SVG 用 class 引用 CSS 变量，随主题切换） */
 .chart-grid {
   stroke: var(--chart-grid);
@@ -417,72 +444,50 @@ html {
 
 
 /* ============================================================================
-   深色模式 · 液态玻璃（Liquid Glass）层
+   深色模式 · 深海声呐（v0.45.0 重做，替代旧「液态玻璃」层）
    light 模式完全不受影响，所有规则都锁在 .dark 下。
    ----------------------------------------------------------------------------
-   与上一版「毛玻璃」的区别（这是本次重做的核心）：
-     · 毛玻璃 = 一块模糊的雾，越糊越"脏"，且五色光斑 + 点阵网格非常廉价。
-     · 液态玻璃 = 一块**有厚度、有折光**的介质：
-         1) 底色更薄（.38 而非 .46），主要靠边缘折光营造"玻璃"而非"雾"；
-         2) 沿边框走一圈**方向性高光**（conic-gradient + background-clip:border-box），
-            像光从左上方扫过玻璃切边 —— 这是液态玻璃最标志性的一笔；
-         3) 内侧四边分别打亮/压暗（inset box-shadow），做出切面的"棱"；
-         4) backdrop-filter 带少量 brightness 提亮折射内容，不是单纯变糊。
-   背景也一并重做：单一冷色系（靛蓝→青）+ 极低饱和 + 大尺度，
-   删掉点阵与斜向光带（廉价感主要来源），改为一层极缓慢的极光漂移。
+   设计取向：这是一台「声呐」，不是一块玻璃。
+     · 画布 = 深海：近黑的蓝，顶部一束极淡的青色环境光，右上角一组声呐距离环；
+     · 面板 = 仪器外壳：实底、发丝描边、顶部一道微光，层级靠明度差不靠透明度；
+     · 主色 = 声呐青（#2dd4bf），警示 = 琥珀，危险 = 珊瑚红，与亮色同语义。
+   旧版的紫色极光 + 半透明折射玻璃整体退役：长列表里几十层 backdrop 合成
+   既拖帧率又让文字发虚；实底面板在数据产品里更耐看、更锐利。
    ============================================================================ */
 
-/* ---------- 1. 背景：深空 + 有形状的光团 ----------
-   上一版为了"去土"把光压得太低，结果背景变成一潭死水 —— 玻璃没有东西可透/
-   可折射，卡片就只是"灰方块"。液态玻璃的前提是**背后有可观的光**。
-   这版：同一冷色族内做明暗层次，靠"光的形状"而非纯色相撑起高级感。 */
+/* ---------- 1. 背景：深海 + 声呐距离环 ---------- */
 .dark body {
-  background-color: #06070e;
-  /* 背景分两类元素：
-       A. 大色场 —— 决定整体色调与"高级感"，全部低饱和、超大面积、柔和衰减；
-       B. 局部亮斑 —— 尺寸小、亮度略高，是有明显亮度梯度的"结构"。
-     折射需要背后有梯度可弯折：A 提供氛围，B 才是折射显形的载体。
-     上一版用网格提供结构，虽然有效但太"工程感"，这里换成亮斑。 */
+  background-color: #05090f;
   background-image:
-    /* A. 大色场 */
-    radial-gradient(64% 52% at 18% 26%, rgba(122, 92, 255, 0.5) 0%, rgba(86, 66, 190, 0.22) 40%, transparent 72%),
-    radial-gradient(52% 44% at 84% 20%, rgba(0, 170, 210, 0.34) 0%, rgba(0, 120, 150, 0.13) 44%, transparent 74%),
-    radial-gradient(58% 48% at 78% 84%, rgba(228, 90, 160, 0.26) 0%, rgba(160, 60, 110, 0.1) 46%, transparent 76%),
-    radial-gradient(50% 42% at 20% 90%, rgba(60, 120, 255, 0.3) 0%, transparent 70%),
-    /* 顶部环境光 */
-    radial-gradient(90% 36% at 50% -8%, rgba(110, 96, 240, 0.34), transparent 72%),
-    /* 暗角 */
-    radial-gradient(132% 104% at 50% 44%, transparent 44%, rgba(0, 0, 0, 0.66) 100%);
+    /* 顶部环境光：像海面透下来的一束光 */
+    radial-gradient(1100px 480px at 50% -12%, rgba(45, 212, 191, 0.075), transparent 70%),
+    /* 右上角距离环：声呐的指纹。4 圈细环 + 中心点，透明度压到刚好可辨 */
+    radial-gradient(circle at 86% 6%, transparent 57px, rgba(94, 234, 212, 0.055) 58px, transparent 59.5px),
+    radial-gradient(circle at 86% 6%, transparent 117px, rgba(94, 234, 212, 0.045) 118px, transparent 119.5px),
+    radial-gradient(circle at 86% 6%, transparent 177px, rgba(94, 234, 212, 0.035) 178px, transparent 179.5px),
+    radial-gradient(circle at 86% 6%, transparent 237px, rgba(94, 234, 212, 0.028) 238px, transparent 239.5px),
+    radial-gradient(circle at 86% 6%, rgba(94, 234, 212, 0.16) 0 2px, transparent 3px),
+    /* 左下一点冷光，托住画面重心 */
+    radial-gradient(900px 520px at -6% 108%, rgba(56, 189, 248, 0.05), transparent 70%),
+    /* 暗角：视线收拢到中间 */
+    radial-gradient(140% 110% at 50% 40%, transparent 52%, rgba(0, 0, 0, 0.5) 100%);
   background-attachment: fixed;
 }
 
-/* 局部亮斑层（唯一的一条 body::before，勿重复定义）
-   ── 液态玻璃的折射是"把背后的像拉弯"。背后若只有平滑大色场，弯折前后几乎一样，
-      效果等于看不见。这里放几团**尺寸小、亮度略高**的亮斑：
-      它们有明显亮度梯度，被折射弯折时会产生可见的鼓包/偏移，
-      同时不像网格那样带"工程感"。再配 60s 极缓慢漂移，玻璃里的像会一直微动。 */
+/* 距离环中心的呼吸点：唯一常驻的背景动效，幅度极小（性能友好） */
 .dark body::before {
   content: '';
   position: fixed;
-  inset: -10%;
+  inset: 0;
   z-index: -1;
   pointer-events: none;
-  background-image:
-    radial-gradient(11% 9% at 28% 34%, rgba(186, 200, 255, 0.22) 0%, transparent 66%),
-    radial-gradient(9% 7% at 70% 56%, rgba(255, 196, 235, 0.18) 0%, transparent 66%),
-    radial-gradient(13% 10% at 46% 76%, rgba(150, 220, 255, 0.2) 0%, transparent 68%),
-    radial-gradient(8% 6% at 84% 38%, rgba(200, 210, 255, 0.16) 0%, transparent 66%);
-  will-change: transform;
-  animation: aurora-drift 60s ease-in-out infinite alternate;
+  background-image: radial-gradient(circle at 86% 6%, rgba(94, 234, 212, 0.35) 0 1.5px, transparent 2.5px);
+  animation: sonar-ping 5.6s ease-in-out infinite;
 }
 
-@keyframes aurora-drift {
-  from {
-    transform: translate3d(-1.2%, -0.8%, 0) scale(1.02);
-  }
-  to {
-    transform: translate3d(1.4%, 1.0%, 0) scale(1.06);
-  }
+@keyframes sonar-ping {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 0.9; }
 }
 
 /* ============================================================================
@@ -551,121 +556,81 @@ html:not(.dark) .status-bar {
   border: 1px solid rgba(255, 255, 255, 0.8);
 }
 
-/* ---------- 2. 液态玻璃：所有"框" ----------
-   折射（backdrop-filter: url(#lg-*)）由 src/utils/liquidGlass.ts 按元素尺寸
-   动态生成并挂上 —— 真折射必须依赖按尺寸计算的 SVG 位移贴图，纯 CSS 做不了。
-   这里只负责"玻璃的底色与切面"：
-     · 底色要够透，折射出来的像才看得见；
-     · 又要够暗，白字才读得清 —— 取 0.42~0.52 的深色薄雾；
-     · 顶部一道亮边 = 光打在玻璃切面上的高光。 */
+/* ---------- 2. 仪器面板：所有"框" ----------
+   实底表面（--surface）+ 发丝描边 + 顶部微光。不用 backdrop-filter：
+   列表页一次 50 张卡，逐层合成是帧率杀手；实底反而让数字更锐利。 */
 .dark .card,
 .dark .glass {
-  /* 基础 .card 的 background-color 是不透明深色，必须清掉，否则折射被挡住 */
-  background-color: transparent;
-  background-image: linear-gradient(rgba(8, 11, 18, 0.4), rgba(8, 11, 18, 0.5));
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.3),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.45),
-    0 1px 3px rgba(0, 0, 0, 0.5),
-    0 26px 56px -30px rgba(0, 0, 0, 0.95);
+  background-color: var(--surface);
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.024), rgba(255, 255, 255, 0) 42%);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-2), var(--bevel);
   transition:
-    transform 0.42s cubic-bezier(0.22, 1, 0.36, 1),
-    box-shadow 0.42s cubic-bezier(0.22, 1, 0.36, 1),
-    border-color 0.3s ease;
+    transform 0.28s cubic-bezier(0.2, 0.7, 0.3, 1),
+    border-color 0.28s ease,
+    box-shadow 0.28s ease;
 }
 
-/* 悬停时轻微"膨胀"——液态玻璃被触碰会流动 */
+/* 悬停：描边染上一丝声呐青 + 轻微上浮（不放大，避免文字抖动） */
 .dark .card-hover:hover {
-  transform: translateY(-2px) scale(1.004);
-  border-color: rgba(255, 255, 255, 0.24);
+  transform: translateY(-2px);
+  border-color: rgba(94, 234, 212, 0.28);
+  box-shadow: var(--shadow-3), inset 0 1px 0 rgba(94, 234, 212, 0.09);
 }
 
-/* 悬停：折光环变亮、投影加深（折射强度由 JS 侧统一，不在这里改） */
-.dark .card-hover:hover {
-  background-image: linear-gradient(rgba(10, 13, 22, 0.24), rgba(10, 13, 22, 0.34));
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.4),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.45),
-    0 2px 6px rgba(0, 0, 0, 0.5),
-    0 34px 66px -30px rgba(0, 0, 0, 1);
-}
-
-/* 分段控件（页签条）：同款液态玻璃，尺度更小 */
+/* 分段控件（页签条）：下沉凹槽 */
 .dark .seg {
-  /* 页签条：薄玻璃，折射由 JS 挂上 */
-  background-color: rgba(255, 255, 255, 0.045);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 8px 22px -16px rgba(0, 0, 0, 0.9);
+  background-color: var(--surface-sunk);
+  border: 1px solid var(--line);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.45), var(--bevel);
 }
 
-/* 选中项 = 高透玻璃（无高斯模糊）
-   文献要点：「处于切换状态时的按钮则没有模糊效果，此时是一块高透玻璃，
-   而非磨砂玻璃」。所以这里刻意不加 blur，只做提亮与强边缘高光。 */
+/* 选中页签：抬升的实底键帽 + 青色信号灯 */
 .dark .seg-item[data-active='true'] {
-  background-color: rgba(255, 255, 255, 0.16);
-  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0.08) 72%);
-  -webkit-backdrop-filter: saturate(200%) brightness(1.14);
-  backdrop-filter: saturate(200%) brightness(1.14);
+  background-color: var(--surface-2);
+  background-image: linear-gradient(180deg, rgba(94, 234, 212, 0.09), rgba(94, 234, 212, 0.02));
+  color: var(--ink);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.48),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.3),
-    inset 0 0 12px -4px rgba(190, 210, 255, 0.35),
-    0 2px 10px rgba(0, 0, 0, 0.5);
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 0 0 1px rgba(94, 234, 212, 0.22),
+    0 2px 8px rgba(0, 0, 0, 0.45);
 }
 
-/* 输入类控件：薄玻璃 */
+/* 输入类控件：下沉槽位，聚焦亮青色环 */
 .dark input:not([type='range']),
 .dark select,
 .dark textarea {
-  background-color: rgba(255, 255, 255, 0.05);
-  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0) 70%);
-  -webkit-backdrop-filter: blur(8px) saturate(160%);
-  backdrop-filter: blur(8px) saturate(160%);
-  border-color: rgba(255, 255, 255, 0.11);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.10);
+  background-color: var(--surface-sunk);
+  background-image: none;
+  border-color: var(--line);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.35);
   transition: border-color 0.25s ease, box-shadow 0.25s ease, background-color 0.25s ease;
 }
 .dark input:not([type='range']):hover,
-.dark select:hover {
-  border-color: rgba(255, 255, 255, 0.2);
+.dark select:hover,
+.dark textarea:hover {
+  border-color: var(--line-strong);
 }
 .dark input:not([type='range']):focus,
 .dark select:focus,
 .dark textarea:focus {
-  border-color: rgba(167, 139, 250, 0.55);
+  border-color: rgba(45, 212, 191, 0.55);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.14),
-    0 0 0 3px rgba(139, 92, 246, 0.16);
+    inset 0 1px 3px rgba(0, 0, 0, 0.3),
+    0 0 0 3px rgba(45, 212, 191, 0.14);
 }
 
-/* 小胶囊：极薄玻璃 */
+/* 小胶囊：实底 + 发丝线 */
 .dark .chip {
-  background-color: rgba(255, 255, 255, 0.055);
-  -webkit-backdrop-filter: blur(8px) saturate(150%);
-  backdrop-filter: blur(8px) saturate(150%);
-  border-color: rgba(255, 255, 255, 0.09);
+  background-color: var(--surface-2);
+  border-color: var(--line);
 }
 
-/* 顶部状态条 */
+/* 顶部状态条：与画布几乎齐平的一层 */
 .dark .status-bar {
-  /* 之前是一条 conic 高光边 + 半透明白底的"灰横杠"，很脏。
-     改为几乎看不见的一层薄雾：只留极淡底色 + 极弱模糊。 */
-  background-color: rgba(255, 255, 255, 0.022);
+  background-color: rgba(13, 21, 32, 0.6);
   background-image: none;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  -webkit-backdrop-filter: blur(10px) saturate(140%);
-  backdrop-filter: blur(10px) saturate(140%);
-}
-
-/* 性能：列表页 50 张玻璃卡，文章卡降一档模糊半径（视觉差异小，合成开销明显降低） */
-/* 列表页一次渲染 50 张卡 —— 每张一个 backdrop 层，实测会把帧率压到 23fps，
-   而模糊半径无关（8px 与 10px 同效），瓶颈是「图层数量」。
-   列表卡改为"只透不糊"：仍保留半透明底色（背后光晕透得上来），
-   去掉逐层模糊。列表背景本身接近均匀，糊与不糊肉眼差别很小。 */
-.dark article.card {
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
+  border: 1px solid var(--line-soft);
 }
 
 /* ---------- 3. 动效 ---------- */
@@ -692,23 +657,16 @@ html:not(.dark) .status-bar {
 @media (prefers-reduced-motion: reduce) {
   .dark body::before {
     animation: none;
+    opacity: 0.5;
   }
   .page-enter {
     animation: none;
   }
   .dark .card,
   .dark .glass,
-  .dark .seg,
-  .dark .seg-item[data-active='true'],
-  .dark input,
-  .dark select,
-  .dark textarea,
-  .dark .chip {
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-    background-image: linear-gradient(rgba(11, 15, 24, 0.94), rgba(11, 15, 24, 0.94));
+  .dark .card-hover:hover {
     transform: none;
-    border-color: rgba(255, 255, 255, 0.12);
+    transition: none;
   }
 }
 
@@ -727,13 +685,13 @@ select option {
   color: #101423;
 }
 html.dark select option {
-  background-color: #141a25;
-  color: #e8ecf5;
+  background-color: #0d1520;
+  color: #e9f1f7;
 }
 html.dark select option:checked,
 html.dark select option:hover {
-  background-color: #2b2f45;
-  color: #ffffff;
+  background-color: #16323a;
+  color: #5eead4;
 }
 
 /* ==========================================================================
@@ -1089,4 +1047,93 @@ html:not(.dark) .risk-page .text-slate-500 {
 }
 html:not(.dark) .risk-page .border-white\/\[0\.06\] {
   border-color: #e2e8f0;
+}
+
+/* ============================================================================
+   暗色「深海声呐」· Tailwind 色板重映射 + 组件精修（v0.45.0）
+   ----------------------------------------------------------------------------
+   组件里大量使用 violet/indigo/slate 工具类（历史原因，亮色靠变量重映射换青绿）。
+   暗色同样只覆盖变量：紫 → 声呐青、slate 中性 → 深海蓝中性，
+   再对少数写死颜色的组件（主按钮/评分徽章/图表语义色）做定点精修。
+   本节必须在全文件最后，靠顺序压过上面的通用规则。
+   ============================================================================ */
+html.dark {
+  /* 紫 → 声呐青（按钮渐变、焦点环、强调文字一次性全部换色） */
+  --color-violet-50: #ecfdf8;
+  --color-violet-100: #d3f8ef;
+  --color-violet-200: #a9f0e2;
+  --color-violet-300: #7ae8d6;
+  --color-violet-400: #43dcc8;
+  --color-violet-500: #1fb9a6;
+  --color-violet-600: #149e8e;
+  --color-violet-700: #108275;
+  --color-violet-800: #0f685e;
+  --color-violet-900: #0e544d;
+  --color-violet-950: #04332e;
+
+  --color-indigo-300: #7ae8d6;
+  --color-indigo-400: #43dcc8;
+  --color-indigo-500: #1fb9a6;
+  --color-indigo-600: #149e8e;
+  --color-indigo-700: #108275;
+
+  /* slate 中性 → 深海蓝中性（slate-50/100 在暗色里是"文字色"，必须保持亮） */
+  --color-slate-50: #eef5fa;
+  --color-slate-100: #e2ecf4;
+  --color-slate-200: #c8d8e4;
+  --color-slate-300: #a7bccd;
+  --color-slate-400: #7e96ab;
+  --color-slate-500: #5f7890;
+  --color-slate-600: #45596e;
+  --color-slate-700: #2c3e50;
+  --color-slate-800: #182634;
+  --color-slate-900: #0f1a26;
+  --color-slate-950: #080f18;
+}
+
+/* 主按钮：青色渐变 + 深色字（青底白字对比不足，深字才是仪器按键的读法） */
+html.dark .bg-gradient-to-b.from-violet-500.to-violet-600 {
+  color: #032a25;
+  box-shadow:
+    0 6px 18px -8px rgba(31, 185, 166, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+html.dark .bg-gradient-to-b.from-violet-500.to-violet-600:hover {
+  box-shadow:
+    0 10px 24px -8px rgba(31, 185, 166, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+/* 语义色微调：红/橙/绿/琥珀整体提亮一档，深海背景上不发闷 */
+html.dark {
+  --color-red-400: #fb7185;
+  --color-red-500: #f43f5e;
+  --color-red-600: #e11d48;
+  --color-emerald-400: #34d399;
+  --color-emerald-500: #10b981;
+  --color-amber-400: #fbbf24;
+  --color-amber-500: #f59e0b;
+}
+
+/* 风险看板：终端风面板在深海主题下用青色发丝线，辉光收敛 */
+html.dark .risk-panel {
+  border-color: rgba(148, 190, 215, 0.12);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.008));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+html.dark .risk-panel:hover {
+  border-color: rgba(94, 234, 212, 0.25);
+}
+
+/* 滚动条：深海主题自己的语言（细、青灰、悬停染青） */
+html.dark {
+  scrollbar-color: #2c4257 transparent;
+}
+html.dark ::-webkit-scrollbar-thumb {
+  background: #2c4257;
+  background-clip: content-box;
+}
+html.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(94, 234, 212, 0.45);
+  background-clip: content-box;
 }

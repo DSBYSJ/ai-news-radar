@@ -592,6 +592,12 @@ export default function SettingsPage() {
                 </span>{' '}
                 启发式兜底
               </span>
+              <span title="v0.44.2 之前 pipeline 没有写入 ai_status，这些是老数据">
+                <span className="num font-semibold text-slate-500">
+                  {ai.byDay.reduce((s, d) => s + Number(d.unknown ?? 0), 0)}
+                </span>{' '}
+                未记录（旧数据）
+              </span>
             </div>
             {ai.recent.length > 0 && (
               <ul className="mt-3 divide-y divide-slate-100 dark:divide-white/[0.06]">

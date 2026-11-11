@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { api } from './api.ts'
-import { applyRefraction, resetRefraction } from './utils/liquidGlass.ts'
+import { resetRefraction } from './utils/liquidGlass.ts'
 import { useBurstFeed } from './hooks/useBurstFeed.ts'
 import ListPage from './pages/ListPage.tsx'
 import HotPage from './pages/HotPage.tsx'
@@ -132,34 +132,17 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  // 液态玻璃折射：按元素尺寸生成 SVG 位移贴图并挂到 backdrop-filter 上。
-  // 只在深色模式生效（亮色模式保持原样）；内容变化 / 窗口尺寸变化后重扫。
+  // 玻璃折射：v0.45.0 起两种主题都是实底面板，折射引擎整体停用。
+  // 这里只保留 resetRefraction：清掉旧版本可能残留在元素上的内联滤镜。
   useEffect(() => {
-    // 切换主题时先清掉上一轮内联样式，避免上一模式的滤镜/参数残留
     resetRefraction()
 
     /*
-     * 触屏 / 窄屏（安卓 WebView）**完全不做液态玻璃折射**：
-     * 折射靠 backdrop-filter: url(#feDisplacementMap)，滚动时每个元素重绘都要重算位移贴图，
-     * 而且每次 DOM 变化都要对 body 全量 getBoundingClientRect（强制重排）。
-     * 这是"所有页面下滑都卡"的主因 —— 移动端退回实底，视觉损失可忽略。
+     * 触屏 / 窄屏（安卓 WebView）与桌面端一致：不再挂任何折射。
+     * 旧版折射靠 backdrop-filter: url(#feDisplacementMap)，滚动时每个元素重绘都要
+     * 重算位移贴图，且每次 DOM 变化都对 body 全量 getBoundingClientRect（强制重排），
+     * 是"所有页面下滑都卡"的主因。深海声呐主题用实底 + 发丝线，无需折射。
      */
-    if (window.matchMedia('(max-width: 820px), (hover: none)').matches) return
-
-    let raf = 0
-    const run = () => {
-      cancelAnimationFrame(raf)
-      raf = requestAnimationFrame(() => applyRefraction())
-    }
-    run()
-    const mo = new MutationObserver(run)
-    mo.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style'] })
-    window.addEventListener('resize', run)
-    return () => {
-      cancelAnimationFrame(raf)
-      mo.disconnect()
-      window.removeEventListener('resize', run)
-    }
   }, [theme, tab])
 
   // 突发实时推送（WebSocket）：采集到 z ≥ 2.5 的新突发时立即弹提示

@@ -74,7 +74,12 @@ export async function newsRoutes(app: FastifyInstance): Promise<void> {
       authEnabled: Boolean(config.jwtSecret),
       collectAt: config.collectAt,
       summaryAt: config.summaryAt,
-      latestDate: (db.prepare('SELECT MAX(date(published_at)) AS d FROM articles').get() as { d: string | null }).d,
+      // 只统计「已发生」的日期：未来时间戳会把 latestDate 顶到明天，导致前端"今日"口径归零
+      latestDate: (
+        db
+          .prepare('SELECT MAX(date(published_at)) AS d FROM articles WHERE published_at <= ?')
+          .get(new Date().toISOString()) as { d: string | null }
+      ).d,
       time: new Date().toISOString(),
     }
   }
@@ -509,7 +514,9 @@ export async function newsRoutes(app: FastifyInstance): Promise<void> {
     const byDay = db
       .prepare(
         `SELECT date(published_at) AS d,
-                SUM(CASE WHEN COALESCE(ai_status, 'ok') = 'ok' THEN 1 ELSE 0 END) AS ok,
+                SUM(CASE WHEN ai_status = 'ok' THEN 1 ELSE 0 END) AS ok,
+                -- v0.44.2 之前只有建列没有写入：NULL 是「未记录」，不能算成功
+                SUM(CASE WHEN ai_status IS NULL THEN 1 ELSE 0 END) AS unknown,
                 SUM(CASE WHEN ai_status = 'failed' THEN 1 ELSE 0 END) AS failed,
                 SUM(CASE WHEN ai_status = 'timeout' THEN 1 ELSE 0 END) AS timeout,
                 SUM(CASE WHEN ai_status = 'heuristic' THEN 1 ELSE 0 END) AS heuristic

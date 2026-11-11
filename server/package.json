@@ -1,6 +1,6 @@
 {
   "name": "ai-news-server",
-  "version": "0.44.1",
+  "version": "0.44.2",
   "private": true,
   "description": "AI 资讯趋势雷达 · 后端（采集 / 存储 / 趋势统计）",
   "type": "module",
@@ -38,6 +38,7 @@
   },
   "dependencies": {
     "@fastify/websocket": "^11.3.4",
+    "ai-news-web": "file:..",
     "fast-xml-parser": "^4.5.0",
     "fastify": "^5.2.0"
   },

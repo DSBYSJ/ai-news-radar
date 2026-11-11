@@ -24,6 +24,27 @@ export const CATEGORY_COLORS: Record<string, string> = {
   other: '#9aa3ad', // 灰
 }
 
+/**
+ * 暗色「深海声呐」分类色板（v0.45.0）：
+ * 色相与亮色一一对应（颜色是分类的指纹，不能换），整体提亮一档，
+ * 在深海蓝黑背景上保持可辨；灰类略偏冷以融入画面。
+ */
+export const CATEGORY_COLORS_DARK: Record<string, string> = {
+  model_release: '#f87171', // 红
+  product_update: '#60a5fa', // 蓝
+  research_paper: '#a78bfa', // 紫
+  open_source: '#4ade80', // 绿
+  funding: '#fbbf24', // 橙黄
+  policy: '#2dd4bf', // 青（与主色同源）
+  opinion: '#f472b6', // 粉
+  other: '#8ba1b4', // 冷灰
+}
+
+/** 按主题取分类色：dark=true 用深海色板，否则用亮色色板 */
+export function categoryColor(category: string, dark: boolean): string {
+  return (dark ? CATEGORY_COLORS_DARK : CATEGORY_COLORS)[category] ?? (dark ? '#8ba1b4' : '#9aa3ad')
+}
+
 export const CATEGORY_ORDER = [
   'model_release',
   'product_update',

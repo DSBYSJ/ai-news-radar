@@ -135,3 +135,48 @@ test('htmlToText：转义过的 HTML（IT之家式 &lt;p&gt;）也要清干净',
   const paras = text.split(/\n{2,}/).filter(Boolean)
   assert.equal(paras.length, 2, `应切成 2 段，实际 ${JSON.stringify(paras)}`)
 })
+
+test('insertRawItems：未来时间戳按抓取时间入库（防 latestDate 被顶到明天）', async () => {
+  const { DatabaseSync } = await import('node:sqlite')
+  const { readFileSync } = await import('node:fs')
+  const { insertRawItems } = await import('../src/collector/store.ts')
+
+  const db = new DatabaseSync(':memory:')
+  db.exec(readFileSync(new URL('../src/schema.sql', import.meta.url), 'utf8'))
+  db.prepare("INSERT INTO sources (id, name, url, kind, weight) VALUES ('s','源','u','rss',2)").run()
+
+  const fetchedAt = new Date('2026-11-11T09:00:00Z')
+  const mk = (guid: string, publishedAt: Date | null) => ({
+    guid,
+    url: `https://x/${guid}`,
+    title: `标题 ${guid}`,
+    summary: '',
+    content: undefined,
+    publishedAt,
+  })
+
+  insertRawItems(db, 's', [
+    mk('normal', new Date('2026-11-11T05:00:00Z')), // 正常
+    mk('tz-shift', new Date('2026-11-11T16:49:00Z')), // 源把本地时间当 UTC（+8h）
+    mk('tomorrow', new Date('2026-11-12T00:00:00Z')), // 日期型零点
+    mk('slight', new Date('2026-11-11T10:00:00Z')), // 仅超前 1 小时（容差内，保留）
+    mk('none', null), // 无时间 → 抓取时间
+  ], fetchedAt)
+
+  const rows = db.prepare('SELECT guid, published_at FROM raw_items ORDER BY guid').all() as unknown as {
+    guid: string
+    published_at: string
+  }[]
+  const at = (g: string): string => rows.find((r) => r.guid === g)!.published_at
+
+  assert.equal(at('normal'), '2026-11-11T05:00:00.000Z', '正常时间不变')
+  assert.equal(at('tz-shift'), fetchedAt.toISOString(), '超前 7.8 小时 → 夹到抓取时间')
+  assert.equal(at('tomorrow'), fetchedAt.toISOString(), '明天的零点 → 夹到抓取时间')
+  assert.equal(at('slight'), '2026-11-11T10:00:00.000Z', '容差（2h）内的轻微超前保留')
+  assert.equal(at('none'), fetchedAt.toISOString(), '无时间用抓取时间')
+
+  // 关键后果：latestDate 不会超过抓取当天
+  const latest = db.prepare('SELECT MAX(date(published_at)) d FROM raw_items').get() as { d: string }
+  assert.equal(latest.d, '2026-11-11', '最新日期不越过抓取日')
+  db.close()
+})

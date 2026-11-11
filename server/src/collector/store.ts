@@ -33,8 +33,20 @@ export function insertRawItems(db: DatabaseSync, sourceId: string, items: FeedIt
 
   let inserted = 0
   for (const item of items) {
-    // published 缺失或非法时退化为抓取时间（不丢数据）
-    const publishedAt = item.publishedAt ?? fetchedAt
+    /*
+     * 未来时间夹紧（v0.44.2）
+     *
+     * 有些源把本地时间当 UTC 输出（InfoQ 中文实测 +8h），或只给日期用零点
+     * （OpenAI News 出现 11-12T00:00），会在库里产生"明天的文章"。
+     * 后果不是显示错乱这么简单：`MAX(published_at)` 被顶到明天后，
+     * 前端把"明天"当成"今天"，四张 KPI（今日收录/跨源事件/突发/负面占比）全部归零。
+     *
+     * 处理：超出 2 小时容差的"未来时间"按抓取时间入库 —— 不丢条目，只修正时间。
+     */
+    const FUTURE_TOLERANCE_MS = 2 * 3600_000
+    const rawPublished = item.publishedAt ?? fetchedAt
+    const publishedAt =
+      rawPublished.getTime() > fetchedAt.getTime() + FUTURE_TOLERANCE_MS ? fetchedAt : rawPublished
     const result = stmt.run(
       sourceId,
       item.guid,

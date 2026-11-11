@@ -17,7 +17,8 @@ import type {
   SentimentResponse,
   VelocityResponse,
 } from '../types.ts'
-import { CATEGORY_COLORS, CATEGORY_LABELS, CATEGORY_ORDER } from '../utils/format.ts'
+import { CATEGORY_LABELS, CATEGORY_ORDER, categoryColor } from '../utils/format.ts'
+import { useIsDark } from '../hooks/useTheme.ts'
 
 /**
  * 趋势分析（v0.35.0 信息架构重做）
@@ -34,6 +35,7 @@ import { CATEGORY_COLORS, CATEGORY_LABELS, CATEGORY_ORDER } from '../utils/forma
 
 const SENTIMENTS = ['positive', 'neutral', 'negative']
 const SENTIMENT_COLORS: Record<string, string> = { positive: '#57a97c', neutral: '#9aa3ad', negative: '#cf5a5a' }
+const SENTIMENT_COLORS_DARK: Record<string, string> = { positive: '#4ade80', neutral: '#8ba1b4', negative: '#f87171' }
 const SENTIMENT_LABELS: Record<string, string> = { positive: '正面', neutral: '中性', negative: '负面' }
 
 /** 速览条里的一个数字 */
@@ -73,6 +75,14 @@ export default function TrendPage() {
   const [compareSeries, setCompareSeries] = useState<EntityDailySeries | null>(null)
   const [entityDetail, setEntityDetail] = useState<EntitySentimentResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const dark = useIsDark()
+  // 图表序列色（SVG 属性不吃 CSS 变量，按主题选色）：
+  // 灰线=每日条数，均线=主题强调色，预测=紫/琥珀虚线，负面=红
+  const maColor = dark ? '#2dd4bf' : '#dc2626'
+  const forecastColor = dark ? '#fbbf24' : '#7c3aed'
+  const negColor = dark ? '#f87171' : '#cf5a5a'
+  const grayColor = dark ? '#7e96ab' : '#94a3b8'
+  const compareColors = dark ? ['#2dd4bf', '#fb7185', '#fbbf24'] : ['#176b75', '#b3402a', '#b8873a']
 
   const exportTrendCsv = (): void => {
     if (velocity) exportVelocityCsv(velocity)
@@ -297,7 +307,7 @@ export default function TrendPage() {
             level="有多少"
             tone="trend"
             title="收录量与 7 日趋势"
-            hint="灰线是每日条数，红线是 7 日均线（抹掉单日噪声），紫色虚线是未来 7 天外推。"
+            hint="灰线是每日条数，高亮线是 7 日均线（抹掉单日噪声），虚线是未来 7 天外推。"
             badge={
               change === null || change === undefined ? null : (
                 <span className="flex items-baseline gap-1.5">
@@ -318,19 +328,19 @@ export default function TrendPage() {
               series={[
                 {
                   name: '每日条数',
-                  color: '#94a3b8',
+                  color: grayColor,
                   values: [...(velocity?.points.map((p) => p.count) ?? []), ...pad],
                   width: 1.5,
                 },
                 {
                   name: '7 日均线',
-                  color: '#dc2626',
+                  color: maColor,
                   values: [...(velocity?.points.map((p) => p.ma7) ?? []), ...pad],
                   width: 2.5,
                 },
                 {
                   name: '7 天预测',
-                  color: '#7c3aed',
+                  color: forecastColor,
                   dashed: true,
                   values: [...forecastBridge, lastMa7, ...(forecast?.forecast.map((f) => f.value) ?? [])],
                   width: 2,
@@ -340,7 +350,7 @@ export default function TrendPage() {
                 forecast
                   ? [
                       {
-                        color: '#7c3aed',
+                        color: forecastColor,
                         lo: [...forecastBridge, lastMa7, ...forecast.forecast.map((f) => f.lo)],
                         hi: [...forecastBridge, lastMa7, ...forecast.forecast.map((f) => f.hi)],
                       },
@@ -426,7 +436,7 @@ export default function TrendPage() {
                         </span>
                         <span
                           className="shrink-0 rounded-full px-1.5 py-0.5 text-[11px] text-white"
-                          style={{ backgroundColor: CATEGORY_COLORS[e.category] ?? '#9ca3af' }}
+                          style={{ backgroundColor: categoryColor(e.category, dark) }}
                         >
                           {CATEGORY_LABELS[e.category] ?? e.category}
                         </span>
@@ -472,7 +482,7 @@ export default function TrendPage() {
                 <StackedBarChart
                   points={sentiment.byDay.map((d) => ({ date: d.date, total: d.classified, ratios: d.ratios }))}
                   categories={SENTIMENTS}
-                  colors={SENTIMENT_COLORS}
+                  colors={dark ? SENTIMENT_COLORS_DARK : SENTIMENT_COLORS}
                   labelMap={SENTIMENT_LABELS}
                   height={230}
                 />
@@ -537,8 +547,8 @@ export default function TrendPage() {
                     <LineChart
                       labels={entityDetail.points.map((p) => p.date)}
                       series={[
-                        { name: '负面占比', color: '#cf5a5a', values: entityDetail.points.map((p) => p.negRatio), width: 1.5 },
-                        { name: '7 日均值', color: '#7c3aed', values: entityDetail.points.map((p) => p.ma7), width: 2.5 },
+                        { name: '负面占比', color: negColor, values: entityDetail.points.map((p) => p.negRatio), width: 1.5 },
+                        { name: '7 日均值', color: maColor, values: entityDetail.points.map((p) => p.ma7), width: 2.5 },
                       ]}
                       yMax={1}
                       tickFormat={(v) => `${Math.round(v * 100)}%`}
@@ -606,7 +616,7 @@ export default function TrendPage() {
                   labels={compareSeries?.dates ?? []}
                   series={(compareSeries?.series ?? []).map((s2, i) => ({
                     name: s2.name,
-                    color: ['#176b75', '#b3402a', '#b8873a'][i % 3],
+                    color: compareColors[i % 3],
                     values: s2.values,
                   }))}
                   height={200}

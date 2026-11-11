@@ -14,12 +14,12 @@ import Modal from './Modal.tsx'
 export type CardTone = 'base' | 'mix' | 'trend' | 'alert' | 'mood' | 'entity'
 
 const TONE_STYLE: Record<CardTone, string> = {
-  base: 'from-slate-500 to-slate-600 shadow-[0_4px_10px_-4px_rgba(71,85,105,0.7),inset_0_1px_0_rgba(255,255,255,0.25)]',
-  mix: 'from-sky-500 to-sky-600 shadow-[0_4px_10px_-4px_rgba(2,132,199,0.7),inset_0_1px_0_rgba(255,255,255,0.25)]',
-  trend: 'from-violet-500 to-violet-600 shadow-[0_4px_10px_-4px_rgba(109,40,217,0.8),inset_0_1px_0_rgba(255,255,255,0.3)]',
-  alert: 'from-amber-500 to-orange-600 shadow-[0_4px_10px_-4px_rgba(217,119,6,0.7),inset_0_1px_0_rgba(255,255,255,0.25)]',
-  mood: 'from-emerald-500 to-emerald-600 shadow-[0_4px_10px_-4px_rgba(5,150,105,0.7),inset_0_1px_0_rgba(255,255,255,0.25)]',
-  entity: 'from-teal-500 to-cyan-600 shadow-[0_4px_10px_-4px_rgba(13,148,136,0.7),inset_0_1px_0_rgba(255,255,255,0.25)]',
+  base: 'chart-tone chart-tone-base',
+  mix: 'chart-tone chart-tone-mix',
+  trend: 'chart-tone chart-tone-trend',
+  alert: 'chart-tone chart-tone-alert',
+  mood: 'chart-tone chart-tone-mood',
+  entity: 'chart-tone chart-tone-entity',
 }
 
 interface Props {

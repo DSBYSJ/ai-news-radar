@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import type { CategoryRatioPoint } from '../types.ts'
-import { CATEGORY_COLORS, CATEGORY_LABELS, formatPct, shortDate } from '../utils/format.ts'
+import { CATEGORY_LABELS, categoryColor, formatPct, shortDate } from '../utils/format.ts'
 import { linearScale } from '../utils/scale.ts'
+import { useIsDark } from '../hooks/useTheme.ts'
 
 interface Props {
   points: CategoryRatioPoint[]
@@ -26,8 +27,9 @@ const PAD = { top: 14, right: 16, bottom: 26, left: 42 }
 export default function StackedBarChart({ points, categories, height = 260, colors, labelMap }: Props) {
   const [hidden, setHidden] = useState<Set<string>>(new Set())
   const [hover, setHover] = useState<number | null>(null)
+  const dark = useIsDark()
 
-  const colorOf = (c: string) => colors?.[c] ?? CATEGORY_COLORS[c] ?? '#9ca3af'
+  const colorOf = (c: string) => colors?.[c] ?? categoryColor(c, dark)
   const labelOf = (c: string) => labelMap?.[c] ?? CATEGORY_LABELS[c] ?? c
 
   const visible = categories.filter((c) => !hidden.has(c))

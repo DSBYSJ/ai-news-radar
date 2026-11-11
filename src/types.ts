@@ -822,6 +822,6 @@ export interface CollectDebug {
 
 export interface AiStatusDebug {
   days: number
-  byDay: { d: string; ok: number; failed: number; timeout: number; heuristic: number }[]
+  byDay: { d: string; ok: number; failed: number; timeout: number; heuristic: number; unknown?: number }[]
   recent: { id: number; title: string; ai_status: string; ai_error: string | null; published_at: string; source_name: string }[]
 }

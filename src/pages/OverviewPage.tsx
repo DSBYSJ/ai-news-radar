@@ -4,7 +4,8 @@ import { api } from '../api.ts'
 import EvidenceModal from '../components/EvidenceModal.tsx'
 import AskPanel from '../components/AskPanel.tsx'
 import type { CrossSourceResponse, EntityItem, Health, SentimentResponse, SummaryListItem, VelocityResponse } from '../types.ts'
-import { CATEGORY_COLORS, CATEGORY_LABELS } from '../utils/format.ts'
+import { CATEGORY_LABELS, categoryColor } from '../utils/format.ts'
+import { useIsDark } from '../hooks/useTheme.ts'
 
 type Nav = (tab: 'list' | 'trend' | 'summary') => void
 
@@ -76,6 +77,11 @@ function Kpi({
   // 大数字一律中性墨色：颜色语义只放在下面的变化量胶囊里。
   // 之前大数字随涨跌染色，一屏出现红/绿/黑三种，像告警面板而不是仪表盘。
   const valueTone = 'text-slate-900 dark:text-slate-50'
+  const dark = useIsDark()
+  const sparkColor =
+    tone === 'up' ? (dark ? '#fb7185' : '#dc2626')
+    : tone === 'down' ? (dark ? '#34d399' : '#059669')
+    : dark ? '#2dd4bf' : '#7c3aed'
 
   const deltaCls =
     tone === 'up'
@@ -101,7 +107,7 @@ function Kpi({
         </p>
         {trend && trend.length > 1 && (
           <span className="mb-0.5 shrink-0 opacity-80 transition-opacity group-hover:opacity-100">
-            <Sparkline values={trend} color={tone === 'up' ? '#dc2626' : tone === 'down' ? '#059669' : '#7c3aed'} />
+            <Sparkline values={trend} color={sparkColor} />
           </span>
         )}
       </div>
@@ -182,6 +188,7 @@ export default function OverviewPage({ health, onNavigate }: Props) {
   const [entities, setEntities] = useState<EntityItem[]>([])
   const [sentiment, setSentiment] = useState<SentimentResponse | null>(null)
   const [evidence, setEvidence] = useState<{ kind: 'sentiment' | 'burst'; date: string; category?: string } | null>(null)
+  const dark = useIsDark()
 
   useEffect(() => {
     let alive = true
@@ -365,7 +372,7 @@ export default function OverviewPage({ health, onNavigate }: Props) {
                     </span>
                     <span
                       className="shrink-0 text-[10.5px] font-medium"
-                      style={{ color: CATEGORY_COLORS[e.category] ?? '#94a3b8' }}
+                      style={{ color: categoryColor(e.category, dark) }}
                     >
                       {CATEGORY_LABELS[e.category] ?? e.category}
                     </span>

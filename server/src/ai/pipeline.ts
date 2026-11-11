@@ -95,8 +95,8 @@ export async function runProcessing(opts: ProcessOptions = {}): Promise<ProcessS
 
   const insertArticle = db.prepare(
     `INSERT OR IGNORE INTO articles
-       (raw_id, url, title, tldr, summary, category, entities, score, score_parts, event_key, published_at, created_at, ai_relevant)
-     VALUES (?, ?, ?, NULL, ?, ?, NULL, ?, ?, NULL, ?, ?, ?)`,
+       (raw_id, url, title, tldr, summary, category, entities, score, score_parts, event_key, published_at, created_at, ai_relevant, ai_status, ai_error)
+     VALUES (?, ?, ?, NULL, ?, ?, NULL, ?, ?, NULL, ?, ?, ?, ?, ?)`,
   )
   const insertMention = db.prepare('INSERT OR IGNORE INTO mentions (article_id, entity) VALUES (?, ?)')
   const updateDeep = db.prepare('UPDATE articles SET tldr = ?, summary = ?, entities = ? WHERE id = ?')
@@ -111,6 +111,7 @@ export async function runProcessing(opts: ProcessOptions = {}): Promise<ProcessS
     const inputs = batch.map((r, i) => ({ id: i + 1, title: r.title, summary: r.summary ?? '', source: r.source_name }))
     const validIds = [...inputs.map((i) => i.id), ...batch.map((r) => r.id)]
     let results: Stage1Result[] | null = null
+    let batchFailed = false
 
     if (useAi) {
       const prompt = buildStage1Prompt(inputs)
@@ -127,6 +128,8 @@ export async function runProcessing(opts: ProcessOptions = {}): Promise<ProcessS
         usedFallback = true
         lastError = res.error || lastError || '未知原因'
       }
+      // 这一批是不是"AI 整体失败"（不是个别条目没回）→ 用于 ai_status
+      batchFailed = useAi && !results
     }
 
     const byId = new Map<number, Stage1Result>()
@@ -158,6 +161,12 @@ export async function runProcessing(opts: ProcessOptions = {}): Promise<ProcessS
         aiHits: keyword.hits,
       })
 
+      /*
+       * ai_status（v0.44.2）：之前这个字段只有迁移建列、从没人写，
+       * 后台「AI 处理状态」把 NULL 一律当成功 → 永远显示 100% 正常。
+       * 三态：ok（模型给出结果）/ heuristic（规则兜底）/ failed（整批 AI 失败）
+       */
+      const aiStatus = batchFailed ? 'failed' : hit ? 'ok' : 'heuristic'
       const res = insertArticle.run(
         row.id,
         row.url,
@@ -169,6 +178,8 @@ export async function runProcessing(opts: ProcessOptions = {}): Promise<ProcessS
         row.published_at,
         now,
         aiRelevant ? 1 : 0,
+        aiStatus,
+        batchFailed ? lastError.slice(0, 300) : null,
       )
       if (Number(res.changes) > 0) classified += 1
     }

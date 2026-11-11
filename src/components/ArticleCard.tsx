@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { api } from '../api.ts'
 import ReaderModal from './ReaderModal.tsx'
 import type { Article, ArticleContent } from '../types.ts'
-import { CATEGORY_COLORS, formatDateTime } from '../utils/format.ts'
+import { categoryColor, formatDateTime } from '../utils/format.ts'
+import { useIsDark } from '../hooks/useTheme.ts'
 
 /**
  * 资讯卡：一屏能扫，但每一条都"有质感"。
@@ -23,7 +24,8 @@ export default function ArticleCard({ article }: { article: Article }) {
   const [readerOpen, setReaderOpen] = useState(false)
   const [loadingContent, setLoadingContent] = useState(false)
   const [noContent, setNoContent] = useState(false)
-  const accent = CATEGORY_COLORS[article.category] ?? '#9aa3ad'
+  const dark = useIsDark()
+  const accent = categoryColor(article.category, dark)
   const crossSource = article.sourceCount !== null && article.sourceCount >= 2
 
   const openReader = async (): Promise<void> => {
@@ -64,10 +66,10 @@ export default function ArticleCard({ article }: { article: Article }) {
             className="num inline-flex h-[18px] min-w-[26px] items-center justify-center rounded text-[10.5px] font-bold tabular-nums"
             style={
               (article.score ?? 0) >= 60
-                ? { backgroundColor: '#fef2f2', color: '#b91c1c' }
+                ? { backgroundColor: 'var(--hot-soft)', color: 'var(--hot)' }
                 : (article.score ?? 0) >= 40
-                  ? { backgroundColor: '#fffbeb', color: '#b45309' }
-                  : { backgroundColor: '#f1f5f9', color: '#64748b' }
+                  ? { backgroundColor: 'var(--warn-soft)', color: 'var(--warn)' }
+                  : { backgroundColor: 'var(--surface-sunk)', color: 'var(--ink-muted)' }
             }
             title={`重要度 ${article.score ?? '–'} / 100`}
           >

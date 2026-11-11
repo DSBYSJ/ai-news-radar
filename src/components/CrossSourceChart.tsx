@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { CrossSourceEvent, CrossSourcePoint } from '../types.ts'
 import { shortDate } from '../utils/format.ts'
 import { linearScale, niceTicks } from '../utils/scale.ts'
+import { useIsDark } from '../hooks/useTheme.ts'
 
 interface Props {
   points: CrossSourcePoint[]
@@ -22,6 +23,10 @@ const PAD = { top: 14, right: 16, bottom: 26, left: 42 }
  */
 export default function CrossSourceChart({ points, dayEvents = {}, threshold = 3, height = 220 }: Props) {
   const [hover, setHover] = useState<number | null>(null)
+  const dark = useIsDark()
+  // 达到阈值 = 珊瑚红（危险/重要），未达 = 声呐青（常态信号）
+  const hotColor = dark ? '#fb7185' : '#dc2626'
+  const calmColor = dark ? '#38bdf8' : '#93c5fd'
 
   const rawMax = Math.max(threshold, ...points.map((p) => p.maxSources))
   const ticks = niceTicks(rawMax, 4)
@@ -61,7 +66,7 @@ export default function CrossSourceChart({ points, dayEvents = {}, threshold = 3
               width={barW}
               height={h}
               rx={2}
-              fill={p.maxSources >= threshold ? '#dc2626' : '#93c5fd'}
+              fill={p.maxSources >= threshold ? hotColor : calmColor}
               fillOpacity={hover === null || highlighted ? 1 : 0.45}
             />
           )
@@ -72,11 +77,11 @@ export default function CrossSourceChart({ points, dayEvents = {}, threshold = 3
           x2={W - PAD.right}
           y1={y(threshold)}
           y2={y(threshold)}
-          stroke="#dc2626"
+          stroke={hotColor}
           strokeWidth={1.5}
           strokeDasharray="6 4"
         />
-        <text x={W - PAD.right} y={y(threshold) - 6} textAnchor="end" fontSize={11} fill="#dc2626">
+        <text x={W - PAD.right} y={y(threshold) - 6} textAnchor="end" fontSize={11} fill={hotColor}>
           {threshold} 家独立源
         </text>
 
