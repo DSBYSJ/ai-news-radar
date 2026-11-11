@@ -143,3 +143,18 @@ test('hotRanking：单日事件不返回时间线', () => {
   assert.equal(items[0].timeline.length, 0, '单日事件时间线为空数组')
   db.close()
 })
+
+test('hotRanking：汇总帖（早报/周报）不进热度榜，但普通新闻正常排序', () => {
+  const db = setup()
+  addArticle(db, { key: 'e1', at: at(2), source: 'a', url: 'https://x/1', title: 'Edge AI Daily 早报（11月11日）' })
+  addArticle(db, { key: 'e2', at: at(3), source: 'b', url: 'https://x/2', title: 'IT早报 1111：Anthropic 启动 IPO' })
+  addArticle(db, { key: 'e3', at: at(4), source: 'a', url: 'https://x/3', title: 'OpenAI 发布 GPT-6 稀疏注意力版本' })
+  addArticle(db, { key: 'e4', at: at(5), source: 'b', url: 'https://x/4', title: 'Reddit 将推出 AI 汇总商品评价系统' })
+
+  const items = hotRanking(db, { now: NOW })
+  const titles = items.map((i) => i.title)
+  assert.equal(titles.some((t) => t.includes('早报')), false, '早报类不应出现在热度榜')
+  assert.ok(titles.some((t) => t.includes('OpenAI')), '普通新闻保留')
+  assert.ok(titles.some((t) => t.includes('Reddit')), '含"汇总"二字但非合订本的新闻不能误伤')
+  db.close()
+})

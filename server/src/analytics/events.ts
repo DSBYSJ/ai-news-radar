@@ -13,8 +13,52 @@ import { jaccard, textTokens } from './tokens.ts'
  *  4. 统计组内「独立源数量 source_count」与「文章总数 article_count」，
  *     输出到 event_clusters 表；同时兼容写入旧 events 表（既有接口继续可用）。
  */
+/**
+ * 实体是否足以判定"同一事件"。
+ * 见常量区注释：只用首篇实体、汇总贴不参与、交集需占较小集 40%。
+ */
+function canMergeByEntity(articleEntities: Set<string>, core: Set<string>): boolean {
+  if (articleEntities.size < ENTITY_INTERSECTION || core.size < ENTITY_INTERSECTION) return false
+  if (articleEntities.size > MAX_ENTITIES_FOR_MERGE || core.size > MAX_ENTITIES_FOR_MERGE) return false
+  let inter = 0
+  for (const e of articleEntities) if (core.has(e)) inter += 1
+  if (inter < ENTITY_INTERSECTION) return false
+  return inter / Math.min(articleEntities.size, core.size) >= ENTITY_RATIO
+}
+
 export const SIMILARITY_THRESHOLD = 0.75
 const ENTITY_INTERSECTION = 2
+/**
+ * 实体合并的三个额外约束（v0.44.3，修「晨报把全站串成一个大簇」）
+ *
+ * 旧逻辑：拿「簇内实体并集」和文章实体比，交集 ≥2 就合并 → 一篇晨报（30+ 实体）
+ * 合并进来后，簇的实体集变成"什么都沾"，后续任何提 OpenAI/ChatGPT 的文章都能并进来，
+ * 滚雪球成几十篇不相关新闻（实测出现 34 篇：罗技鼠标 + 小米门锁 + 期货夜盘同簇）。
+ *
+ * 新规则：
+ *   ① 只用「簇内首篇的实体」做匹配（不滚雪球）
+ *   ② 任一方实体数 > 6 视为汇总贴，**不参与**实体合并（只能靠标题相似度）
+ *   ③ 交集至少占较小实体集的 40%（2/30 这种"沾边"不算）
+ */
+const ENTITY_RATIO = 0.4
+const MAX_ENTITIES_FOR_MERGE = 6
+/**
+ * 标题相似必须"双证据"（v0.44.3 实测）：
+ *   中文短标题的 simhash 分布极扁 —— 完全无关的两条标题（"派早报：MiniMax 发布…"
+ *   vs "宁德时代三季度净利润…"）也能拿到 **0.656**，随便一对就越过 0.75 的线，
+ *   于是链式合并（A~B, B~C 但 A 与 C 无关）把一天的中文新闻串成一坨（实测 31 条同簇）。
+ *
+ * 规则：
+ *   · simhash ≥ 0.92        → 几乎同题（同一篇的转载）
+ *   · simhash ≥ 0.75 且 词重叠 ≥ 0.2 → 改写幅度合理的同一事件
+ *   · 词重叠 ≥ 0.6          → 关键词高度重合（改写大但核心词一致）
+ *   单独一个"0.75~0.9 的 simhash"不再足以合并。
+ */
+const SIMHASH_STRONG = 0.92
+const TOKEN_SUPPORT = 0.2
+const TOKEN_STRONG = 0.6
+/** 单簇文章上限：真实事件在本语料里很少超过 12 篇；超过视为链式误合 */
+const MAX_ARTICLES_PER_CLUSTER = 12
 const DAY_MS = 86_400_000
 
 interface ArticleRow {
@@ -34,6 +78,9 @@ interface Cluster {
   date: string
   tokens: Set<string>
   hash: bigint
+  /** 首篇的实体（用于匹配，不随合并增长） */
+  core: Set<string>
+  /** 全部成员的实体并集（仅统计用） */
   entities: Set<string>
   articleIds: number[]
   sources: Set<string>
@@ -96,9 +143,14 @@ export async function rebuildEvents(opts: { db?: DatabaseSync; days?: number } =
     const bucket = byDate.get(date) ?? []
     let target: Cluster | undefined
     for (const c of bucket) {
-      const similarity = Math.max(simhashSimilarity(hash, c.hash), jaccard(tokens, c.tokens))
-      const entityInter = [...entities].filter((e) => c.entities.has(e)).length
-      if (similarity >= SIMILARITY_THRESHOLD || entityInter >= ENTITY_INTERSECTION) {
+      const sh = simhashSimilarity(hash, c.hash)
+      const jac = jaccard(tokens, c.tokens)
+      const titleMatch =
+        sh >= SIMHASH_STRONG ||
+        (sh >= SIMILARITY_THRESHOLD && jac >= TOKEN_SUPPORT) ||
+        jac >= TOKEN_STRONG
+      const roomy = c.articleIds.length < MAX_ARTICLES_PER_CLUSTER
+      if (roomy && (titleMatch || canMergeByEntity(entities, c.core))) {
         target = c
         break
       }
@@ -110,7 +162,8 @@ export async function rebuildEvents(opts: { db?: DatabaseSync; days?: number } =
         date,
         tokens,
         hash,
-        entities,
+        core: new Set(entities),
+        entities: new Set(entities),
         articleIds: [],
         sources: new Set(),
         firstSeen: row.published_at,
@@ -125,6 +178,7 @@ export async function rebuildEvents(opts: { db?: DatabaseSync; days?: number } =
 
     target.articleIds.push(row.id)
     target.sources.add(row.source_name)
+    // 只维护"统计用"并集；匹配始终用 core（首篇实体），避免滚雪球
     for (const e of entities) target.entities.add(e)
     if (row.published_at < target.firstSeen) target.firstSeen = row.published_at
     if (row.published_at > target.lastSeen) target.lastSeen = row.published_at

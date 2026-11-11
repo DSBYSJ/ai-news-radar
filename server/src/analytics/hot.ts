@@ -1,4 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite'
+import { isDigestTitle } from './digest.ts'
 
 /**
  * AI 热点榜（v0.17.0 重写）
@@ -89,9 +90,16 @@ export function hotRanking(db: DatabaseSync, opts: { hours?: number; limit?: num
     )
     .all(cutoff) as unknown as ArticleRow[]
 
+  /*
+   * 汇总帖（早报/晚报/周报/一周回顾）**不进热度榜**：
+   * 它们天生"多来源 + 多篇"，会长期霸榜第一，而且不是一件事（详见 analytics/digest.ts）。
+   * 仍保留在资讯列表里，只是不参与热度排序。
+   */
+  const ranked = rows.filter((r) => !isDigestTitle(r.title))
+
   // 按 event_key 分组，再按「标题归一化后相等」跨天合并（事件键按天分桶）
   const byKey = new Map<string, Group>()
-  for (const row of rows) {
+  for (const row of ranked) {
     const g = byKey.get(row.event_key)
     if (g) g.articles.push(row)
     else byKey.set(row.event_key, { keys: new Set([row.event_key]), articles: [row] })

@@ -262,3 +262,39 @@ test('velocity：按分类过滤后条数下降（item 6 图表联动）', () =>
   assert.ok(sum(onlyModel) < sum(all))
   db.close()
 })
+
+test('事件聚类：无关中文标题不能合并（simhash 单独高分不算）', async () => {
+  const { readFileSync } = await import('node:fs')
+  const { DatabaseSync } = await import('node:sqlite')
+  const { rebuildEvents } = await import('../src/analytics/events.ts')
+
+  const db = new DatabaseSync(':memory:')
+  db.exec(readFileSync(new URL('../src/schema.sql', import.meta.url), 'utf8'))
+  db.prepare("INSERT INTO sources (id,name,url,kind,weight) VALUES ('s','源','u','rss',2)").run()
+  const now = new Date()
+  const at = (min: number) => new Date(now.getTime() - min * 60000).toISOString()
+  const add = (id: number, title: string) => {
+    const rawId = Number(db.prepare(
+      `INSERT INTO raw_items (source_id,guid,url,url_norm,title,summary,published_at,fingerprint,fetched_at)
+       VALUES ('s',?,?,?,?, '', ?, ?, ?)`,
+    ).run(`g${id}`, `https://x/${id}`, `https://x/${id}`, title, at(id), `f${id}`, at(id)).lastInsertRowid)
+    db.prepare(
+      `INSERT INTO articles (raw_id,url,title,tldr,summary,category,entities,score,score_parts,sentiment,event_key,published_at,created_at,ai_relevant)
+       VALUES (?,?,?,NULL,'','other','[]',60,NULL,NULL,NULL,?,?,1)`,
+    ).run(rawId, `https://x/${id}`, title, at(id), at(id))
+  }
+  add(1, '派早报：MiniMax 发布 M3.1 Flash 模型等')
+  add(2, '宁德时代 2026 年三季度归母净利润 212.46 亿元同比增长 14.54%')
+  add(3, '小米智能门锁 5 首销：支持实时监测锁体状态，1176 元')
+  add(4, '派早报：MiniMax 发布 M3.1 Flash 模型等') // 同一篇的两个来源
+
+  await rebuildEvents({ db, days: 7 })
+  const clusters = db.prepare('SELECT article_count, title_repr FROM events').all() as unknown as {
+    article_count: number
+    title_repr: string
+  }[]
+  const big = clusters.filter((c) => c.article_count > 1)
+  assert.equal(big.length, 1, `只应有一组同题合并，实际 ${big.length} 组：${JSON.stringify(big)}`)
+  assert.equal(big[0].article_count, 2, '同题的 2 篇合并')
+  db.close()
+})
