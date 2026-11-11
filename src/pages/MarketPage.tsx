@@ -3,7 +3,7 @@ import { api } from '../api.ts'
 import type { MarketCompanyRow, MarketOverview } from '../types.ts'
 import LinkageCard from '../components/market/LinkageCard.tsx'
 import MarketStatusBar from '../components/market/MarketStatusBar.tsx'
-import PsSparkline from '../components/market/PsSparkline.tsx'
+import { PsTrendCell } from '../components/market/PsSparkline.tsx'
 
 /**
  * AI 资产估值看板（v0.45.0 重做）
@@ -293,7 +293,7 @@ export default function MarketPage() {
         </div>
 
         <div className="mt-2 overflow-x-auto">
-          <table className="w-full min-w-[800px] text-[11px]">
+          <table className="w-full min-w-[880px] text-[11px]">
             <thead>
               <tr className="text-slate-500">
                 <th className="py-1.5 pr-2 text-left font-normal">公司</th>
@@ -315,7 +315,7 @@ export default function MarketPage() {
                     历史分位 <span className="text-[9px] text-slate-400">ⓘ</span>
                   </span>
                 </th>
-                <th className="py-1.5 pl-1.5 text-right font-normal">倍数走势</th>
+                <th className="py-1.5 pl-1.5 text-right font-normal">倍数走势（财年）</th>
               </tr>
             </thead>
             <tbody>
@@ -361,12 +361,9 @@ export default function MarketPage() {
                         </span>
                       )}
                     </td>
-                    <td className="py-1.5 pl-1.5 text-right">
+                    <td className="py-1.5 pl-1.5">
                       <div className="flex justify-end">
-                        <PsSparkline
-                          points={c.psHistory}
-                          color={(c.psHistory[c.psHistory.length - 1]?.ps ?? 0) >= (c.psHistory[0]?.ps ?? 0) ? '#e5484d' : '#22c55e'}
-                        />
+                        <PsTrendCell points={c.psHistory} />
                       </div>
                     </td>
                   </tr>
