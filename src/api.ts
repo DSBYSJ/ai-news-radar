@@ -119,6 +119,10 @@ export const api = {
   riskBacktest: () => get<RiskBacktest>('/risk/backtest'),
   /** 美股 AI 产业链估值看板（只读本地表，不联网） */
   marketOverview: () => get<MarketOverview>('/market/overview'),
+  /** 手动触发行情同步（异步任务） */
+  marketSync: () => post<{ ok: boolean; jobId?: string; error?: string }>('/market/sync', undefined),
+  marketSyncStatus: (id: string) =>
+    get<{ status: string; report?: unknown; error?: string }>(`/market/sync/${id}`),
   /** 新闻热度 × 股价联动（观察记录 + 每日快照，只读本地表） */
   marketLinkage: (asOf?: string) => get<LinkageResponse>('/market/linkage', { asOf }),
   volume: (days: number) => get<{ days: number; points: DailyPoint[] }>('/trend/volume', { days }),

@@ -60,6 +60,19 @@ export interface MarketOverview {
     /** 窗口年数（保留一位小数） */
     windowYears: number | null
   }
+  /**
+   * 数据新鲜度（v0.45.0）
+   * 估值页之前最大的问题是"看着像实时，其实行情停在几周前" —— 必须显式暴露。
+   */
+  freshness: {
+    /** 行情最后一天 */
+    priceUntil: string | null
+    /** 比率最后同步时间（ISO） */
+    lastSyncAt: string | null
+    /** 落后自然天数 */
+    daysBehind: number | null
+    status: 'ok' | 'lag' | 'stale' | 'unknown'
+  }
   segments: (SegmentSummary & { psMedian: number | null; percentileMedian: number | null; valuationCovered: number })[]
   companies: MarketCompanyRow[]
 }
@@ -87,6 +100,16 @@ export function buildMarketOverview(db: DatabaseSync): MarketOverview {
     else if (!latest) missing = '缺少股本或营收，无法计算市值'
     else if (latest.ps === null) missing = '缺少营收，无法计算 P/S'
 
+    const psHistory = (
+      db
+        .prepare(
+          'SELECT fiscal_end AS fiscalEnd, ps FROM company_ratios WHERE symbol = ? AND ps IS NOT NULL ORDER BY fiscal_end DESC LIMIT 8',
+        )
+        .all(c.symbol) as unknown as { fiscalEnd: string; ps: number }[]
+    )
+      .map((r) => ({ fiscalEnd: r.fiscalEnd, ps: Number(r.ps) }))
+      .reverse()
+
     return {
       symbol: c.symbol,
       name: c.name,
@@ -109,6 +132,7 @@ export function buildMarketOverview(db: DatabaseSync): MarketOverview {
       points: series.length,
       manualPrice: latest?.manual === true,
       missingValuation: missing,
+      psHistory,
     }
   })
 
@@ -137,8 +161,17 @@ export function buildMarketOverview(db: DatabaseSync): MarketOverview {
       ? Number(((Date.parse(windowTo) - Date.parse(windowFrom)) / (365 * 86_400_000)).toFixed(1))
       : null
 
+  const lastSyncAt =
+    (db.prepare('SELECT MAX(updated_at) AS u FROM company_ratios').get() as { u: string | null } | undefined)?.u ?? null
+  const daysBehind = windowTo
+    ? Math.max(0, Math.floor((Date.now() - Date.parse(`${windowTo}T00:00:00Z`)) / 86_400_000))
+    : null
+  const status: 'ok' | 'lag' | 'stale' | 'unknown' =
+    daysBehind === null ? 'unknown' : daysBehind <= 2 ? 'ok' : daysBehind <= 5 ? 'lag' : 'stale'
+
   return {
     generatedAt: new Date().toISOString(),
+    freshness: { priceUntil: windowTo, lastSyncAt, daysBehind, status },
     coverage: {
       total: rows.length,
       priced,

@@ -76,6 +76,7 @@ export function startScheduler(app: FastifyInstance): void {
   startDailySummary(app)
   startAihotBenchmark(app)
   startLinkageSettle(app)
+  startMarketSync(app)
 }
 
 /** 解析 "07:00,10:00" → 当天分钟数数组（去重、升序、忽略非法项）；空串表示不启用 */
@@ -266,6 +267,58 @@ function startLinkageSettle(app: FastifyInstance): void {
           app.log.warn({ err, date }, '联动结算失败（不影响其他任务）')
         }
         scheduleNext()
+      })()
+    }, delay)
+  }
+  scheduleNext()
+}
+
+/**
+ * 美股行情 / 估值比率每日同步（v0.45.0）
+ *
+ * 为什么必须单独排期：`runFullPipeline` 只跑「采集→加工→聚类→突发→情感→简报」，
+ * 市场链路（价格/比率）不在里面 —— 之前只能手动跑 `npm run market:sync`，
+ * 结果估值页的行情停在 10-20（落后三周），页面上所有分位都是过期数据。
+ *
+ * 设计：
+ *   · 每天一次（默认北京时间 06:40，美股收盘后）
+ *   · 只在配置了 FMP_API_KEY 时启动；失败只记日志，不影响采集主流程
+ *   · 增量拉取（syncPrices 内部从"已有最后日期"续），省免费额度
+ */
+function startMarketSync(app: FastifyInstance): void {
+  const spec = config.marketSyncAt.trim().toLowerCase()
+  if (!spec || spec === 'off' || spec === 'false') {
+    app.log.info('行情同步定时未开启（MARKET_SYNC_AT=off）')
+    return
+  }
+  const match = spec.match(/^(\d{1,2}):(\d{2})$/)
+  const hour = match ? Math.min(23, Math.max(0, Number(match[1]))) : 6
+  const minute = match ? Math.min(59, Math.max(0, Number(match[2]))) : 40
+  if (!match) app.log.warn(`MARKET_SYNC_AT 格式应为 HH:MM（收到 ${spec}），已回退为 06:40`)
+
+  const scheduleNext = (): void => {
+    const delay = msUntilNextLocal(Date.now(), hour, minute)
+    app.log.info(
+      `行情同步定时：${new Date(Date.now() + delay).toISOString()}（北京时间 ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}，约 ${(delay / 3_600_000).toFixed(1)} 小时后）`,
+    )
+    setTimeout(() => {
+      void (async () => {
+        try {
+          const { hasFmpKey } = await import('./market/fmp.ts')
+          if (!hasFmpKey()) {
+            app.log.warn('行情同步跳过：未配置 FMP_API_KEY')
+          } else {
+            const db = getDb()
+            const { syncPrices, syncRatios } = await import('./market/prices.ts')
+            const prices = await syncPrices(db)
+            const ratios = await syncRatios(db)
+            app.log.info({ prices, ratios }, '行情同步完成')
+          }
+        } catch (err) {
+          app.log.error({ err }, '行情同步失败（不影响采集）')
+        } finally {
+          scheduleNext()
+        }
       })()
     }, delay)
   }

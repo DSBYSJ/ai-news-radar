@@ -486,6 +486,8 @@ export interface MarketCompanyRow {
   points: number
   manualPrice: boolean
   missingValuation: string | null
+  /** 最近几个财年的 P/S（迷你曲线） */
+  psHistory: { fiscalEnd: string; ps: number }[]
 }
 
 export interface MarketSegmentRow {
@@ -513,6 +515,13 @@ export interface MarketOverview {
     windowFrom: string | null
     windowTo: string | null
     windowYears: number | null
+  }
+  /** 数据新鲜度（v0.45.0）：估值页必须显式告诉用户"行情停在哪天" */
+  freshness: {
+    priceUntil: string | null
+    lastSyncAt: string | null
+    daysBehind: number | null
+    status: 'ok' | 'lag' | 'stale' | 'unknown'
   }
   segments: MarketSegmentRow[]
   companies: MarketCompanyRow[]

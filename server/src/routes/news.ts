@@ -12,6 +12,8 @@ import { runBackfill } from '../risk/backfill.ts'
 import { runBacktest } from '../risk/backtest.ts'
 import { benchmarkTrend } from '../aihot/benchmark.ts'
 import { buildMarketOverview } from '../market/overview.ts'
+import { hasFmpKey } from '../market/fmp.ts'
+import { syncPrices, syncRatios } from '../market/prices.ts'
 import { computeStats, coverageSummary, listSnapshots, type LinkageStats } from '../market/linkageObs.ts'
 import { deleteAlias, listAliases, listMapping, upsertAlias } from '../entities/alias.ts'
 import { realign } from '../entities/realign.ts'
@@ -619,6 +621,57 @@ export async function newsRoutes(app: FastifyInstance): Promise<void> {
    * 事件 = 某实体当日被 ≥minSources 家独立源报道；结果是**超额收益**（个股 − 纳指）。
    * 只读本地表，不联网。
    */
+  /**
+   * 手动触发行情/比率同步（v0.45.0）
+   *
+   * 背景：市场链路原先不在 runFullPipeline 里，也没排期 —— 估值页的行情停在几周前。
+   * 现在有了每日定时（MARKET_SYNC_AT），这里是页面上的"立即刷新"入口。
+   * 同步是长请求（20 个标的 × 5 年日线），所以走异步 + 轮询，不阻塞接口。
+   */
+  const marketJobs = new Map<
+    string,
+    { status: 'running' | 'done' | 'error'; startedAt: string; finishedAt?: string; report?: unknown; error?: string }
+  >()
+
+  app.post('/api/news/market/sync', async (req) => {
+    if (!hasFmpKey()) return { ok: false, error: '未配置 FMP_API_KEY，无法同步行情' }
+    const running = [...marketJobs.values()].find((j) => j.status === 'running')
+    if (running) return { ok: false, error: '已有同步任务在运行，请稍后', jobId: null }
+
+    const q = req.query as Query
+    const only =
+      typeof q.only === 'string' && q.only.trim()
+        ? q.only.split(',').map((x) => x.trim().toUpperCase()).filter(Boolean)
+        : undefined
+
+    const id = `mk_${Date.now().toString(36)}`
+    marketJobs.set(id, { status: 'running', startedAt: new Date().toISOString() })
+    setImmediate(() => {
+      void (async () => {
+        try {
+          const db = getDb()
+          const prices = await syncPrices(db, { only })
+          const ratios = await syncRatios(db, { only })
+          marketCache = null // 清缓存，下一次 overview 重新算
+          marketJobs.set(id, {
+            status: 'done',
+            startedAt: '',
+            finishedAt: new Date().toISOString(),
+            report: { prices, ratios },
+          })
+        } catch (err) {
+          marketJobs.set(id, { status: 'error', startedAt: '', finishedAt: new Date().toISOString(), error: String(err) })
+        }
+      })()
+    })
+    return { ok: true, jobId: id }
+  })
+
+  app.get('/api/news/market/sync/:id', async (req) => {
+    const job = marketJobs.get((req.params as { id: string }).id)
+    return job ?? { status: 'unknown' }
+  })
+
   app.get('/api/news/market/linkage', async (req) => {
     const q = req.query as Query
     const db = getDb()
