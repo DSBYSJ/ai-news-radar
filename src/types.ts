@@ -399,6 +399,7 @@ export interface MacroPoint {
   high52w: number | null
   /** 历史序列（分位数 / Z-Score 用） */
   history: number[]
+  dates?: string[]
   source: string
 }
 
@@ -713,6 +714,8 @@ export interface RiskReport {
   subIndices?: { overheat: SubIndex; stress: SubIndex; fragility: SubIndex } | null
   /** 数据质量与可信度 */
   quality?: RiskQuality
+  eventRisk?: EventRisk
+  assessment?: { level: 'unknown' | 'observe' | 'watch' | 'elevated' | 'critical'; headline: string; detail: string }
   /** 背离预警 */
   divergences: Divergence[]
   /** 宏观背景下最脆弱的实体 */
@@ -721,6 +724,24 @@ export interface RiskReport {
   params: RiskParams
   /** 公式说明（tooltip 直接渲染） */
   formulas: { key: string; title: string; formula: string; detail: string }[]
+}
+
+export interface RiskEvent {
+  id: string; entity: string; symbol: string | null
+  kind: 'leadership' | 'regulatory' | 'funding' | 'operations' | 'security'
+  category: string; title: string; score: number; severity: number
+  confidence: 'official' | 'multiple' | 'single' | 'unconfirmed'
+  sources: number; articles: number; firstSeen: string; lastSeen: string
+  halfLifeHours: number; ageHours: number; decay: number; confidenceWeight: number
+  evidence: { title: string; url: string; source: string; publisher: string; publishedAt: string }[]
+  note: string
+}
+
+export interface EventRisk {
+  model: string; windowDays: number; score: number | null
+  status: 'unknown' | 'quiet' | 'watch' | 'elevated' | 'critical'
+  scanned: number; latestAt: string | null; stale: boolean
+  events: RiskEvent[]; unconfirmed: RiskEvent[]; note: string
 }
 
 export interface RiskFactorV2 {

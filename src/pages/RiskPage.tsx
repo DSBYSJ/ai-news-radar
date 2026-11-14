@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api.ts'
-import type { RiskReport } from '../types.ts'
+import type { MacroPoint, RiskReport, RiskBacktest } from '../types.ts'
 import GaugeArc from '../components/risk/GaugeArc.tsx'
 import NfiWaterfall from '../components/risk/NfiWaterfall.tsx'
 import FactorRadar from '../components/risk/FactorRadar.tsx'
@@ -9,45 +9,21 @@ import MacroDrawer, { TRANSMISSION } from '../components/risk/MacroDrawer.tsx'
 import HistoryLine from '../components/risk/HistoryLine.tsx'
 import ScatterMatrix from '../components/risk/ScatterMatrix.tsx'
 import RiskTicker from '../components/risk/RiskTicker.tsx'
-import CountUp from '../components/risk/CountUp.tsx'
+import EventRiskPanel from '../components/risk/EventRiskPanel.tsx'
 import { BacktestCard, QualityBar, SubIndexRow } from '../components/risk/RiskTrust.tsx'
-import { bandOf, DISASTER_MARKS, RISK_LABEL, semanticColor } from '../components/risk/riskColors.ts'
-import type { RiskBacktest } from '../types.ts'
+import { bandOf, RISK_LABEL } from '../components/risk/riskColors.ts'
+import { nfiContributions, yieldCurvePoint } from '../lib/riskDisplay.ts'
 
-/**
- * 风险看板（v0.27.0 展示层重构）
- *
- * 布局（宽屏三栏 → 窄屏单列）：
- *   顶部：背离跑马灯 + 4 个宏观卡片（迷你趋势 + 下钻）
- *   左侧主区：NFI 仪表盘 + CRS 仪表盘 + NFI 归因瀑布图
- *   右侧辅区：多因子雷达图 + 历史时间序列（十字准星）
- *   底部：宏观-微观交叉矩阵
- *
- * 交互：hover 瀑布/雷达的因子 → 历史折线叠加该因子的分数曲线（cross-filtering）
- */
-
-interface HistoryPoint {
-  date: string
-  nfi: number | null
-  crs: number | null
-  factors?: Record<string, number | null>
-}
-
-/** 分位数（本地计算，避免额外请求） */
+interface HistoryPoint { date: string; nfi: number | null; crs: number | null; factors?: Record<string, number | null> }
 function percentileOf(value: number, history: number[]): number | null {
-  const clean = history.filter((h) => Number.isFinite(h))
+  const clean = history.filter(Number.isFinite)
   if (clean.length < 30) return null
-  let below = 0
-  let equal = 0
-  for (const h of clean) {
-    if (h < value) below += 1
-    else if (h === value) equal += 1
-  }
-  return (below + equal / 2) / clean.length
+  return (clean.filter(x => x < value).length + clean.filter(x => x === value).length / 2) / clean.length
 }
 
 export default function RiskPage() {
   const [days, setDays] = useState(30)
+  const [revision, setRevision] = useState(0)
   const [report, setReport] = useState<RiskReport | null>(null)
   const [history, setHistory] = useState<HistoryPoint[]>([])
   const [loading, setLoading] = useState(true)
@@ -59,277 +35,103 @@ export default function RiskPage() {
   useEffect(() => {
     let alive = true
     setLoading(true)
-    void Promise.all([
-      api.risk(days),
-      api.riskHistoryDetailed(365),
-      // 回测失败不该拖垮整页（老数据可能还没回填真实日期）
-      api.riskBacktest().catch(() => null),
-    ])
+    void Promise.all([api.risk(days), api.riskHistoryDetailed(365), api.riskBacktest().catch(() => null)])
       .then(([r, h, bt]) => {
         if (!alive) return
-        setReport(r)
-        setHistory((h.items ?? []) as HistoryPoint[])
-        setBacktest(bt)
-        setError(null)
-      })
-      .catch((e) => {
-        if (alive) setError(e instanceof Error ? e.message : String(e))
-      })
-      .finally(() => {
-        if (alive) setLoading(false)
-      })
-    return () => {
-      alive = false
-    }
-  }, [days])
+        setReport(r); setHistory(h.items ?? []); setBacktest(bt); setError(null)
+      }).catch(e => { if (alive) setError(e instanceof Error ? e.message : String(e)) })
+      .finally(() => { if (alive) setLoading(false) })
+    return () => { alive = false }
+  }, [days, revision])
 
+  const curve = useMemo(() => report ? yieldCurvePoint(report.macro.series.rates10y, report.macro.series.rates2y) : null, [report])
   const macroCards = useMemo<MacroCardData[]>(() => {
     if (!report) return []
-    const s = report.macro.series
-    const mk = (
-      key: string,
-      label: string,
-      display: string,
-      spark: number[],
-      raw: number,
-      colorOverride?: string,
-    ): MacroCardData => ({
-      key,
-      label,
-      display,
-      percentile: s[key]?.history?.length ? percentileOf(raw, s[key].history) : null,
-      yearAgo: s[key]?.yearAgo ?? null,
-      spark,
-      raw,
-      colorOverride,
+    const series = report.macro.series
+    const mk = (key: string, label: string, p?: MacroPoint, isIndex = false): MacroCardData => ({
+      key, label, display: p ? isIndex ? p.value.toLocaleString('en-US', { maximumFractionDigits: 0 }) : `${p.value.toFixed(2)}%` : '—',
+      percentile: p ? percentileOf(p.value, p.history) : null,
+      yearAgo: p?.yearAgo ?? null, spark: p?.history.slice(-30) ?? [], raw: p?.value ?? 0,
+      asOf: p?.asOf, unit: isIndex ? 'percent' : 'pp', colorOverride: isIndex ? 'var(--accent)' : undefined,
     })
-    return [
-      mk('rates10y', '10Y 美债', `${s.rates10y?.value.toFixed(2) ?? '—'}%`, s.rates10y?.history.slice(-30) ?? [], s.rates10y?.value ?? 0),
-      mk('creditSpread', '高收益 OAS', `${s.creditSpread?.value.toFixed(2) ?? '—'}%`, s.creditSpread?.history.slice(-30) ?? [], s.creditSpread?.value ?? 0),
-      mk('nasdaq', '纳斯达克', s.nasdaq?.value.toFixed(0) ?? '—', s.nasdaq?.history.slice(-30) ?? [], s.nasdaq?.value ?? 0),
-      mk(
-        'rates2y',
-        '收益率曲线',
-        report.macro.inversion === null ? '—' : report.macro.inversion ? '倒挂' : '正常',
-        s.rates2y?.history.slice(-30) ?? [],
-        s.rates2y?.value ?? 0,
-        // 语义型指标：正常=绿、倒挂=红（不按分位着色）
-        semanticColor(report.macro.inversion !== true),
-      ),
-    ]
-  }, [report])
-
-  // 跨图联动：hover 因子 → 历史折线叠加该因子的分数曲线
+    return [mk('rates10y', '10Y 美债收益率', series.rates10y), mk('creditSpread', '高收益债信用利差', series.creditSpread),
+      mk('nasdaq', '纳斯达克综合指数', series.nasdaq, true), {
+        key: 'yieldCurve', label: '收益率曲线 · 10Y − 2Y', display: curve ? `${curve.value >= 0 ? '+' : ''}${curve.value.toFixed(2)}pp` : '—',
+        percentile: null, yearAgo: curve?.yearAgo ?? null, spark: curve?.history.slice(-30) ?? [], raw: curve?.value ?? 0,
+        colorOverride: curve ? curve.value >= 0 ? 'var(--risk-calm)' : 'var(--risk-critical)' : 'var(--ink-muted)', asOf: curve?.asOf, unit: 'pp',
+      }]
+  }, [report, curve])
   const overlay = useMemo(() => {
     if (!hoverFactor || history.length === 0) return null
-    const label = report?.nfi?.factors.find((f) => f.key === hoverFactor)?.label ?? hoverFactor
-    const values = history.map((h) => h.factors?.[hoverFactor] ?? null)
-    if (values.every((v) => v === null || v === undefined)) return null
-    return { name: `${label}（历史分）`, values, color: '#8b7cf6' }
+    const values = history.map(h => h.factors?.[hoverFactor] ?? null)
+    if (values.every(v => v === null)) return null
+    return { name: report?.nfi?.factors.find(f => f.key === hoverFactor)?.label ?? hoverFactor, values, color: '#9b8cde' }
   }, [hoverFactor, history, report])
-
-  const macroDrill = drillKey ? macroCards.find((c) => c.key === drillKey) : null
-  const macroSeries = report?.macro.series[drillKey ?? '']
+  const contributions = report?.nfi ? nfiContributions(report.nfi.factors) : []
+  const macroDrill = macroCards.find(c => c.key === drillKey)
+  const macroSeries = drillKey === 'yieldCurve' ? curve : report?.macro.series[drillKey ?? '']
 
   return (
-    <div className="risk-page space-y-4">
-      <header className="flex flex-wrap items-end justify-between gap-2">
-        <div className="min-w-0">
-          <p className="flex items-center gap-1.5 text-[10px] font-medium tracking-[0.14em] text-[var(--accent)]">
-            <span className="inline-block h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
-            SONAR RISK TERMINAL
-          </p>
-          <h2 className="mt-1.5 text-[21px] font-semibold tracking-tight text-slate-900 dark:text-slate-100">
-            AI 估值与危机风险
-          </h2>
-          <p className="mt-0.5 text-[11.5px] text-slate-500 dark:text-slate-400">
-            叙事泡沫指数（NFI）用站内新闻；危机风险分（CRS）须接利率 / 信用利差 / 指数
-          </p>
-        </div>
-        <div className="flex items-center gap-1.5">
-          {[30, 60, 90].map((d) => (
-            <button
-              key={d}
-              type="button"
-              onClick={() => setDays(d)}
-              className={`rounded-lg px-2.5 py-1 text-[11px] transition ${
-                days === d ? 'bg-[var(--accent)] text-white' : 'border border-white/10 text-slate-400 hover:border-white/25'
-              }`}
-            >
-              {d} 天
-            </button>
-          ))}
+    <div className="risk-page">
+      <header className="risk-page-header">
+        <div><p className="eyebrow">RISK INTELLIGENCE <span className="eyebrow-rule" /></p><h2>把风险，看得更清楚<span className="heading-dot">.</span></h2>
+          <p className="page-description">先识别事件，再观察叙事与市场。让每一条预警，都有依据可循。</p></div>
+        <div className="risk-header-tools">
+          <div className="range-switch" aria-label="叙事观察窗口">{[30, 60, 90].map(d => <button key={d} type="button" aria-pressed={days === d} onClick={() => setDays(d)}>{d} 天</button>)}</div>
+          <button className="risk-refresh" type="button" aria-label="刷新风险数据" disabled={loading} onClick={() => setRevision(r => r + 1)}><span className={loading ? 'animate-spin' : ''}>↻</span></button>
         </div>
       </header>
+      {loading && !report && <div className="risk-panel risk-loading animate-pulse" aria-label="正在读取风险数据" />}
+      {error && <p className="risk-error" role="alert">读取失败：{error}{report ? '。下方保留上次结果，请刷新后再判断。' : ''}</p>}
+      {report && <>
+        {report.eventRisk && <EventRiskPanel data={report.eventRisk} assessment={report.assessment} />}
 
-      {loading && <div className="risk-panel h-48 animate-pulse rounded-xl" />}
-      {error && <p className="rounded-lg bg-red-500/10 p-3 text-[12px] text-red-400">{error}</p>}
+        <div className="section-heading"><div><span className="section-index">01</span><h3>叙事与市场，分开解读</h3></div><span>叙事窗口 {days} 天 · 事件窗口固定 7 天</span></div>
+        <div className="risk-score-grid">
+          <section className="risk-panel score-panel"><div className="panel-heading"><h3>叙事泡沫</h3><span className="metric-code">NFI</span></div>
+            <p className="panel-description">融资与追高情绪，是否正在升温？</p>
+            <GaugeArc value={report.nfi?.score ?? null} label="NARRATIVE FROTH" bandLabel={report.nfi?.score == null ? '样本不足' : RISK_LABEL[bandOf(report.nfi.score)]} height={145} />
+            <p className="score-footnote">负面事件可能使泡沫分下降，低分不代表公司安全。</p>
+          </section>
+          <section className="risk-panel score-panel"><div className="panel-heading"><h3>宏观压力</h3><span className="metric-code">CRS</span></div>
+            <p className="panel-description">信用环境与市场走势，是否承压？</p>
+            <GaugeArc value={report.crisis?.score ?? null} label="MACRO PRESSURE" bandLabel={report.crisis ? RISK_LABEL[bandOf(report.crisis.score)] : '核心数据不足'} height={145} />
+            <p className="score-footnote">宏观数据存在发布滞后，不能替代公司事件预警。</p>
+          </section>
+          <section className="risk-panel structure-panel"><div className="panel-heading"><h3>信号结构</h3><span className="metric-code">FACTORS</span></div>
+            <p className="panel-description">哪些因子正在推动叙事温度？</p>
+            {report.nfi && <FactorRadar factors={report.nfi.factors.map(f => ({ key: f.key, label: f.label, score: f.score }))} onFactorHover={setHoverFactor} />}
+            <p className="score-footnote">结构分布用于解释，不作为独立预测结论。</p>
+          </section>
+        </div>
 
-      {report && (
-        <>
-          <RiskTicker items={report.divergences} />
+        <div className="section-heading"><div><span className="section-index">02</span><h3>市场环境</h3></div><span>点击指标查看历史与传导逻辑 ↗</span></div>
+        <div className="macro-grid">{macroCards.map(c => <MacroCard key={c.key} data={c} onDrill={() => setDrillKey(c.key)} />)}</div>
+        <RiskTicker items={report.divergences} />
+        {report.quality && <QualityBar quality={report.quality} />}
 
-          <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
-            {macroCards.map((c) => (
-              <MacroCard key={c.key} data={c} onDrill={() => setDrillKey(c.key)} />
-            ))}
-          </div>
-
-          {report.quality && <QualityBar quality={report.quality} />}
-
-          <div className="grid gap-4 lg:grid-cols-3">
-            {/* 左侧主区 */}
-            <div className="space-y-4 lg:col-span-2">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <section className="risk-panel rounded-2xl p-3.5">
-                  <p className="text-center text-[10px] tracking-[0.14em] text-slate-500 dark:text-slate-500">
-                    叙事泡沫指数
-                  </p>
-                  <GaugeArc
-                    value={report.nfi?.score ?? null}
-                    label="NFI"
-                    bandLabel={report.nfi ? RISK_LABEL[bandOf(report.nfi.score)] : '样本不足'}
-                    sub={report.nfi ? `${report.narrative.articles.toLocaleString('en-US')} 条入库` : undefined}
-                  />
-                </section>
-
-                <section className="risk-panel rounded-2xl p-3.5">
-                  <p className="text-center text-[10px] tracking-[0.14em] text-slate-500 dark:text-slate-500">
-                    危机风险分
-                  </p>
-                  <GaugeArc
-                    value={report.crisis?.score ?? null}
-                    label="CRS"
-                    bandLabel={report.crisis ? RISK_LABEL[bandOf(report.crisis.score)] : '未计算'}
-                    marks={DISASTER_MARKS}
-                    /* v0.29.0：主看板不再显示"12 个月概率区间"。
-                       概率公式未经校准，即使标注"非预测"，一个 8%–18% 的区间仍会被当成概率读。
-                       等有了回测校准证据再放回来。 */
-                  />
-                </section>
-              </div>
-
-              {report.subIndices && <SubIndexRow subIndices={report.subIndices} />}
-
-              <section className="risk-panel rounded-2xl p-4">
-                <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <p className="text-[11px] tracking-[0.12em] text-slate-400">NFI 归因拆解</p>
-                  <p className="text-[10px] text-slate-500">hover 柱子看公式明细 · 满格柱呼吸警示</p>
-                </div>
-                {report.nfi && (
-                  <div className="mt-2">
-                    <NfiWaterfall
-                      factors={report.nfi.factors.map((f) => ({
-                        key: f.key,
-                        label: f.label,
-                        value: f.value,
-                        score: f.score,
-                        weight: f.weight,
-                        contribution: f.score === null ? 0 : (f.score * f.weight) / 100,
-                        note: f.note,
-                      }))}
-                      total={report.nfi.score}
-                      onFactorHover={setHoverFactor}
-                    />
-                    <p className="num mt-1 text-[9.5px] text-slate-500">
-                      各项求和{' '}
-                      {(report.nfi.factors ?? [])
-                        .reduce((s, f) => s + (f.score === null ? 0 : (f.score * f.weight) / 100), 0)
-                        .toFixed(1)}{' '}
-                      vs 总分 {report.nfi.score}
-                    </p>
-                  </div>
-                )}
-              </section>
-            </div>
-
-            {/* 右侧辅区 */}
-            <div className="space-y-4">
-              <section className="risk-panel rounded-2xl p-4">
-                <p className="text-[11px] tracking-[0.12em] text-slate-400">多因子结构</p>
-                <p className="mt-0.5 text-[10px] text-slate-500">顶破边缘 = 该因子满格，风险结构畸形</p>
-                {report.nfi && (
-                  <div className="mt-1">
-                    <FactorRadar
-                      factors={report.nfi.factors.map((f) => ({ key: f.key, label: f.label, score: f.score }))}
-                      onFactorHover={setHoverFactor}
-                    />
-                  </div>
-                )}
-              </section>
-
-              <section className="risk-panel rounded-2xl p-4">
-                <div className="flex items-baseline justify-between gap-2">
-                  <p className="text-[11px] tracking-[0.12em] text-slate-400">历史回溯</p>
-                  <p className="text-[10px] text-slate-500">十字准星</p>
-                </div>
-                <div className="mt-2">
-                  <HistoryLine
-                    points={history}
-                    overlay={overlay}
-                    height={200}
-                    events={[
-                      { date: '2026-10-13', label: '项目上线' },
-                      { date: '2026-10-19', label: '加源扩面' },
-                    ]}
-                  />
-                </div>
-              </section>
-            </div>
-          </div>
-
-          {report.vulnerableEntities.length > 0 && (
-            <section className="risk-panel rounded-2xl p-4">
-              <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <p className="text-[11px] tracking-[0.12em] text-slate-400">宏观-微观风险交叉矩阵</p>
-                <p className="num text-[10px] text-slate-500">
-                  宏观压力 <CountUp value={report.crisis?.score ?? null} /> · {report.vulnerableEntities.length} 个实体
-                </p>
-              </div>
-              <div className="mt-2">
-                <ScatterMatrix
-                  items={report.vulnerableEntities.map((v) => ({
-                    entity: v.entity,
-                    score: v.score,
-                    mentions: v.mentions,
-                    negativeShare: v.negativeShare,
-                    heatChange: v.heatChange,
-                    funding: v.funding,
-                  }))}
-                  macroPressure={report.crisis?.score ?? null}
-                />
-              </div>
-            </section>
-          )}
-
-          {backtest && <BacktestCard data={backtest} />}
-
-          <p className="border-t border-white/[0.06] pt-2.5 text-[10px] leading-relaxed text-slate-500">
-            {report.disclaimer}
-          </p>
-        </>
-      )}
-
-      <MacroDrawer
-        open={drillKey !== null}
-        onClose={() => setDrillKey(null)}
-        data={
-          macroDrill && macroSeries
-            ? {
-                label: macroSeries.label,
-                display: macroDrill.display,
-                raw: macroSeries.value,
-                percentile: macroDrill.percentile,
-                asOf: macroSeries.asOf,
-                history: macroSeries.history,
-                yearAgo: macroSeries.yearAgo,
-                avg200: macroSeries.avg200,
-                high52w: macroSeries.high52w,
-              }
-            : null
-        }
-        transmission={TRANSMISSION[drillKey ?? ''] ?? '暂无该指标的传导说明。'}
-      />
+        <div className="section-heading"><div><span className="section-index">03</span><h3>理解分数背后的变化</h3></div><span>公式可解释 · 缺失项不补零</span></div>
+        <div className="risk-analysis-grid">
+          <section className="risk-panel analysis-panel"><div className="panel-heading"><h3>叙事归因</h3><span>按有效权重归一</span></div>
+            <p className="panel-description">悬停因子，查看贡献与计算口径。</p>
+            {report.nfi && <NfiWaterfall factors={contributions} total={report.nfi.score} onFactorHover={setHoverFactor} />}
+          </section>
+          <section className="risk-panel analysis-panel"><div className="panel-heading"><h3>历史观察</h3><span>NFI / CRS</span></div>
+            <p className="panel-description">历史曲线保留各自含义，事件冲击单独观察。</p>
+            <HistoryLine points={history} overlay={overlay} height={220} />
+          </section>
+        </div>
+        {report.subIndices && <SubIndexRow subIndices={report.subIndices} />}
+        {report.vulnerableEntities.length > 0 && <section className="risk-panel analysis-panel"><div className="panel-heading"><h3>公司层面的脆弱性</h3><span>{report.vulnerableEntities.length} 个实体 · 不受 CRS 门槛限制</span></div>
+          <ScatterMatrix items={report.vulnerableEntities} macroPressure={report.crisis?.score ?? null} />
+        </section>}
+        {backtest && <BacktestCard data={backtest} />}
+        <p className="risk-disclaimer">{report.disclaimer}</p>
+      </>}
+      <MacroDrawer open={drillKey !== null} onClose={() => setDrillKey(null)} data={macroDrill && macroSeries ? {
+        label: macroSeries.label, display: macroDrill.display, raw: macroSeries.value, percentile: macroDrill.percentile,
+        asOf: macroSeries.asOf, history: macroSeries.history, yearAgo: macroSeries.yearAgo, avg200: macroSeries.avg200, high52w: macroSeries.high52w,
+      } : null} transmission={drillKey === 'yieldCurve' ? '10 年期减 2 年期美债收益率；低于 0 为倒挂。按同一观测日期对齐，不能把 2Y 单独走势当成收益率曲线。倒挂是结构信号，不是确定的衰退预测。' : TRANSMISSION[drillKey ?? ''] ?? '暂无说明'} />
     </div>
   )
 }

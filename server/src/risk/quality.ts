@@ -2,6 +2,7 @@ import type { DatabaseSync } from 'node:sqlite'
 import type { MacroSnapshot } from './macro.ts'
 import { seriesCoverage } from './macroHistory.ts'
 import type { NarrativeInputs } from './narrative.ts'
+import { publisherOf } from './events.ts'
 
 /**
  * 风险数据质量（v0.29.0 按外部评审意见重写）
@@ -87,25 +88,28 @@ export function assessQuality(
 ): RiskQuality {
   const { inputs, macro, days, now } = opts
   const cutoff = new Date(now - days * 86_400_000).toISOString()
+  const upper = new Date(now).toISOString()
 
   const srcRow = db
     .prepare(
-      `SELECT COUNT(DISTINCT r.source_id) AS n
+      `SELECT DISTINCT r.url AS url
          FROM articles a JOIN raw_items r ON r.id = a.raw_id
-        WHERE a.ai_relevant = 1 AND a.published_at >= ?`,
+        WHERE a.ai_relevant = 1 AND a.published_at >= ? AND a.published_at <= ?`,
     )
-    .get(cutoff) as { n: number } | undefined
-  const independentSources = Number(srcRow?.n ?? 0)
+    .all(cutoff, upper) as { url: string }[]
+  const independentSources = new Set(srcRow.map(r => publisherOf(r.url)).filter(Boolean)).size
 
   const entRow = db
     .prepare(
-      `SELECT SUM(CASE WHEN a.entities IS NOT NULL AND a.entities != '[]' THEN 1 ELSE 0 END) AS withEnt,
-              COUNT(*) AS total
+      `SELECT a.entities
          FROM articles a
-        WHERE a.ai_relevant = 1 AND a.published_at >= ?`,
+        WHERE a.ai_relevant = 1 AND a.published_at >= ? AND a.published_at <= ?`,
     )
-    .get(cutoff) as { withEnt: number | null; total: number } | undefined
-  const entityCoverage = entRow && entRow.total > 0 ? Number(entRow.withEnt ?? 0) / entRow.total : 0
+    .all(cutoff, upper) as { entities: string | null }[]
+  const withEntities = entRow.filter(r => {
+    try { const value: unknown = JSON.parse(r.entities ?? 'null'); return Array.isArray(value) && value.some(e => typeof e === 'string' && e.trim()) } catch { return false }
+  }).length
+  const entityCoverage = entRow.length > 0 ? withEntities / entRow.length : 0
   const sentimentCoverage = inputs.articles > 0 ? inputs.classified / inputs.articles : 0
 
   const coverage = new Map(seriesCoverage(db).map((c) => [c.series, c]))
@@ -121,7 +125,7 @@ export function assessQuality(
       rows: c?.rows ?? 0,
       from: c?.from ?? null,
       to: c?.to ?? null,
-      ok: true,
+      ok: Number.isFinite(p.value) && Number.isFinite(Date.parse(p.asOf)) && Date.parse(p.asOf) <= now,
       proxy: PROXY_LABEL[key],
     }
   })
@@ -131,9 +135,11 @@ export function assessQuality(
     series.push({ key, label: key, asOf: null, rows: c?.rows ?? 0, from: c?.from ?? null, to: c?.to ?? null, ok: false })
   }
 
-  const asOfDates = series.map((s) => s.asOf).filter((d): d is string => Boolean(d)).sort()
-  const latestMacro = asOfDates.length > 0 ? asOfDates[asOfDates.length - 1] : null
-  const staleDays = latestMacro ? Math.round((now - Date.parse(latestMacro)) / 86_400_000) : null
+  const required = series.filter(s => ['rates10y', 'rates2y', 'creditSpread', 'nasdaq'].includes(s.key))
+  const asOfDates = required.filter(s => s.ok).map(s => s.asOf).filter((d): d is string => Boolean(d)).sort()
+  // 以必需序列最旧的日期衡量滞后，辅助长历史序列不计入 4 项完整度。
+  const oldestMacro = asOfDates[0] ?? null
+  const staleDays = oldestMacro ? Math.max(0, Math.floor((now - Date.parse(oldestMacro)) / 86_400_000)) : null
 
   const unavailable: string[] = []
   if (inputs.articles < 20) unavailable.push(`新闻样本不足（${inputs.articles} < 20 条），NFI 不计算`)
@@ -143,7 +149,7 @@ export function assessQuality(
   if (!macro.available) unavailable.push('宏观数据全部缺失，CRS 不计算')
   for (const m of macro.missing) unavailable.push(`宏观序列缺失：${m}`)
 
-  const macroOk = series.filter((s) => s.ok).length
+  const macroOk = required.filter((s) => s.ok).length
   const creditRows = series.find((s) => s.key === 'creditSpread')?.rows ?? 0
   if (creditRows > 0 && creditRows < 1250) {
     unavailable.push(`高收益债 OAS 历史仅 ${creditRows} 行（约 3 年），其"长期分位"实际只有 3 年参考意义`)
@@ -198,7 +204,7 @@ export function assessQuality(
   const bad = dimensions.filter((d) => d.status !== 'sufficient').map((d) => d.label)
 
   const notes: string[] = []
-  if (status === 'stale') notes.push('宏观数据已过期，页面上的分数可能不代表当前状态')
+  if (staleDays !== null && staleDays > 7) notes.push('必需宏观序列已过期，暂停输出 CRS，避免旧值伪装成当前低风险')
   if (independentSources < 3) notes.push('独立信源过少，叙事类指标容易受单一来源影响')
   if (unavailable.length > 0) notes.push(`有 ${unavailable.length} 项未参与计算，详见下方清单`)
 

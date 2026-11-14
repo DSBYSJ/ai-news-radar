@@ -8,17 +8,17 @@ import type { Divergence } from '../../types.ts'
  */
 
 const SEVERITY_STYLE = {
-  critical: 'border-[#e5484d]/60 bg-[#e5484d]/12 text-[#ff8b8f]',
-  warning: 'border-[#f5a623]/50 bg-[#f5a623]/10 text-[#f7c873]',
+  critical: 'risk-ticker-critical',
+  warning: 'risk-ticker-warning',
 } as const
 
 export default function RiskTicker({ items }: { items: Divergence[] }) {
   if (items.length === 0) {
     return (
-      <div className="flex items-center gap-2 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3.5 py-2.5">
-        <span className="risk-pulse inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" />
-        <p className="text-[11px] text-slate-400">
-          背离监测正常 · 情绪 / 价格 / 热度 / 融资 / 叙事 / 宏观 暂无异常信号
+      <div className="risk-ticker-empty flex items-center gap-2">
+        <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--ink-faint)]" />
+        <p>
+          <strong>背离规则暂未触发</strong> · 仅覆盖情绪、价格与融资的特定组合，不代表没有事件风险。
         </p>
       </div>
     )
@@ -52,8 +52,8 @@ export default function RiskTicker({ items }: { items: Divergence[] }) {
         ))}
       </div>
       {/* 左右渐隐遮罩 */}
-      <div className="pointer-events-none absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-[#0d1117] to-transparent" />
-      <div className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-[#0d1117] to-transparent" />
+      <div className="pointer-events-none absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-[var(--surface)] to-transparent" />
+      <div className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-[var(--surface)] to-transparent" />
     </div>
   )
 }

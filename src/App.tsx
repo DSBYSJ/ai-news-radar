@@ -239,21 +239,21 @@ export default function App() {
 
   // 安全区适配（安卓 App edge-to-edge 下避让状态栏与手势区；桌面端 env() 为 0，不受影响）
   return (
-    <div className="mx-auto max-w-6xl overflow-x-hidden px-4 pb-[calc(env(safe-area-inset-bottom)+2rem)] pt-[calc(env(safe-area-inset-top)+1.25rem)] md:px-6 md:pt-[calc(env(safe-area-inset-top)+1.75rem)]">
+    <div className="app-shell">
       <CommandPalette
         open={paletteOpen}
         onClose={() => setPaletteOpen(false)}
         onNavigate={(t) => setTab(t)}
       />
 
-      <header className="mb-6">
+      <header className="app-header">
         {/* ===== 顶部：两层结构 =====
             第一层：品牌（字标 + 产品名 + 版本）+ 操作
             第二层：一句说明 + 数据读数（右侧）
             健康状态只在"异常时"出现 —— 三个常绿点占位但零信息量，是之前显乱的主因。
         */}
-        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
-          <div className="flex min-w-0 items-center gap-3">
+        <div className="header-main flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+          <div className="brand-lockup flex min-w-0 items-center gap-3">
             {/* 字标：SONAR，O = 闭合环 + 实心点 + 外脉冲 */}
             <span
               className="flex select-none items-center text-slate-900 dark:text-white"
@@ -283,7 +283,11 @@ export default function App() {
           </div>
 
           {/* 操作区：主按钮实心 / 次按钮描边 / 主题为图标按钮 */}
-          <div className="flex items-center gap-2">
+          <div className="header-actions flex items-center gap-2">
+            <button type="button" className="sonar-search" onClick={() => setPaletteOpen(true)} aria-label="搜索资讯">
+              <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" /><path d="m13 13 4 4" /></svg>
+              <span>搜索资讯</span><kbd>Ctrl K</kbd>
+            </button>
             <button type="button" onClick={() => void run('collect')} disabled={running !== ''} className={btnPrimary}>
               <RefreshIcon spinning={running === '采集中…'} />
               采集
@@ -374,7 +378,7 @@ export default function App() {
         )}
 
         {/* ===== 页签：分段控件 ===== */}
-        <nav className="seg mt-4" role="tablist">
+        <nav className="seg app-nav" aria-label="主导航" role="tablist">
           {TABS.map(([key, label]) => (
             <button
               key={key}
@@ -419,6 +423,8 @@ export default function App() {
           <p className="p-6 text-[12px] text-slate-400">未知页签：{tab}</p>
         )}
       </div>
+
+      <footer className="site-footer"><span>SONAR <span className="footer-slash">/</span> 个人情报工作台</span><span>发现信号，保留判断。</span></footer>
 
       {/* 突发实时推送提示（右下角浮层） */}
       {toasts.length > 0 && (

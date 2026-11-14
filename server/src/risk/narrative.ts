@@ -299,7 +299,7 @@ export function narrativeInputs(db: DatabaseSync, opts: { days?: number; now?: n
 
   const total = rows.length
   const moneyCount = rows.filter((r) => r.category === 'funding' || hitAny(`${r.title} ${r.summary ?? ''}`, MONEY_WORDS)).length
-  const classifiedRows = rows.filter((r) => r.sentiment !== null)
+  const classifiedRows = rows.filter((r) => r.sentiment === 'positive' || r.sentiment === 'negative' || r.sentiment === 'neutral')
   const positive = classifiedRows.filter((r) => r.sentiment === 'positive').length
   const negative = classifiedRows.filter((r) => r.sentiment === 'negative').length
   const classified = classifiedRows.length

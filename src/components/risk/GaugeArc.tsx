@@ -56,9 +56,9 @@ export default function GaugeArc({
 }: Props) {
   const v = value === null || !Number.isFinite(value) ? null : Math.max(0, Math.min(100, value))
   const band: RiskBand = bandOf(v)
-  const color = colorOf(v)
+  const color = v === null ? 'var(--ink-faint)' : `var(--risk-${band}, ${colorOf(v)})`
   const valueDeg = v === null ? 180 : 180 - (v / 100) * 180
-  const glow = band === 'critical' ? 'drop-shadow(0 0 8px rgba(229,72,77,0.75))' : `drop-shadow(0 0 6px ${color}66)`
+  const glow = band === 'critical' ? 'drop-shadow(0 0 5px rgba(229,72,77,0.3))' : 'none'
 
   // 当前值标记：只在外圈（不进入中心区）
   const markInner = polar(R_BAND_IN - 2, valueDeg)
@@ -80,7 +80,7 @@ export default function GaugeArc({
             stroke={s.color}
             strokeWidth="12"
             strokeLinecap="round"
-            opacity="0.32"
+            opacity="0.2"
           />
         ))}
 
@@ -135,7 +135,7 @@ export default function GaugeArc({
       {/* 中心数字：独立一块，位于弧内侧（没有任何指针穿过） */}
       <div className="-mt-6 flex flex-col items-center">
         <span
-          className="text-[34px] font-semibold leading-none"
+          className="text-[40px] font-medium leading-none tracking-tight"
           style={{ color, textShadow: band === 'critical' ? '0 0 18px rgba(229,72,77,0.45)' : 'none' }}
         >
           <CountUp value={v} placeholder="—" />
@@ -146,7 +146,7 @@ export default function GaugeArc({
       {/* 字幕区：分档徽章 + 副信息 */}
       <div className="mt-1.5 flex flex-col items-center gap-1">
         {bandLabel && (
-          <span className="rounded-full px-2 py-0.5 text-[10px]" style={{ color, backgroundColor: `${color}1f` }}>
+          <span className="rounded-full px-2 py-0.5 text-[10px]" style={{ color, backgroundColor: `color-mix(in srgb, ${color} 12%, transparent)` }}>
             {bandLabel}
           </span>
         )}

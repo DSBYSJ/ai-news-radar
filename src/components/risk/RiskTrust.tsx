@@ -23,7 +23,7 @@ export function QualityBar({ quality }: { quality: RiskQuality }) {
   const style = STATUS_STYLE[quality.status]
 
   return (
-    <section className="risk-panel rounded-2xl p-3.5">
+    <section className="risk-panel risk-quality">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <span className="text-[11px] tracking-[0.12em] text-slate-400">数据质量</span>
@@ -41,7 +41,7 @@ export function QualityBar({ quality }: { quality: RiskQuality }) {
 
       <p className="mt-1.5 text-[10.5px] leading-relaxed text-slate-400">{quality.headline}</p>
 
-      <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="risk-quality-grid grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
         {quality.dimensions.map((d) => {
           const s = STATUS_STYLE[d.status]
           return (
@@ -58,6 +58,7 @@ export function QualityBar({ quality }: { quality: RiskQuality }) {
 
       <button
         type="button"
+        aria-expanded={open}
         onClick={() => setOpen(!open)}
         className="mt-2 text-[10px] text-slate-500 underline decoration-dotted hover:text-slate-300"
       >

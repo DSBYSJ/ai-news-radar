@@ -59,7 +59,7 @@ interface Observation {
 }
 
 /** 解析 FRED 的 CSV（两列：observation_date, 值；缺值为 "."） */
-function parseFredCsv(text: string): Observation[] {
+export function parseFredCsv(text: string): Observation[] {
   const out: Observation[] = []
   const lines = text.split('\n')
   for (let i = 1; i < lines.length; i++) {
@@ -74,7 +74,7 @@ function parseFredCsv(text: string): Observation[] {
     if (!Number.isFinite(value)) continue
     out.push({ date, value })
   }
-  return out
+  return out.sort((a, b) => a.date.localeCompare(b.date))
 }
 
 /** 取离目标日期最近的观测（一年前用） */
@@ -119,7 +119,7 @@ async function fetchFredApi(seriesId: string, apiKey: string): Promise<Observati
     const v = Number.parseFloat(o.value)
     if (Number.isFinite(v)) out.push({ date: o.date, value: v })
   }
-  return out
+  return out.sort((a, b) => a.date.localeCompare(b.date))
 }
 
 interface SeriesSpec {

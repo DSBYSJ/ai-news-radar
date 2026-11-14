@@ -1,5 +1,3 @@
-import { percentileColor } from './riskColors.ts'
-
 /**
  * 迷你趋势图（Sparkline）
  * 手写 SVG 折线 + 尾点高亮；`history` 为升序数值序列。
@@ -50,29 +48,36 @@ export interface MacroCardData {
   spark: number[]
   /** 现值（用于散点/联动） */
   raw: number
+  asOf?: string
+  unit?: 'pp' | 'percent'
 }
 
 export default function MacroCard({ data, onDrill }: { data: MacroCardData; onDrill: () => void }) {
   // 语义型指标（收益率曲线）用覆盖色：正常=绿/倒挂=红；其余按历史分位着色
-  const color = data.colorOverride ?? percentileColor(data.percentile)
+  const color = data.colorOverride ?? (data.percentile === null ? 'var(--ink-muted)' :
+    data.percentile >= 0.95 ? 'var(--risk-critical)' : data.percentile >= 0.75 ? 'var(--risk-warn)' : 'var(--risk-calm)')
   const change =
     data.yearAgo && data.yearAgo !== 0 ? ((data.raw - data.yearAgo) / Math.abs(data.yearAgo)) * 100 : null
+  const difference = data.yearAgo === null ? null : data.raw - data.yearAgo
+  const changeLabel = data.unit === 'pp'
+    ? difference === null ? '' : ` · 一年 ${difference >= 0 ? '+' : ''}${difference.toFixed(2)}pp`
+    : change === null ? '' : ` · 一年 ${change >= 0 ? '+' : ''}${change.toFixed(1)}%`
 
   return (
     <button
       type="button"
       onClick={onDrill}
-      className="group relative overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 text-left transition hover:border-white/15 hover:bg-white/[0.05]"
+      className="macro-card group relative overflow-hidden text-left transition"
     >
       <div className="relative flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="text-[10px] tracking-[0.08em] text-slate-500">{data.label}</p>
-          <p className="num mt-1 text-[20px] font-semibold leading-none" style={{ color }}>
+          <p className="macro-value num" style={{ color }}>
             {data.display}
           </p>
           <p className="num mt-1.5 text-[9.5px] text-slate-500">
             {data.percentile !== null ? `历史分位 ${(data.percentile * 100).toFixed(0)}%` : '分位 —'}
-            {change !== null && ` · 一年 ${change >= 0 ? '+' : ''}${change.toFixed(1)}%`}
+            {changeLabel}
           </p>
         </div>
         <span className="mt-1 shrink-0 text-[9px] text-slate-600 transition group-hover:text-slate-400">
@@ -89,10 +94,11 @@ export default function MacroCard({ data, onDrill }: { data: MacroCardData; onDr
       </div>
 
       {/* 近 30 天走势（独立一行，不压文字） */}
-      <div className="mt-1.5 flex items-center gap-2">
+      <div className="macro-spark">
         <Sparkline values={data.spark} width={150} height={22} color={color} />
-        <span className="text-[9px] text-slate-600">近 30 天</span>
+        <span className="text-[9px] text-slate-600">近 30 个观测</span>
       </div>
+      <p className="macro-date">观测日期 {data.asOf ?? '—'}</p>
     </button>
   )
 }

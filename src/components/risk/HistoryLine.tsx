@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import { colorOf } from './riskColors.ts'
+import { segmentedLine } from '../../lib/riskDisplay.ts'
 
 /**
  * 历史时间序列折线（带十字准星 + 因子联动高亮）
@@ -45,20 +46,10 @@ export default function HistoryLine({ points, overlay, height = 210, events = []
   const xOf = (i: number): number => PAD_L + (i / (points.length - 1)) * innerW
   const yOf = (v: number): number => PAD_T + innerH - (v / 100) * innerH
 
-  const linePath = (key: 'nfi' | 'crs'): string =>
-    points
-      .map((p, i) => {
-        const v = p[key]
-        return v === null || v === undefined ? null : `${i === 0 ? 'M' : 'L'}${xOf(i).toFixed(1)},${yOf(v).toFixed(1)}`
-      })
-      .filter(Boolean)
-      .join(' ')
+  const linePath = (key: 'nfi' | 'crs'): string => segmentedLine(points.map(p => p[key]), xOf, yOf)
 
   const overlayPath = overlay
-    ? overlay.values
-        .map((v, i) => (v === null || v === undefined ? null : `${i === 0 ? 'M' : 'L'}${xOf(i).toFixed(1)},${yOf(v).toFixed(1)}`))
-        .filter(Boolean)
-        .join(' ')
+    ? segmentedLine(overlay.values, xOf, yOf)
     : ''
 
   const handleMove = (clientX: number): void => {
