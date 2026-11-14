@@ -14,6 +14,9 @@ import CountUp from './CountUp.tsx'
  */
 
 interface Props {
+  neutral?: boolean
+  suffix?: string
+  decimals?: number
   value: number | null
   label: string
   /** 分档徽章（如 "偏热" / "需留意"） */
@@ -53,12 +56,15 @@ export default function GaugeArc({
   marks = [],
   probability = null,
   height = 150,
+  neutral = false,
+  suffix = '',
+  decimals = 0,
 }: Props) {
   const v = value === null || !Number.isFinite(value) ? null : Math.max(0, Math.min(100, value))
   const band: RiskBand = bandOf(v)
-  const color = v === null ? 'var(--ink-faint)' : `var(--risk-${band}, ${colorOf(v)})`
+  const color = v === null ? 'var(--ink-faint)' : neutral ? 'var(--accent)' : `var(--risk-${band}, ${colorOf(v)})`
   const valueDeg = v === null ? 180 : 180 - (v / 100) * 180
-  const glow = band === 'critical' ? 'drop-shadow(0 0 5px rgba(229,72,77,0.3))' : 'none'
+  const glow = !neutral && band === 'critical' ? 'drop-shadow(0 0 5px rgba(229,72,77,0.3))' : 'none'
 
   // 当前值标记：只在外圈（不进入中心区）
   const markInner = polar(R_BAND_IN - 2, valueDeg)
@@ -72,7 +78,7 @@ export default function GaugeArc({
         <path d={arcPath(R_BAND, 0, 100)} fill="none" stroke="rgba(148,163,184,0.16)" strokeWidth="12" strokeLinecap="round" />
 
         {/* 四段风险色带 */}
-        {GAUGE_STOPS.map((s) => (
+        {!neutral && GAUGE_STOPS.map((s) => (
           <path
             key={s.from}
             d={arcPath(R_BAND, s.from + 0.4, s.to - 0.4)}
@@ -136,9 +142,9 @@ export default function GaugeArc({
       <div className="-mt-6 flex flex-col items-center">
         <span
           className="text-[40px] font-medium leading-none tracking-tight"
-          style={{ color, textShadow: band === 'critical' ? '0 0 18px rgba(229,72,77,0.45)' : 'none' }}
+          style={{ color, textShadow: !neutral && band === 'critical' ? '0 0 18px rgba(229,72,77,0.45)' : 'none' }}
         >
-          <CountUp value={v} placeholder="—" />
+          <CountUp value={v} decimals={decimals} placeholder="—" />{v!==null&&suffix&&<small className="gauge-unit">{suffix}</small>}
         </span>
         <span className="mt-1.5 text-[9px] tracking-[0.22em] text-slate-500 dark:text-slate-500">{label}</span>
       </div>

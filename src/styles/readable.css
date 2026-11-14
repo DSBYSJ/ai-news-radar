@@ -1,4 +1,33 @@
 /* Comfortable reading scale: real font sizes, no page zoom or transform. */
+.gauge-unit { font-size: 19px; margin-left: 3px; }
+.measurement-observations { margin-top: 12px; }
+.measurement-observation { display: flex; align-items: center; justify-content: space-between; gap: 15px; padding: 7px 0; border-bottom: 1px solid var(--line-soft); }
+.measurement-observation > div > span { font-size: 13px; color: var(--ink-2); }
+.measurement-observation small { display: block; color: var(--ink-faint); font-size: 11px; line-height: 1.4; margin-top: 2px; }
+.measurement-observation > strong { color: var(--accent); font-weight: 550; font-size: 16px; white-space: nowrap; }
+.measurement-explanation { color: var(--ink-muted); font-size: 12px; line-height: 1.9; margin-top: 12px; }
+.measurement-explanation p { margin-top: 10px; }
+.measurement-explanation b { font-weight: 500; color: var(--ink-2); }
+.measurement-empty { padding: 18px 0; color: var(--ink-muted); font-size: 13px; line-height: 1.9; }
+.measurement-detail-note { font-size: 12px; color: var(--ink-muted); line-height: 1.9; margin-top: 17px; }
+.measurement-partition-track { margin: 27px 0 23px; background: var(--surface-sunk); display: flex; height: 12px; border-radius: 8px; overflow: hidden; }
+.measurement-partition-track span { background: var(--accent); }
+.measurement-partition-track span[data-kind='chase_only'] { background: #ad9165; }
+.measurement-partition-track span[data-kind='overlap'] { background: #7e91b0; }
+.measurement-partitions { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 15px; }
+.measurement-partitions span { display: block; font-size: 12px; color: var(--ink-muted); }
+.measurement-partitions strong { display: block; font-size: 26px; font-weight: 500; color: var(--ink-2); margin-top: 8px; }
+.measurement-partitions small { color: var(--ink-faint); font-size: 12px; margin-left: 5px; }
+.pressure-feature-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 22px; margin-top: 23px; }
+.pressure-feature h4 { font-size: 14px; color: var(--ink-2); }
+.pressure-feature > div > span { display: block; font-size: 13px; color: var(--ink-muted); margin-top: 5px; }
+.pressure-feature > strong { color: var(--accent); display: block; font-size: 27px; font-weight: 500; margin-top: 17px; }
+.pressure-feature > strong small { display: block; color: var(--ink-muted); font-size: 11px; font-weight: 400; }
+.pressure-feature-track { height: 5px; border-radius: 5px; background: var(--surface-sunk); margin-top: 12px; overflow: hidden; }
+.pressure-feature-track > span { display: block; background: var(--accent); height: 100%; }
+.pressure-feature > p { font-size: 11px; color: var(--ink-faint); line-height: 1.85; margin-top: 12px; }
+.legacy-risk-archive > summary { font-size: 14px; color: var(--ink-muted); cursor: pointer; }
+@media(max-width:800px){.pressure-feature-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:24px}.measurement-partitions{gap:10px}.measurement-partitions strong{font-size:22px}}
 html:not(.dark) body, html.dark body { font-size: 16px; line-height: 1.75; }
 html .app-shell { width: min(1440px, 100%); padding-inline: 40px; }
 html .app-shell [class~='text-[9px]'], html .app-shell [class~='text-[9.5px]'] { font-size: 12px; line-height: 1.65; }

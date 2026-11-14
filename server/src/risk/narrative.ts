@@ -2,6 +2,8 @@ import type { DatabaseSync } from 'node:sqlite'
 import { fomoCoefficient, type FomoLike } from './calculation.ts'
 
 /**
+ * V1/V2 存档口径；当前看板使用 narrativeEvidence.ts，不再采用下面的五项合成。
+ *
  * 叙事泡沫指数（Narrative Froth Index, NFI）
  *
  * ⚠️ 先说清它**不是**什么：

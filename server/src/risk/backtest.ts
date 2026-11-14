@@ -782,6 +782,7 @@ const BASELINES: { name: string; scoreOf: (s: Sample) => number | null }[] = [
 ]
 
 export interface BacktestReport {
+  model: 'legacy-v2'
   generatedAt: string
   params: RiskParams
   /** 一句话定位：这份回测到底评的是什么 */
@@ -912,11 +913,11 @@ export function runBacktest(db: DatabaseSync, opts: { params?: RiskParams } = {}
     .all() as unknown as { series: string; rows: number; from: string; to: string }[]
 
   return {
+    model:'legacy-v2',
     generatedAt: new Date().toISOString(),
     params,
     positioning:
-      '宏观压力评分的历史回测（不含 NFI）—— 因新闻历史不足 1 个月，NFI 无法跨年回测；' +
-      '本报告结论只能用于宏观部分，不能代表生产 CRS 的整体表现。',
+      'V2 旧模型回测存档（不含 NFI），使用长期 Baa 信用代理与旧公式，不适用于当前 V3 市场压力或资本叙事占比。不得将以下统计解释为新版的预测能力。',
     dataRange: {
       from: samples[0]?.date ?? '—',
       to: samples[samples.length - 1]?.date ?? '—',

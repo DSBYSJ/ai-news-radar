@@ -335,3 +335,16 @@ CREATE TABLE IF NOT EXISTS risk_daily (
   divergences TEXT,                   -- JSON
   created_at  TEXT NOT NULL
 );
+
+-- V3 与旧 risk_daily 分开保存；不同叙事窗口也不拼接。
+CREATE TABLE IF NOT EXISTS risk_snapshots (
+  date TEXT NOT NULL,
+  window_days INTEGER NOT NULL,
+  model TEXT NOT NULL,
+  nfi REAL,
+  nfi_factors TEXT,
+  crs REAL,
+  crs_factors TEXT,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY(date, window_days, model)
+);

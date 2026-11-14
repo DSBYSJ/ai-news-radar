@@ -189,7 +189,7 @@ export function assessQuality(
       label: '宏观完整度',
       value: `${macroOk}/4 序列`,
       status: macroOk >= 4 ? 'sufficient' : macroOk >= 3 ? 'partial' : 'insufficient',
-      rule: '4 项齐全才输出完整 CRS；缺 2 项以上视为不可用',
+      rule: '4 项为宏观背景覆盖；V3 压力单独核验信用/指数共同日期及四项变换历史，不以背景序列数代替计算条件',
     },
     {
       key: 'freshness',
@@ -204,7 +204,7 @@ export function assessQuality(
   const bad = dimensions.filter((d) => d.status !== 'sufficient').map((d) => d.label)
 
   const notes: string[] = []
-  if (staleDays !== null && staleDays > 7) notes.push('必需宏观序列已过期，暂停输出 CRS，避免旧值伪装成当前低风险')
+  if (staleDays !== null && staleDays > 7) notes.push('部分宏观背景过期；V3 压力能否计算，以信用/指数共同观测及历史门槛为准')
   if (independentSources < 3) notes.push('独立信源过少，叙事类指标容易受单一来源影响')
   if (unavailable.length > 0) notes.push(`有 ${unavailable.length} 项未参与计算，详见下方清单`)
 

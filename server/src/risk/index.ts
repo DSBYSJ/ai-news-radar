@@ -1,18 +1,16 @@
 import type { DatabaseSync } from 'node:sqlite'
 import { config } from '../config.ts'
-import { loadMacro, type MacroSnapshot, type MacroPoint } from './macro.ts'
-import { narrativeFroth, narrativeInputs, type NarrativeReport } from './narrative.ts'
+import { loadMacro, type MacroSnapshot } from './macro.ts'
+import type { NarrativeReport } from './narrative.ts'
+import { narrativeEvidence, type NarrativeEvidence } from './narrativeEvidence.ts'
+import { marketPressure, type MarketPressure } from './pressure.ts'
 import { loadParams } from './params.ts'
 import { assessQuality, type RiskQuality } from './quality.ts'
 import { eventRisk, type EventRisk } from './events.ts'
 import {
-  computeCrs,
-  computeNfi,
-  detectDivergences,
   type CrsFactor,
   type CrsResult,
   type Divergence,
-  type NfiResult,
   type RiskParams,
 } from './calculation.ts'
 
@@ -25,7 +23,7 @@ import {
  */
 
 export interface CrisisAssessment {
-  /** 0~100；越大越危险 */
+  /** V3 四项历史分位的平均值；不是危机概率 */
   score: number
   level: 'low' | 'guarded' | 'elevated' | 'high'
   /**
@@ -46,7 +44,7 @@ export interface VulnerableEntity {
   negativeShare: number
   /** 近 7 天 vs 前 7 天提及变化（正=升温） */
   heatChange: number | null
-  /** 融资类提及数（缺乏实质融资 → 加分） */
+  /** 融资类提及数，仅保留兼容，不参与实体加分 */
   funding: number
   /** 脆弱性得分 0~100 */
   score: number
@@ -54,17 +52,19 @@ export interface VulnerableEntity {
 }
 
 export interface RiskReport {
+  model: 'risk-evidence-v3'
+  pressure: MarketPressure
   generatedAt: string
   windowDays: number
   /** 旧字段（保留）：叙事指数结构 */
   narrative: NarrativeReport
   /** 旧字段（保留）：宏观快照（新增 history/high52w/inversion） */
   macro: MacroSnapshot
-  /** 旧字段（保留）：危机风险分（现在由 v2 引擎算） */
+  /** 旧字段兼容映射：V3 市场压力，probability12m 始终为空 */
   crisis: CrisisAssessment | null
   // ---- v0.26.0 新增 ----
-  /** NFI v2（FOMO + 非线性加速度） */
-  nfi: NfiResult | null
+  /** V3 资本措辞覆盖测量 */
+  nfi: NarrativeEvidence | null
   /** 瀑布图归因（基础分 → 各项贡献 → 合计） */
   waterfall: CrsResult['waterfall'] | null
   /** 三条诊断子指数（过热 / 当前压力 / 潜在脆弱），不参与总分 */
@@ -75,9 +75,9 @@ export interface RiskReport {
   assessment: { level: 'unknown' | 'observe' | 'watch' | 'elevated' | 'critical'; headline: string; detail: string }
   /** 背离预警 */
   divergences: Divergence[]
-  /** 宏观背景下最脆弱的实体（CRS ≥ 50 时才有意义） */
+  /** 独立实体负面诊断，不依赖 CRS 门槛 */
   vulnerableEntities: VulnerableEntity[]
-  /** 当前生效的参数（前端 tooltip / 调参面板用） */
+  /** V2 存档参数；不控制 V3 测量 */
   params: RiskParams
   /** 公式与口径说明（前端 tooltip 直接渲染） */
   formulas: { key: string; title: string; formula: string; detail: string }[]
@@ -86,36 +86,11 @@ export interface RiskReport {
 }
 
 const DISCLAIMER =
-  '本模块分三条独立观察线：事件冲击直接检查已采集 RSS/API 标题，关注公司重大变动；叙事泡沫指数（NFI）只用站内新闻，衡量「讨论有多热」；' +
-  '危机风险分（CRS）必须接入利率、信用利差、指数三类宏观数据才计算。' +
-  'NFI 不是估值模型（新闻里没有估值倍数）。' +
-  'CRS 的历史回测（不含 NFI）显示两个时间切分结论不一致（回撤 AUC 0.60 vs 0.42），' +
-  '且独立危机事件只有 3 个 —— 因此 CRS 目前定位为「可解释的宏观压力描述」，' +
-  '不是已验证的危机预警模型，也不输出预测概率。事件冲击为规则预警强度，低分或未检出不等于安全；传闻单独展示，不与已发生事件混算。'
-
-/** 把宏观快照转成引擎需要的输入 */
-function macroInput(point: MacroPoint | undefined, key: string, label: string) {
-  if (!point) return null
-  return {
-    key,
-    label,
-    value: point.value,
-    history: point.history,
-    yearAgo: point.yearAgo,
-    avg200: point.avg200,
-    high52w: point.high52w,
-  }
-}
-
-/** 指数连续下跌天数（从历史序列尾部往前数） */
-function consecutiveDownDays(history: number[]): number {
-  let n = 0
-  for (let i = history.length - 1; i > 0; i--) {
-    if (history[i] < history[i - 1]) n += 1
-    else break
-  }
-  return n
-}
+  'V3 分开测量事件、资本叙事和市场压力。NFI 是去重与出版源均衡后的资本叙事报道占比，不是估值模型、泡沫概率或市场情绪调查。' +
+  'CRS 是信用利差水平/走阔、指数回撤/实现波动四项此前三年历史分位的平均值；利率水平、倒挂、低利差和股市上涨作为背景，不再增加当前压力。' +
+  '50 不是安全线，读数不是合成分本身的百分位；持续高压时期，相对基准也会变化，应结合绝对水平。' +
+  'V3 是描述性监测模型，未经独立预测验证，不输出危机概率；旧版回测不能证明新版有效。宏观历史按观测日期回放，缺少历史发布版本与修订记录，不冒充真实可交易的发布时点回测。' +
+  '公司事件的规则强度独立呈现，不与宏观读数或新闻占比合成。'
 
 /** 实体诊断：负面占比与近期负面升温；缺少融资报道不是财务危机证据。 */
 function vulnerableEntities(db: DatabaseSync, days: number, now: number, limit = 10): VulnerableEntity[] {
@@ -198,101 +173,50 @@ export async function riskReport(
 ): Promise<RiskReport> {
   const now = opts.now ?? Date.now()
   const params = loadParams(db)
-  const narrative = narrativeFroth(db, { days: opts.days, now: opts.now })
-  const inputs = narrativeInputs(db, { days: opts.days, now: opts.now })
+  const nfi = narrativeEvidence(db, { days: opts.days, now })
+  const inputs = nfi.inputs
+  const narrative: NarrativeReport = {windowDays:nfi.windowDays,articles:inputs.articles,classified:inputs.classified,
+    nfi:nfi.score,band:'unknown',factors:nfi.factors,latestDate:inputs.latestDate,
+    observations:[{key:'measurement',label:'统计口径',value:nfi.formula},{key:'sampling',label:'来源覆盖',value:`${nfi.sampling.eligiblePublishers} 个合格出版源，${nfi.sampling.eligibleArticles} 条去重报道`}]}
   const macro = opts.macro ?? (await loadMacro(opts.macroKey ?? config.fredApiKey))
 
-  // ---------- NFI v2 ----------
-  const nfi = computeNfi(
-    {
-      articles: inputs.articles,
-      moneyShare: inputs.moneyShare,
-      sentimentSkew: inputs.sentimentSkew,
-      concentration: inputs.concentration,
-      acceleration: inputs.acceleration,
-      fomo: inputs.fomo,
-      // 赛道锚点：预留（估值倍数 / 资金净流入暂无数据源）
-      anchors: [],
-    },
-    params,
-  )
+  // ---------- V3：新闻占比与市场压力独立测量 ----------
+  const pressure = marketPressure(macro,{now})
+  const coreReady = pressure.status === 'ready'
 
-  // ---------- CRS v2 ----------
-  const rates = macroInput(macro.series.rates10y, 'rates', '10 年期美债收益率')
-  const credit = macroInput(macro.series.creditSpread, 'credit', '高收益债信用利差（OAS）')
-  const index = macroInput(macro.series.nasdaq, 'index', '纳斯达克综合指数')
-  const coreReady = ['rates10y', 'creditSpread', 'nasdaq'].every(key => {
-    const p = macro.series[key]
-    const age = p ? now - Date.parse(p.asOf) : NaN
-    return p && Number.isFinite(p.value) && Number.isFinite(age) && age >= 0 && age <= 7 * 86_400_000
-  })
-  const crs: CrsResult | null =
-    macro.available && coreReady
-      ? computeCrs(
-          { nfi: nfi.score, rates, credit, index, inversion: macro.inversion, concentration: inputs.concentration },
-          params,
-        )
-      : null
-
-  // ---------- 背离检测 ----------
-  const indexHistory = macro.series.nasdaq?.history ?? []
-  const indexDownDays = consecutiveDownDays(indexHistory)
-  const indexChange =
-    indexHistory.length >= 6 && indexHistory[indexHistory.length - 6] > 0
-      ? indexHistory[indexHistory.length - 1] / indexHistory[indexHistory.length - 6] - 1
-      : null
-
-  const dayMs = 86_400_000
-  const countBetween = (from: number, to: number, extra = ''): number =>
-    (
-      db
-        .prepare(
-          `SELECT COUNT(*) AS n FROM articles
-            WHERE ai_relevant = 1 AND published_at >= ? AND published_at < ?${extra}`,
-        )
-        .get(new Date(now - from * dayMs).toISOString(), new Date(now - to * dayMs).toISOString()) as { n: number }
-    ).n
-  const recentCount = countBetween(7, 0)
-  const prevCount = countBetween(14, 7)
-  const heatSurgeRatio = prevCount > 0 ? recentCount / prevCount : null
-  const fundingRecent = countBetween(7, 0, " AND category = 'funding'")
-  const fundingPrev = countBetween(14, 7, " AND category = 'funding'")
-  const fundingChangeRatio = fundingPrev > 0 ? (fundingRecent - fundingPrev) / fundingPrev : null
-
-  const divergences = detectDivergences({
-    optimism: inputs.optimism,
-    indexDownDays,
-    heatSurgeRatio,
-    fundingChangeRatio,
-    entity: null,
-    moneyShare: inputs.moneyShare,
-    indexChange,
-    params,
-  })
+  // V2 的新闻/市场阈值背离规则不跨版本沿用。
+  const divergences: Divergence[] = []
 
   // 公司事件与宏观分脱钩：CRS 低时仍然显示公司层面的负面信号。
   const vulnerable = vulnerableEntities(db, narrative.windowDays, now, 10)
   const events = eventRisk(db, { now })
 
-  const crisis: CrisisAssessment | null = crs
-    ? { score: crs.score, level: crs.level, probability12m: crs.probability12m, factors: crs.factors }
+  const crisis: CrisisAssessment | null = pressure.score !== null
+    ? { score: pressure.score, level: pressure.score>=90?'high':pressure.score>=75?'elevated':pressure.score>=50?'guarded':'low', probability12m: null, factors: pressure.factors }
     : null
 
   const quality = assessQuality(db, { days: narrative.windowDays, now, inputs, macro })
-  if (!coreReady) quality.unavailable.push('CRS 核心序列（利率/信用/指数）缺失、超前或超过 7 天未更新，暂停计算')
+  quality.unavailable.push(...nfi.reasons,...pressure.reasons)
+  quality.notes.push(nfi.note,pressure.note)
+  quality.dimensions.push({key:'v3_narrative',label:'资本叙事计算条件',value:`${nfi.sampling.eligibleArticles} 条 / ${nfi.sampling.eligiblePublishers} 源`,status:nfi.status==='ready'?'sufficient':'insufficient',rule:'去重后至少 30 条、3 个出版源，每源至少 5 条；每源等权'})
+  quality.dimensions.push({key:'v3_pressure',label:'V3 压力计算条件',value:`${pressure.factors.length}/4 项有效`,status:coreReady?'sufficient':'insufficient',rule:'共同观测不超过 7 天；每项此前三年至少 252 个有效观测，缺项不归一成完整读数'})
+  if(!coreReady||nfi.status!=='ready'){
+    quality.status='insufficient'
+    quality.headline='部分 V3 计算条件未满足；未计算项显示原因，不作低风险判断'
+  }
   const eventLevel = events.stale ? 0 : (events.score ?? 0)
-  const pressure = Math.max(eventLevel, crs?.score ?? 0)
-  const level = pressure >= 75 ? 'critical' : pressure >= 55 ? 'elevated' : pressure >= 30 ? 'watch' : events.stale || !crs ? 'unknown' : 'observe'
+  const level = eventLevel >= 75 ? 'critical' : eventLevel >= 55 ? 'elevated' : eventLevel >= 30 || (pressure.score??0)>=75 ? 'watch' : events.stale || !coreReady ? 'unknown' : 'observe'
   const lead = events.events[0]
   const assessment: RiskReport['assessment'] = {
     level,
-    headline: lead && eventLevel >= 30 ? `${lead.entity}出现${lead.category}信号` : pressure >= 30 ? '宏观市场压力值得关注' : level === 'unknown' ? '数据覆盖有限，暂不作低风险判断' : '已覆盖信号暂未达到较高预警档',
+    headline: lead && eventLevel >= 30 ? `${lead.entity}出现${lead.category}信号` : (pressure.score??0)>=75 ? '市场压力位于近期历史较高位置' : level === 'unknown' ? '数据覆盖有限，暂不作低风险判断' : '已覆盖事件暂无较强触发，市场读数单独解读',
     detail: lead && eventLevel >= 30
-      ? `近 7 天事件强度 ${events.score}；宏观压力 ${crs?.score ?? '未计算'}。公司事件单独触发关注，不会被全站新闻均值稀释。`
+      ? `近 7 天事件强度 ${events.score}；市场压力读数 ${pressure.score ?? '未计算'}。两者量纲不同，不合成概率；公司事件单独触发关注。`
       : '事件冲击、叙事泡沫与宏观压力分别衡量不同问题；任何一条线的低分都不代表整体安全。',
   }
 
   return {
+    model:'risk-evidence-v3',pressure,
     generatedAt: new Date(now).toISOString(),
     windowDays: narrative.windowDays,
     narrative: { ...narrative, nfi: nfi.score, band: nfi.band },
@@ -300,8 +224,8 @@ export async function riskReport(
     crisis,
     nfi,
     disclaimer: DISCLAIMER,
-    waterfall: crs?.waterfall ?? null,
-    subIndices: crs?.subIndices ?? null,
+    waterfall: pressure.score===null?null:[...pressure.factors.map(f=>({label:f.label,value:f.contribution,kind:'item' as const})),{label:'合计',value:pressure.score,kind:'total' as const}],
+    subIndices: null,
     quality,
     eventRisk: events,
     assessment,
@@ -309,56 +233,12 @@ export async function riskReport(
     vulnerableEntities: vulnerable,
     params,
     formulas: [
-      {
-        key: 'nfi',
-        title: 'NFI 叙事泡沫指数（v2）',
-        formula: `Σ(分项得分 × 权重) / Σ权重，权重：融资 ${params.nfi.money}% / 情绪 ${params.nfi.sentiment}% / 集中度 ${params.nfi.concentration}% / 加速度 ${params.nfi.acceleration}% / FOMO ${params.nfi.fomo}%`,
-        detail:
-          `加速度：1.00 以下 0 分，1.00~${(1 + params.acceleration.threshold).toFixed(2)} 线性升至 50，之后按阶跃渐近 100；` +
-          `超过 ${params.acceleration.cap ?? 3} 倍视为采集面变化，不参与加权。` +
-          'FOMO：逐篇打分后按「覆盖率 × 强度」聚合，不再把整窗拼成一段文本。',
-      },
-      {
-        key: 'crs',
-        title: 'CRS 危机风险分（v2）',
-        formula: `基础权重 NFI ${params.crs.nfi}% / 利率 ${params.crs.rates}% / 信用 ${params.crs.credit}% / 指数 ${params.crs.index}%，再加交叉项（利率×信用）最多 +8 分`,
-        detail:
-          `宏观指标用历史分位数化（point-in-time，只用当天及以前的观测）；OAS > ${params.steps.oas}% 阶跃跳升；` +
-          `纳指回撤跨过 ${(params.dynamic.drawdown * 100).toFixed(0)}% 时宏观权重平滑升至 ×${params.dynamic.boost}（±${((params.dynamic.band ?? 0.02) * 100).toFixed(0)}pp 过渡带）。` +
-          (params.crs.rates === 0
-            ? '　ⓘ 当前为**简化模式**：利率连续打分权重为 0，倒挂改在「潜在脆弱」子指数里体现。'
-            : ''),
-      },
-      {
-        key: 'simplify',
-        title: '为什么简化（v0.34.0）',
-        formula: 'CRS 由 4 项（NFI 40 / 利率 20 / 信用 20 / 指数 20）改为 3 项（NFI 30 / 信用 35 / 指数 35）',
-        detail:
-          '依据是回测消融：去掉利率连续打分后，两个时间切分、两个预测目标同时变好' +
-          '（回撤 AUC 0.599→0.627 与 0.417→0.482）；而只留指数会明显变差（0.533/0.419），说明信用项必需。' +
-          '⚠️ 代价：倒挂不再进总分，只在子指数里体现。⚠️ 局限：回测不含 NFI，30% 的叙事权重无法被验证。',
-      },
-      {
-        key: 'subIndices',
-        title: '三条诊断子指数（不参与总分）',
-        formula: '过热 = NFI×50% + 指数偏离 200 日均值×30% + 一年涨幅×20%；当前压力 = 利差水平×30% + 利差走阔×20% + 利率压力×25% + 指数回撤×25%；潜在脆弱 = 利差过窄×50% + 叙事集中度×30% + 曲线倒挂×20%',
-        detail: '同样是 60 分，可能是"涨得太快要回调"，也可能是"已经出事了"——子指数负责说清是哪一种。',
-      },
-      {
-        key: 'fomo',
-        title: 'FOMO 系数',
-        formula: 'score = 100 × 覆盖率 × (0.4 + 0.6 × 强度/100)；单篇最多计 4 个追高词（88 分）+ 感叹号密度（上限 30）',
-        detail: `本次：覆盖率 ${((inputs.fomo.breadth ?? 0) * 100).toFixed(1)}%、强度 ${inputs.fomo.depth ?? 0}、` +
-          `命中 ${inputs.fomo.hits.join('、') || '无'}；感叹号密度 ${inputs.fomo.exclaimDensity}/百字`,
-      },
-      {
-        key: 'probability',
-        title: '12 个月情景参考值（已从主看板移除）',
-        formula: `p = clamp(${params.probability.base} × e^((CRS−50)/${params.probability.scale}), 3%, 60%)，上下各 ±${(params.probability.band * 100).toFixed(0)}pp`,
-        detail:
-          '⚠️ 该公式未经任何校准：即使标注"非预测"，一个 8%–18% 的区间仍会被当成概率读，' +
-          '因此 v0.29.0 起不再在主看板展示。等具备独立样本与概率校准证据后再放回。',
-      },
+      {key:'nfi',title:'资本叙事占比 V3',formula:nfi.formula,detail:nfi.note},
+      {key:'pressure',title:'市场压力 V3',formula:pressure.formula,detail:pressure.note},
+      {key:'structure',title:'观察项不强行合成',formula:'融资、追逐措辞、正面比例、实体 HHI 和共同来源报道变化分别显示原始单位。',
+        detail:'集中度与正面报道不等于风险；不同量纲不放进统一风险雷达。融资与追逐措辞的并集按互斥部分解释，不重复计数。'},
+      {key:'validation',title:'验证边界',formula:'描述性统计与预测能力分别验证；V2 回测属于旧模型存档。',
+        detail:'新公式未经独立样本预测验证，不输出概率、目标价或常态安全保证。历史宏观重放缺少发布版本和修订档案，不能声称无发布时点泄漏。'},
     ],
   }
 }

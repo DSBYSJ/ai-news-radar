@@ -37,6 +37,10 @@ export function startScheduler(app: FastifyInstance): void {
         },
         '定时调度完成',
       )
+      // 新报道处理后更新近期三个窗口的 V3 快照；在线请求不承担回算。
+      void import('./risk/rebuild.ts').then(({rebuildRiskHistory})=>rebuildRiskHistory({days:7}))
+        .then(report=>app.log.info({snapshots:report.snapshots},'V3 风险快照已更新'))
+        .catch(err=>app.log.warn({err},'V3 风险快照更新未完成'))
     } catch (err) {
       app.log.error({ err }, '定时调度失败')
     } finally {

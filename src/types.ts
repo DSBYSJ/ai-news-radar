@@ -712,6 +712,8 @@ export interface RiskBacktest {
 }
 
 export interface RiskReport {
+  model?: string
+  pressure?: MarketPressure
   generatedAt: string
   windowDays: number
   narrative: NarrativeReport
@@ -770,6 +772,9 @@ export interface RiskFactorV2 {
 }
 
 export interface NfiFactor {
+  display?: string
+  unit?: string
+  coverage?: string
   key: string
   label: string
   value: number | null
@@ -779,10 +784,22 @@ export interface NfiFactor {
 }
 
 export interface NfiResult {
+  model?: string
+  status?: 'ready' | 'insufficient'
+  formula?: string
+  note?: string
+  reasons?: string[]
+  sampling?: {rawArticles:number;uniqueArticles:number;eligibleArticles:number;publishers:number;eligiblePublishers:number;entityCoverage:number;momentumPublishers:number}
+  partitions?: {key:string;label:string;contribution:number;note:string}[]
   score: number | null
   band: 'calm' | 'warm' | 'hot' | 'unknown'
   factors: NfiFactor[]
   fomo: { score: number; hits: string[]; exclaimDensity: number; breadth?: number; depth?: number; articles?: number }
+}
+
+export interface MarketPressure {
+  model: string;score:number|null;status:'ready'|'unavailable';asOf:string|null;reasons:string[];formula:string;note:string
+  factors:(RiskFactorV2&{unit:string;referenceFrom:string;referenceUntil:string;observations:number})[]
 }
 
 export interface Divergence {

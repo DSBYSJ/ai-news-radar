@@ -11,6 +11,7 @@ export function getDb(): DatabaseSync {
   mkdirSync(path.dirname(config.databasePath), { recursive: true })
   db = new DatabaseSync(config.databasePath)
   db.exec('PRAGMA journal_mode = WAL;')
+  db.exec('PRAGMA busy_timeout = 5000;')
   db.exec('PRAGMA foreign_keys = ON;')
   db.exec(readFileSync(path.join(import.meta.dirname, 'schema.sql'), 'utf8'))
   migrate(db)

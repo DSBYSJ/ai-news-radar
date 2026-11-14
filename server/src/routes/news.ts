@@ -8,7 +8,7 @@ import { hotRanking } from '../analytics/hot.ts'
 import { riskReport } from '../risk/index.ts'
 import { DEFAULT_PARAMS } from '../risk/calculation.ts'
 import { loadParams, mergeParams, resetParams, saveParams, validateParams } from '../risk/params.ts'
-import { runBackfill } from '../risk/backfill.ts'
+import { rebuildRiskHistory } from '../risk/rebuild.ts'
 import { runBacktest } from '../risk/backtest.ts'
 import { benchmarkTrend } from '../aihot/benchmark.ts'
 import { buildMarketOverview } from '../market/overview.ts'
@@ -543,7 +543,7 @@ export async function newsRoutes(app: FastifyInstance): Promise<void> {
   /** 风险参数（当前生效值 + 默认值，供调参面板与 tooltip） */
   app.get('/api/news/risk/params', async () => {
     const db = getDb()
-    return { params: loadParams(db), defaults: DEFAULT_PARAMS }
+    return { params: loadParams(db), defaults: DEFAULT_PARAMS, scope:'legacy-v2-only',activeModel:'risk-evidence-v3' }
   })
 
   /** 保存风险参数（校验权重合计等）；保存后建议触发一次异步重算 */
@@ -567,10 +567,11 @@ export async function newsRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/news/risk/history', async (req) => {
     const q = req.query as Query
     const days = Math.max(7, Math.min(400, num(q.days, 180)))
+    const window = Math.max(7,Math.min(180,num(q.window,30)))
     const db = getDb()
     const rows = db
-      .prepare('SELECT date, nfi, crs, nfi_factors FROM risk_daily ORDER BY date DESC LIMIT ?')
-      .all(days) as unknown as { date: string; nfi: number | null; crs: number | null; nfi_factors: string | null }[]
+      .prepare("SELECT date, nfi, crs, nfi_factors FROM risk_snapshots WHERE model = 'risk-evidence-v3' AND window_days = ? ORDER BY date DESC LIMIT ?")
+      .all(window,days) as unknown as { date: string; nfi: number | null; crs: number | null; nfi_factors: string | null }[]
     const items = rows.reverse().map((r) => {
       // details=1 时附带 NFI 分项历史（供图表联动高亮）；旧字段不受影响
       let factors: Record<string, number | null> | undefined
@@ -585,7 +586,7 @@ export async function newsRoutes(app: FastifyInstance): Promise<void> {
       }
       return { date: r.date, nfi: r.nfi, crs: r.crs, factors }
     })
-    return { days, items }
+    return { days, window, items, model:'risk-evidence-v3', note:'只展示同口径 V3；旧版日快照保留在库中，不与新版拼接。历史新闻按当时收录时间截断，宏观按观测日期重放，非发布版本回测。' }
   })
 
   /**
@@ -726,7 +727,7 @@ export async function newsRoutes(app: FastifyInstance): Promise<void> {
     setImmediate(() => {
       void (async () => {
         try {
-          const report = await runBackfill(getDb(), { days, apply: true })
+          const report = await rebuildRiskHistory({ days })
           riskJobs.set(id, { status: 'done', startedAt: '', finishedAt: new Date().toISOString(), report })
         } catch (err) {
           riskJobs.set(id, { status: 'error', startedAt: '', finishedAt: new Date().toISOString(), error: String(err) })

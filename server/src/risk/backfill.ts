@@ -1,11 +1,8 @@
 import type { DatabaseSync } from 'node:sqlite'
-import { computeCrs, computeNfi, type RiskParams } from './calculation.ts'
+import { marketPressure } from './pressure.ts'
+import { narrativeEvidence } from './narrativeEvidence.ts'
 import { loadMacro } from './macro.ts'
-import { narrativeInputs } from './narrative.ts'
-import { loadParams } from './params.ts'
 import {
-  buildMacroInput,
-  inversionAt,
   loadSeries,
   type SeriesData,
 } from './macroHistory.ts'
@@ -34,6 +31,8 @@ import {
  */
 
 export interface BackfillReport {
+  model: string
+  windowDays: number
   days: number
   macroRows: number
   snapshots: number
@@ -98,22 +97,26 @@ function loadBundle(db: DatabaseSync): SeriesBundle {
 /** 逐日回算 NFI / CRS */
 export function backfillRisk(
   db: DatabaseSync,
-  opts: { days?: number; now?: number; apply?: boolean } = {},
+  opts: { days?: number; now?: number; apply?: boolean; windowDays?: number } = {},
 ): BackfillReport {
   const started = Date.now()
   const days = Math.max(7, Math.min(400, opts.days ?? 180))
   const now = opts.now ?? Date.now()
-  const params: RiskParams = loadParams(db)
+  const windowDays = Math.max(7,Math.min(180,Math.trunc(opts.windowDays??30)))
   const dayMs = 86_400_000
   const bundle = loadBundle(db)
 
   const insert = db.prepare(
-    `INSERT INTO risk_daily (date, nfi, nfi_factors, crs, crs_factors, divergences, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT(date) DO UPDATE SET nfi = excluded.nfi, nfi_factors = excluded.nfi_factors,
-       crs = excluded.crs, crs_factors = excluded.crs_factors, divergences = excluded.divergences,
+    `INSERT INTO risk_snapshots (date, window_days, model, nfi, nfi_factors, crs, crs_factors, created_at)
+     VALUES (?, ?, 'risk-evidence-v3', ?, ?, ?, ?, ?)
+     ON CONFLICT(date, window_days, model) DO UPDATE SET nfi = excluded.nfi, nfi_factors = excluded.nfi_factors,
+       crs = excluded.crs, crs_factors = excluded.crs_factors,
        created_at = excluded.created_at`,
   )
+  const asPoint = (s: SeriesData,date: string,key: string) => {
+    const count=s.dates.filter(d=>d<=date).length
+    return count ? {key,label:key,asOf:s.dates[count-1],value:s.values[count-1],history:s.values.slice(0,count),dates:s.dates.slice(0,count),yearAgo:null,avg200:null,high52w:null,source:'macro_history · 按观测日期重放'} : null
+  }
 
   let snapshots = 0
   let withPercentile = 0
@@ -121,71 +124,44 @@ export function backfillRisk(
   let nfiMax: number | null = null
   let crsMin: number | null = null
   let crsMax: number | null = null
-
-  if (opts.apply) db.exec('BEGIN')
+  const pending: {date:string;nfi:number|null;nfiFactors:string;crs:number|null;crsFactors:string}[]=[]
+  let inTransaction=false
   try {
     for (let i = days; i >= 0; i--) {
       const dayEnd = now - i * dayMs
       const date = new Date(dayEnd).toISOString().slice(0, 10)
-      const inputs = narrativeInputs(db, { days: 30, now: dayEnd })
-      const nfi = computeNfi(
-        {
-          articles: inputs.articles,
-          moneyShare: inputs.moneyShare,
-          sentimentSkew: inputs.sentimentSkew,
-          concentration: inputs.concentration,
-          acceleration: inputs.acceleration,
-          fomo: inputs.fomo,
-        },
-        params,
-      )
-
-      // point-in-time：全部只用 <= date 的观测
-      const rates = buildMacroInput(bundle.rates10y, date, 'rates', '10 年期美债收益率')
-      const credit = buildMacroInput(bundle.creditSpread, date, 'credit', '高收益债信用利差（OAS）')
-      const index = buildMacroInput(bundle.nasdaq, date, 'index', '纳斯达克综合指数')
-
-      const crs = computeCrs(
-        {
-          nfi: nfi.score,
-          rates,
-          credit,
-          index,
-          inversion: inversionAt(bundle.rates2y, bundle.rates10y, date),
-          concentration: inputs.concentration,
-        },
-        params,
-      )
-
-      if (rates?.history.length && rates.history.length >= 30) withPercentile += 1
+      const nfi = narrativeEvidence(db,{days:windowDays,now:dayEnd})
+      const credit=asPoint(bundle.creditSpread,date,'creditSpread'),equity=asPoint(bundle.nasdaq,date,'nasdaq')
+      const crs=marketPressure({available:Boolean(credit&&equity),missing:[],inversion:null,notes:[],fetchedAt:new Date(dayEnd).toISOString(),
+        series:{...(credit?{creditSpread:credit}:{}),...(equity?{nasdaq:equity}:{})}},{now:dayEnd})
+      if(crs.status==='ready')withPercentile++
 
       if (nfi.score !== null) {
         nfiMin = nfiMin === null ? nfi.score : Math.min(nfiMin, nfi.score)
         nfiMax = nfiMax === null ? nfi.score : Math.max(nfiMax, nfi.score)
       }
-      crsMin = crsMin === null ? crs.score : Math.min(crsMin, crs.score)
-      crsMax = crsMax === null ? crs.score : Math.max(crsMax, crs.score)
+      if(crs.score!==null){
+        crsMin = crsMin === null ? crs.score : Math.min(crsMin, crs.score)
+        crsMax = crsMax === null ? crs.score : Math.max(crsMax, crs.score)
+      }
 
       if (opts.apply) {
-        insert.run(
-          date,
-          nfi.score,
-          JSON.stringify(nfi.factors),
-          crs.score,
-          JSON.stringify(crs.factors),
-          '[]',
-          new Date().toISOString(),
-        )
+        pending.push({date,nfi:nfi.score,nfiFactors:JSON.stringify(nfi.factors),crs:crs.score,crsFactors:JSON.stringify(crs.factors)})
       }
       snapshots += 1
     }
-    if (opts.apply) db.exec('COMMIT')
+    if (opts.apply) {
+      db.exec('BEGIN');inTransaction=true
+      for(const row of pending)insert.run(row.date,windowDays,row.nfi,row.nfiFactors,row.crs,row.crsFactors,new Date().toISOString())
+      db.exec('COMMIT');inTransaction=false
+    }
   } catch (err) {
-    if (opts.apply) db.exec('ROLLBACK')
+    if (inTransaction) db.exec('ROLLBACK')
     throw err
   }
 
   return {
+    model:'risk-evidence-v3',windowDays,
     days,
     macroRows: 0,
     snapshots,
@@ -199,7 +175,7 @@ export function backfillRisk(
 /** 拉宏观并回算（完整流程） */
 export async function runBackfill(
   db: DatabaseSync,
-  opts: { days?: number; now?: number; apply?: boolean } = {},
+  opts: { days?: number; now?: number; apply?: boolean; windowDays?: number } = {},
 ): Promise<BackfillReport> {
   const macro = await loadMacro(undefined)
   let macroRows = 0
@@ -210,7 +186,9 @@ export async function runBackfill(
     }
     macroRows = storeMacroHistory(db, series)
   }
-  const report = backfillRisk(db, opts)
+  const windows=opts.windowDays?[opts.windowDays]:[30,60,90]
+  const reports=windows.map(windowDays=>backfillRisk(db,{...opts,windowDays}))
+  const report = {...reports[0],snapshots:reports.reduce((sum,r)=>sum+r.snapshots,0),windows:reports.map(r=>({windowDays:r.windowDays,snapshots:r.snapshots})),ms:reports.reduce((sum,r)=>sum+r.ms,0)}
   report.macroRows = macroRows
   return report
 }

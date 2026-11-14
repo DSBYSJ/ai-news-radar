@@ -46,7 +46,7 @@ export default function CountUp({ value, decimals = 0, duration = 900, className
     }
     const start = performance.now()
     const tick = (now: number): void => {
-      const t = Math.min(1, (now - start) / duration)
+      const t = Math.max(0, Math.min(1, (now - start) / duration))
       const v = from + (to - from) * easeOutExpo(t)
       setDisplay(v)
       if (t < 1) {

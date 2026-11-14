@@ -96,7 +96,7 @@ test('riskReport：没有宏观数据时不给危机概率，并说明缺什么'
   db.close()
 })
 
-test('riskReport：接入宏观数据后才计算风险分与概率区间', async () => {
+test('riskReport V3：两点宏观历史不足以计算压力，不再输出旧启发式概率', async () => {
   const db = setup()
   for (let d = 1; d <= 20; d++) {
     add(db, { i: d, daysAgo: d, title: `某公司完成融资，估值暴涨 ${d}`, category: 'funding', sentiment: 'positive' })
@@ -114,11 +114,9 @@ test('riskReport：接入宏观数据后才计算风险分与概率区间', asyn
     },
   }
   const r = await riskReport(db, { now: NOW, macro })
-  assert.ok(r.crisis, '有宏观时应给出风险分')
-  assert.ok(r.crisis!.score > 40, `风险分应偏高，实际 ${r.crisis!.score}`)
-  assert.ok(r.crisis!.probability12m)
-  const p = r.crisis!.probability12m!
-  assert.ok(p.low < p.high && p.high <= 65, `概率上限应 ≤65%（旧实现 75%），实际 ${p.high}`)
-  assert.ok(r.crisis!.factors.some((f) => f.key === 'narrative'))
+  assert.equal(r.model,'risk-evidence-v3')
+  assert.equal(r.crisis,null)
+  assert.equal(r.pressure.score,null)
+  assert.ok(r.pressure.reasons.some(reason=>reason.includes('252')))
   db.close()
 })

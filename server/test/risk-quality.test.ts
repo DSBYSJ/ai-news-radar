@@ -52,7 +52,7 @@ test('实体风险：不受低 CRS 门槛屏蔽；没有融资报道本身不增
   assert.equal(quiet.vulnerableEntities.length, 0)
   db.exec("UPDATE articles SET sentiment='negative'")
   const negative = await riskReport(db, { now: NOW, macro: macro() })
-  assert.ok(negative.crisis!.score < 50)
+  assert.equal(negative.crisis,null,'宏观历史不足时仍独立展示实体负面信号')
   assert.equal(negative.vulnerableEntities[0].score, 70)
   assert.ok(!negative.vulnerableEntities[0].reason.includes('无融资'))
 })
