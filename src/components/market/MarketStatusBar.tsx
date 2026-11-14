@@ -33,7 +33,7 @@ export default function MarketStatusBar({
   const refresh = async (): Promise<void> => {
     if (syncing) return
     setSyncing(true)
-    setMsg('正在同步行情与比率…')
+    setMsg('正在更新财报、拆股与行情…')
     try {
       const r = await api.marketSync()
       if (!r.ok || !r.jobId) {
@@ -41,7 +41,7 @@ export default function MarketStatusBar({
         return
       }
       // 轮询（每个标的 5 年日线，通常 20–60 秒）
-      for (let i = 0; i < 60; i++) {
+      for (let i = 0; i < 180; i++) {
         await new Promise((res) => setTimeout(res, 2000))
         const st = await api.marketSyncStatus(r.jobId)
         if (st.status === 'done') {
@@ -71,10 +71,10 @@ export default function MarketStatusBar({
     <section className="card p-3">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         {/* 新鲜度 */}
-        <span className="flex items-center gap-1.5">
+        <span className="flex flex-wrap items-center gap-1.5">
           <span className={`inline-block h-2 w-2 rounded-full ${style.dot}`} />
           <span className={`text-[11.5px] font-medium ${style.text}`}>
-            行情截至 {f.priceUntil ?? '—'}
+            已覆盖行情最旧日期 {f.priceUntil ?? '—'}
           </span>
           {f.daysBehind !== null && f.daysBehind > 0 && (
             <span className="num text-[10.5px] text-slate-400">（落后 {f.daysBehind} 天 · {style.label}）</span>

@@ -135,7 +135,8 @@ test('规则5：每个估值点都带 basis（财年末 + 申报日 + 可靠性�
   const series = buildDailyValuation([px('2026-03-01', 10)], [v('2026-01-25', '2026-02-25', 100, 10)])
   const p: ValuationPoint = series[0]
   assert.ok(p.basis, '缺少 basis 就无法解释这个数是怎么来的')
-  assert.deepEqual(Object.keys(p.basis!).sort(), ['filedAt', 'fiscalEnd', 'pitReliable'])
+  for (const key of ['filedAt', 'fiscalEnd', 'pitReliable']) assert.ok(key in p.basis!)
+  assert.equal(p.basis!.splitFactor, 1)
   assert.equal(p.basis!.fiscalEnd, '2026-01-25')
   assert.equal(p.basis!.filedAt, '2026-02-25')
 })

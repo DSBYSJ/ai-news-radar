@@ -110,3 +110,23 @@ export async function fetchRatios(symbol: string): Promise<RatioRow[]> {
     }))
     .sort((a, b) => a.fiscalEnd.localeCompare(b.fiscalEnd))
 }
+
+export interface StockSplit { date: string; numerator: number; denominator: number }
+
+export async function fetchSplits(symbol: string): Promise<StockSplit[]> {
+  const rows = await get<Record<string, unknown>[]>('/splits', { symbol })
+  if (!Array.isArray(rows)) throw new Error('拆股接口响应无效，未覆盖已有核验记录')
+  const byDate = new Map<string, StockSplit>()
+  for (const row of rows) {
+    if (typeof row.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(row.date) ||
+        typeof row.numerator !== 'number' || !Number.isFinite(row.numerator) || row.numerator <= 0 ||
+        typeof row.denominator !== 'number' || !Number.isFinite(row.denominator) || row.denominator <= 0) {
+      throw new Error('拆股记录格式无效，未覆盖已有核验记录')
+    }
+    const split = { date: row.date, numerator: row.numerator, denominator: row.denominator }
+    const previous = byDate.get(split.date)
+    if (previous && previous.numerator / previous.denominator !== split.numerator / split.denominator) throw new Error('同日拆股记录冲突')
+    byDate.set(split.date, split)
+  }
+  return [...byDate.values()].sort((a,b) => a.date.localeCompare(b.date))
+}

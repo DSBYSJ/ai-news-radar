@@ -67,8 +67,9 @@ test('行情同步：上游全部失败时任务报错；成功写入部分数�
   const run = async () => {
     const start = await app.inject({ method: 'POST', url: '/api/news/market/sync?only=NVDA' })
     assert.equal(start.json().ok, true)
-    for (let i = 0; i < 100; i++) {
-      await new Promise((r) => setImmediate(r))
+    const deadline = Date.now() + 5000
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 10))
       const status = (await app.inject(`/api/news/market/sync/${start.json().jobId}`)).json()
       if (status.status !== 'running') return status
     }

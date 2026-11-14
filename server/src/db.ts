@@ -15,6 +15,10 @@ export function getDb(): DatabaseSync {
   db.exec(readFileSync(path.join(import.meta.dirname, 'schema.sql'), 'utf8'))
   migrate(db)
   migrateFundamentalVersions(db)
+  const fundamentalColumns = db.prepare('PRAGMA table_info(company_fundamentals)').all() as { name: string }[]
+  for (const column of ['shares_as_of', 'shares_filed_at']) {
+    if (!fundamentalColumns.some(c => c.name === column)) db.exec(`ALTER TABLE company_fundamentals ADD COLUMN ${column} TEXT`)
+  }
   return db
 }
 

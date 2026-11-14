@@ -489,6 +489,15 @@ export interface MarketCompanyRow {
   missingValuation: string | null
   /** 最近几个财年的 P/S（迷你曲线） */
   psHistory: { fiscalEnd: string; ps: number }[]
+  filedAt: string | null
+  priceDate: string | null; priceAgeDays: number | null; financialAgeDays: number | null
+  splitCheckedAt: string | null
+  basis: { fiscalEnd: string; filedAt: string; pitReliable: boolean; splitFactor: number; sharesAsOf: string | null; sharesFiledAt: string | null; shareBasisReliable: boolean; financialAgeDays: number } | null
+  valuationState: 'ready' | 'limited' | 'blocked' | 'unavailable'
+  relativeScore: number | null; interpretation: string; reasons: string[]; metricsUsed: string[]
+  historyMonths: number; peMonths: number; historyFrom: string | null; historyUntil: string | null
+  historicalPsMedian: number | null; historicalPeMedian: number | null
+  peerPercentile: number | null; peerCount: number
 }
 
 export interface MarketSegmentRow {
@@ -508,10 +517,13 @@ export interface MarketSegmentRow {
 
 export interface MarketOverview {
   generatedAt: string
+  model: string
+  methodology: string[]
   coverage: {
     total: number
     priced: number
     valued: number
+    referenced: number; blocked: number; lossMaking: number
     note: string
     windowFrom: string | null
     windowTo: string | null
@@ -520,6 +532,7 @@ export interface MarketOverview {
   /** 数据新鲜度（v0.45.0）：估值页必须显式告诉用户"行情停在哪天" */
   freshness: {
     priceUntil: string | null
+    newestPriceDate: string | null
     lastSyncAt: string | null
     daysBehind: number | null
     status: 'ok' | 'lag' | 'stale' | 'unknown'

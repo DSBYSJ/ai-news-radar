@@ -32,6 +32,7 @@ test('schema.sql：可在空库上建出全部表（含 v0.24.0 新增 3 张）'
       'linkage_observations',
       'macro_history',
       'manual_price',
+      'market_split_history',
       'mentions',
       'raw_items',
       'risk_daily',

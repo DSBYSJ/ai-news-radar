@@ -13,7 +13,7 @@ import { runBacktest } from '../risk/backtest.ts'
 import { benchmarkTrend } from '../aihot/benchmark.ts'
 import { buildMarketOverview } from '../market/overview.ts'
 import { hasFmpKey } from '../market/fmp.ts'
-import { syncPrices, syncRatios } from '../market/prices.ts'
+import { syncMarketData } from '../market/refresh.ts'
 import { UNIVERSE } from '../market/universe.ts'
 import { computeStats, coverageSummary, listSnapshots, type LinkageStats } from '../market/linkageObs.ts'
 import { deleteAlias, listAliases, listMapping, upsertAlias } from '../entities/alias.ts'
@@ -655,15 +655,15 @@ export async function newsRoutes(app: FastifyInstance): Promise<void> {
       void (async () => {
         try {
           const db = getDb()
-          const prices = await syncPrices(db, { only })
-          const ratios = await syncRatios(db, { only })
+          const report = await syncMarketData(db, { only })
+          const { prices, ratios } = report
           marketCache = null // 清缓存，下一次 overview 重新算
           const noUpdates = prices.rows === 0 && ratios.rows === 0
           marketJobs.set(id, {
             status: noUpdates ? 'error' : 'done',
             startedAt,
             finishedAt: new Date().toISOString(),
-            report: { prices, ratios },
+            report,
             ...(noUpdates ? { error: '行情和比率均未更新，请检查数据源状态及订阅权限' } : {}),
           })
         } catch (err) {

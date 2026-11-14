@@ -34,12 +34,13 @@ export async function syncFundamentals(
 
   const upsert = db.prepare(
     `INSERT INTO company_fundamentals
-       (symbol, fiscal_end, filed_at, revenue, net_income, equity, eps_diluted, shares, revenue_tag, pit_reliable, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       (symbol, fiscal_end, filed_at, revenue, net_income, equity, eps_diluted, shares, revenue_tag, pit_reliable, updated_at, shares_as_of, shares_filed_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(symbol, fiscal_end, filed_at) DO UPDATE SET
        revenue = excluded.revenue, net_income = excluded.net_income, equity = excluded.equity,
        eps_diluted = excluded.eps_diluted, shares = excluded.shares,
-       revenue_tag = excluded.revenue_tag, pit_reliable = excluded.pit_reliable, updated_at = excluded.updated_at`,
+       revenue_tag = excluded.revenue_tag, pit_reliable = excluded.pit_reliable, updated_at = excluded.updated_at,
+       shares_as_of = excluded.shares_as_of, shares_filed_at = excluded.shares_filed_at`,
   )
 
   const skipped: SyncReport['skipped'] = []
@@ -74,11 +75,13 @@ export async function syncFundamentals(
           facts.revenueTag,
           a.filedAt ? 1 : 0,
           now,
+          a.sharesAsOf ?? null,
+          a.sharesFiledAt ?? null,
         )
-        rows += 1
       }
       db.exec('COMMIT')
       inTx = false
+      rows += facts.annual.length
     } catch (err) {
       // 只有真的开了事务才回滚：否则 ROLLBACK 会抛 "no transaction is active"，
       // 把真正的错误（网络/参数）盖掉，排查时完全看不到原因
@@ -110,6 +113,8 @@ export interface FundamentalsRow {
   equity: number | null
   epsDiluted: number | null
   shares: number | null
+  sharesAsOf?: string | null
+  sharesFiledAt?: string | null
 }
 
 export interface DerivedMetrics {
@@ -124,7 +129,7 @@ export interface DerivedMetrics {
   /** 连续营收年数，太少说明数据不可用 */
   years: number
   /**
-   * 最新财年是否已经过时（超过 2 年）。
+   * 最新财年是否已经过时（超过 550 天）。
    * 为什么需要：标签选错时，"最新财年"可能是 2017 年，数字本身合法但毫无意义 ——
    * 不标记出来就会被当成当前基本面用。亚马逊踩过这个坑。
    */
@@ -136,7 +141,8 @@ export function loadFundamentals(db: DatabaseSync, symbol: string): Fundamentals
   const rows = db
     .prepare(
       `SELECT fiscal_end AS fiscalEnd, filed_at AS filedAt, pit_reliable AS pit,
-              revenue, net_income AS netIncome, equity, eps_diluted AS epsDiluted, shares
+              revenue, net_income AS netIncome, equity, eps_diluted AS epsDiluted, shares,
+              shares_as_of AS sharesAsOf, shares_filed_at AS sharesFiledAt
          FROM company_fundamentals WHERE symbol = ? ORDER BY fiscal_end, filed_at`,
     )
     .all(symbol) as unknown as (FundamentalsRow & { pit: number })[]
@@ -144,7 +150,7 @@ export function loadFundamentals(db: DatabaseSync, symbol: string): Fundamentals
 }
 
 /** 派生指标：只算"能从财报直接读出"的东西，不掺价格 */
-export function deriveMetrics(company: Company, rows: FundamentalsRow[]): DerivedMetrics {
+export function deriveMetrics(company: Company, rows: FundamentalsRow[], asOf = new Date().toISOString().slice(0,10)): DerivedMetrics {
   /*
    * 版本表里同一财年有多条，展示用的是**最新财年的最新版本**（当前最准确的数）。
    * 注意：这与"历史某天能看到什么"是两件事 —— 后者由 valuation.ts 的
@@ -152,6 +158,7 @@ export function deriveMetrics(company: Company, rows: FundamentalsRow[]): Derive
    */
   const byYear = new Map<string, FundamentalsRow>()
   for (const r of rows) {
+    if (r.fiscalEnd > asOf || (r.filedAt ?? r.fiscalEnd) > asOf) continue
     const prevV = byYear.get(r.fiscalEnd)
     if (!prevV || (r.filedAt ?? '') > (prevV.filedAt ?? '')) byYear.set(r.fiscalEnd, r)
   }
@@ -160,7 +167,9 @@ export function deriveMetrics(company: Company, rows: FundamentalsRow[]): Derive
   const prev = years.length > 1 ? years[years.length - 2] : null
 
   const revenueGrowth =
-    latest?.revenue && prev?.revenue && prev.revenue > 0
+    latest?.revenue && prev?.revenue && prev.revenue > 0 &&
+      Date.parse(latest.fiscalEnd) - Date.parse(prev.fiscalEnd) <= 400 * 86_400_000 &&
+      Date.parse(latest.fiscalEnd) - Date.parse(prev.fiscalEnd) >= 330 * 86_400_000
       ? ((latest.revenue - prev.revenue) / prev.revenue) * 100
       : null
 
@@ -175,14 +184,14 @@ export function deriveMetrics(company: Company, rows: FundamentalsRow[]): Derive
       : null
 
   const stale =
-    latest !== null && Date.now() - Date.parse(latest.fiscalEnd) > 2 * 365 * 86_400_000
+    latest !== null && Date.parse(asOf) - Date.parse(latest.fiscalEnd) > 550 * 86_400_000
 
-  return { company, latest, revenueGrowth, netMargin, roe, years: rows.length, stale }
+  return { company, latest, revenueGrowth, netMargin, roe, years: years.length, stale }
 }
 
 /** 整个清单的派生指标 */
-export function deriveAll(db: DatabaseSync): DerivedMetrics[] {
-  return UNIVERSE.map((c) => deriveMetrics(c, loadFundamentals(db, c.symbol)))
+export function deriveAll(db: DatabaseSync, asOf?: string): DerivedMetrics[] {
+  return UNIVERSE.map((c) => deriveMetrics(c, loadFundamentals(db, c.symbol), asOf))
 }
 
 /**

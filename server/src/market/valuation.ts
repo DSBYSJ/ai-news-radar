@@ -3,19 +3,13 @@ import type { FundamentalsRow } from './fundamentals.ts'
 import { loadFundamentals } from './fundamentals.ts'
 import { loadPrices, loadRatios, type PriceRow } from './prices.ts'
 import { UNIVERSE, type Company } from './universe.ts'
+import type { StockSplit } from './fmp.ts'
+import { splitFactor, loadSplitHistory } from './splits.ts'
 
 /**
- * 估值序列（v0.37.0）
- *
- * 做法：**日频价格 × 当期财报口径**，而不是只用 FMP 给的 5 个年度点。
- *
- * 为什么不用 FMP 的年度 P/S 直接做分位：
- *   免费档只有 5 期年度比率，5 个点算分位几乎没有意义（0%、25%、50%…）。
- *   用日频价格配"当时已经披露的最近一期财报"，能得到 1000+ 个点的序列，
- *   分位才有统计意义。
- *
- * ⚠️ 这是「trailing」口径：t 日用的是 t 日之前**已披露**的最近年报，
- *    不是 t 日所在财年 —— 后者会用到未来数据（年报要等财年结束几个月才发）。
+ * 年报相对估值 v2：日频价格配当时已披露年报，以实际拆股统一股本单位。
+ * 历史参照只取已结束月份的月末快照，近三年至少 24 个有效月份。
+ * 这是已披露年度口径，不是 TTM；日频点数不代表独立财务样本数。
  */
 
 /** 某个估值点用了哪份财报 —— 可追溯性（每个点都能解释自己是怎么算出来的） */
@@ -24,6 +18,11 @@ export interface ValuationBasis {
   filedAt: string
   /** false = 该版本缺真实申报日，退回财年末，不能用于严格时点回测 */
   pitReliable: boolean
+  splitFactor: number
+  sharesAsOf: string | null
+  sharesFiledAt: string | null
+  shareBasisReliable: boolean
+  financialAgeDays: number
 }
 
 export interface ValuationPoint {
@@ -54,7 +53,7 @@ function fundamentalsAt(rows: FundamentalsRow[], date: string): FundamentalsRow 
   let best: FundamentalsRow | null = null
   for (const r of rows) {
     const filed = r.filedAt ?? r.fiscalEnd
-    if (filed > date) continue
+    if (filed > date || r.fiscalEnd > date) continue
     if (!best) {
       best = r
       continue
@@ -68,25 +67,37 @@ function fundamentalsAt(rows: FundamentalsRow[], date: string): FundamentalsRow 
   return best
 }
 
-export function buildDailyValuation(prices: PriceRow[], fundamentals: FundamentalsRow[]): ValuationPoint[] {
+export function buildDailyValuation(prices: PriceRow[], fundamentals: FundamentalsRow[], opts: { splits?: StockSplit[]; adjustmentAsOf?: string } = {}): ValuationPoint[] {
   const out: ValuationPoint[] = []
-  for (const p of prices) {
+  const ordered = [...prices].filter(p => Number.isFinite(p.close) && p.close > 0).sort((a,b) => a.date.localeCompare(b.date))
+  const adjustmentAsOf = opts.adjustmentAsOf ?? ordered.at(-1)?.date ?? ''
+  for (const p of ordered) {
     const f = fundamentalsAt(fundamentals, p.date)
     // 财报还没覆盖到这一天（比如 5 年前的价格配不到更早的财报）→ 跳过，不猜
     if (!f || !f.shares || f.shares <= 0) continue
-    const marketCap = p.close * f.shares
+    const basisDate = f.sharesFiledAt ?? f.filedAt ?? f.fiscalEnd
+    const factor = splitFactor(opts.splits ?? [], basisDate, adjustmentAsOf)
+    const marketCap = p.close * f.shares * factor
+    const impliedShares = f.netIncome && f.netIncome > 0 && f.epsDiluted && f.epsDiluted > 0 ? f.netIncome / f.epsDiluted : null
+    const shareConsistency = impliedShares === null || impliedShares / f.shares >= 0.65 && impliedShares / f.shares <= 1.55
     out.push({
       date: p.date,
       close: p.close,
       marketCap,
       ps: f.revenue && f.revenue > 0 ? marketCap / f.revenue : null,
-      pe: f.epsDiluted && f.epsDiluted > 0 ? p.close / f.epsDiluted : null,
+      // 与 P/S 使用同一市值分子，避免 EPS 与普通股股数口径混搭。
+      pe: f.netIncome && f.netIncome > 0 ? marketCap / f.netIncome : null,
       manual: p.manual === true,
       basis: {
         fiscalEnd: f.fiscalEnd,
         filedAt: f.filedAt ?? f.fiscalEnd,
         // 显式标记优先；没有标记时按"是否有真实申报日"推断（不能默认 true）
         pitReliable: f.pitReliable ?? f.filedAt != null,
+        splitFactor: factor,
+        sharesAsOf: f.sharesAsOf ?? null,
+        sharesFiledAt: f.sharesFiledAt ?? null,
+        shareBasisReliable: Boolean(f.sharesFiledAt && f.sharesFiledAt <= p.date && shareConsistency),
+        financialAgeDays: Math.max(0, Math.floor((Date.parse(p.date) - Date.parse(f.fiscalEnd)) / 86_400_000)),
       },
     })
   }
@@ -98,8 +109,35 @@ export function percentileIn(value: number, series: number[]): number | null {
   const clean = series.filter((v) => Number.isFinite(v))
   if (clean.length < 60) return null
   let below = 0
-  for (const v of clean) if (v < value) below += 1
-  return below / clean.length
+  let equal = 0
+  for (const v of clean) { if (v < value) below += 1; else if (v === value) equal += 1 }
+  return (below + equal / 2) / clean.length
+}
+
+export interface MonthlyReference {
+  psPercentile: number | null; pePercentile: number | null
+  psMedian: number | null; peMedian: number | null
+  months: number; peMonths: number; from: string | null; until: string | null
+}
+
+/** 近三年已结束月份的月末快照；缺失/过旧财报、补录和未核验股本退出参照。 */
+export function monthlyReference(series: ValuationPoint[], current: ValuationPoint, verifiedSplits: boolean): MonthlyReference {
+  const cutoff = new Date(Date.parse(current.date) - 3 * 365.25 * 86_400_000).toISOString().slice(0,10)
+  const byMonth = new Map<string, ValuationPoint>()
+  if (verifiedSplits) for (const point of [...series].sort((a,b) => a.date.localeCompare(b.date))) {
+    if (point.date < cutoff || point.date.slice(0,7) >= current.date.slice(0,7)) continue
+    byMonth.set(point.date.slice(0,7), point)
+  }
+  // 先取实际月末，再核验；月末无效时不能拿月中旧快照替代。
+  const points = [...byMonth.values()].filter(point => !point.manual && point.basis?.pitReliable &&
+    point.basis.shareBasisReliable && point.basis.financialAgeDays <= 550)
+  const psPoints = points.filter(p => p.ps !== null && Number.isFinite(p.ps) && p.ps > 0)
+  const ps = points.map(p => p.ps).filter((v): v is number => v !== null && Number.isFinite(v) && v > 0)
+  const pe = points.map(p => p.pe).filter((v): v is number => v !== null && Number.isFinite(v) && v > 0)
+  const rank = (value: number | null, values: number[]) => value === null || values.length < 24 ? null :
+    Number(((values.filter(v => v < value).length + values.filter(v => v === value).length / 2) / values.length).toFixed(3))
+  return { psPercentile: rank(current.ps, ps), pePercentile: rank(current.pe, pe), psMedian: median(ps), peMedian: median(pe),
+    months: ps.length, peMonths: pe.length, from: psPoints[0]?.date ?? null, until: psPoints.at(-1)?.date ?? null }
 }
 
 function median(xs: number[]): number | null {
@@ -112,7 +150,7 @@ function median(xs: number[]): number | null {
 export interface ValuationSummary {
   company: Company
   latest: ValuationPoint | null
-  /** 当前 P/S 在自身 5 年日频序列中的分位 */
+  /** 当前 P/S 在自身近三年月末参照中的分位 */
   psPercentile: number | null
   pePercentile: number | null
   psMedian: number | null
@@ -120,24 +158,26 @@ export interface ValuationSummary {
   points: number
 }
 
-export function summarizeValuation(company: Company, series: ValuationPoint[]): ValuationSummary {
+export function summarizeValuation(company: Company, series: ValuationPoint[], verifiedSplits = false): ValuationSummary {
   const latest = series.length > 0 ? series[series.length - 1] : null
-  const psSeries = series.map((p) => p.ps).filter((v): v is number => v !== null)
-  const peSeries = series.map((p) => p.pe).filter((v): v is number => v !== null)
+  const reference = latest ? monthlyReference(series, latest, verifiedSplits) : null
   return {
     company,
     latest,
-    psPercentile: latest?.ps != null ? percentileIn(latest.ps, psSeries) : null,
-    pePercentile: latest?.pe != null ? percentileIn(latest.pe, peSeries) : null,
-    psMedian: median(psSeries),
+    psPercentile: reference?.psPercentile ?? null,
+    pePercentile: reference?.pePercentile ?? null,
+    psMedian: reference?.psMedian ?? null,
     points: series.length,
   }
 }
 
 export function deriveAllValuations(db: DatabaseSync): ValuationSummary[] {
-  return UNIVERSE.map((c) =>
-    summarizeValuation(c, buildDailyValuation(loadPrices(db, c.symbol), loadFundamentals(db, c.symbol))),
-  )
+  return UNIVERSE.map(c => {
+    const prices = loadPrices(db,c.symbol), actions = loadSplitHistory(db,c.symbol)
+    const date = prices.at(-1)?.date
+    return summarizeValuation(c,buildDailyValuation(prices,loadFundamentals(db,c.symbol),{splits:actions.splits,adjustmentAsOf:date}),
+      Boolean(date && actions.checkedAt && actions.checkedAt.slice(0,10) >= date))
+  })
 }
 
 export interface SegmentValuation {
@@ -198,11 +238,14 @@ export function checkAgainstFmpRatios(db: DatabaseSync, symbol: string): RatioCh
   const out: RatioCheck[] = []
 
   for (const r of fmpRatios) {
-    // 找财年末当天或之后最近的一个交易日
-    const px = prices.find((p) => p.date >= r.fiscalEnd)
-    const f = fundamentals.find((x) => x.fiscalEnd === r.fiscalEnd)
+    // 仅作事后年度对账，不用于历史决策；取财年末之前最后交易日。
+    const px = prices.filter(p => p.date <= r.fiscalEnd).at(-1)
+    const f = fundamentals.filter(x => x.fiscalEnd === r.fiscalEnd).at(-1)
+    const actions = loadSplitHistory(db,symbol)
     let ours: number | null = null
-    if (px && f?.shares && f.revenue && f.revenue > 0) ours = (px.close * f.shares) / f.revenue
+    if (px && f?.shares && f.sharesFiledAt && f.revenue && f.revenue > 0 && actions.checkedAt) {
+      ours = px.close * f.shares * splitFactor(actions.splits,f.sharesFiledAt,prices.at(-1)!.date) / f.revenue
+    }
     out.push({
       symbol,
       fiscalEnd: r.fiscalEnd,

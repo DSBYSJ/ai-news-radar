@@ -122,7 +122,7 @@ export default function RiskPage() {
           </section>
         </div>
         {report.subIndices && <SubIndexRow subIndices={report.subIndices} />}
-        {report.vulnerableEntities.length > 0 && <section className="risk-panel analysis-panel"><div className="panel-heading"><h3>公司层面的脆弱性</h3><span>{report.vulnerableEntities.length} 个实体 · 不受 CRS 门槛限制</span></div>
+        {report.vulnerableEntities.length > 0 && <section className="risk-panel analysis-panel"><div className="panel-heading"><h3>实体负面信号</h3><span>{report.vulnerableEntities.length} 个实体 · 独立于宏观分数</span></div>
           <ScatterMatrix items={report.vulnerableEntities} macroPressure={report.crisis?.score ?? null} />
         </section>}
         {backtest && <BacktestCard data={backtest} />}

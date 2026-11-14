@@ -17,6 +17,7 @@ import { syncPrices, syncRatios } from './prices.ts'
 import { SEGMENT_LABELS } from './universe.ts'
 import { secUserAgent } from './sec.ts'
 import { checkAgainstFmpRatios, deriveAllValuations, summarizeSegmentValuation } from './valuation.ts'
+import { syncSplits } from './splits.ts'
 
 const argv = process.argv.slice(2)
 const onlyArg = argv.find((a) => a.startsWith('--only='))
@@ -45,7 +46,8 @@ if (noPrices) {
   priceMsg = '未配置 FMP_API_KEY，跳过行情与估值'
 } else {
   console.log('\n[2/3] 行情（FMP 日线，增量）')
-  const p = await syncPrices(db, { only, full: fullPrices })
+  const splits = await syncSplits(db, { only })
+  const p = await syncPrices(db, { only, full: fullPrices || splits.changed.length > 0 })
   console.log(`  写入 ${p.rows} 行，${(p.ms / 1000).toFixed(1)}s`)
   for (const s of p.skipped) console.log(`  · 跳过 ${s.symbol}：${s.reason}`)
 

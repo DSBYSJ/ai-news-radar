@@ -1,199 +1,112 @@
 import type { DatabaseSync } from 'node:sqlite'
-import { deriveAll, summarizeSegments, type DerivedMetrics, type SegmentSummary } from './fundamentals.ts'
+import { deriveAll, deriveMetrics, summarizeSegments, loadFundamentals, type SegmentSummary } from './fundamentals.ts'
 import { SEGMENT_LABELS, UNIVERSE } from './universe.ts'
-import { buildDailyValuation } from './valuation.ts'
-import { loadFundamentals } from './fundamentals.ts'
+import { buildDailyValuation, monthlyReference, type ValuationBasis } from './valuation.ts'
 import { loadPrices } from './prices.ts'
+import { loadSplitHistory } from './splits.ts'
 
-/**
- * 估值看板的数据装配（v0.38.0）
- *
- * 一条纪律：**覆盖不足必须显式说出来**。
- * FMP 免费档只覆盖部分标的（实测 18 家里 8 家），如果页面上直接留空，
- * 用户会以为是"这家公司没估值"，而不是"我们的数据源没权限"。
- */
-
+export const VALUATION_MODEL = 'annual-relative-v2'
 export interface MarketCompanyRow {
-  symbol: string
-  name: string
-  segment: string
-  segmentLabel: string
-  role: string
-  /** 财年（YYYY-MM-DD） */
-  fiscalEnd: string | null
-  revenue: number | null
-  netIncome: number | null
-  revenueGrowth: number | null
-  netMargin: number | null
-  roe: number | null
-  /** 最新财年超过 2 年（多半是 XBRL 标签问题） */
-  stale: boolean
-  /** 以下为估值字段：缺价格时为 null */
-  close: number | null
-  marketCap: number | null
-  ps: number | null
-  /** P/S 在自身历史中的分位 0~1 */
-  psPercentile: number | null
-  pe: number | null
-  pePercentile: number | null
-  /** 估值序列点数（≈ 交易日数）= 分位的有效样本数 */
-  points: number
-  /** 最新价格是否来自手工补录 */
-  manualPrice: boolean
-  /** 为什么没有估值（给界面直接显示，避免"空着"） */
-  missingValuation: string | null
+  symbol: string; name: string; segment: string; segmentLabel: string; role: string
+  fiscalEnd: string | null; filedAt: string | null; revenue: number | null; netIncome: number | null
+  revenueGrowth: number | null; netMargin: number | null; roe: number | null; stale: boolean
+  close: number | null; marketCap: number | null; ps: number | null; pe: number | null
+  psPercentile: number | null; pePercentile: number | null; points: number; manualPrice: boolean
+  missingValuation: string | null; psHistory: { fiscalEnd: string; ps: number }[]
+  priceDate: string | null; priceAgeDays: number | null; financialAgeDays: number | null
+  splitCheckedAt: string | null; basis: ValuationBasis | null
+  valuationState: 'ready' | 'limited' | 'blocked' | 'unavailable'
+  relativeScore: number | null; interpretation: string; reasons: string[]; metricsUsed: string[]
+  historyMonths: number; peMonths: number; historyFrom: string | null; historyUntil: string | null
+  historicalPsMedian: number | null; historicalPeMedian: number | null
+  peerPercentile: number | null; peerCount: number
 }
-
 export interface MarketOverview {
-  generatedAt: string
-  coverage: {
-    total: number
-    /** 有价格的 */
-    priced: number
-    /** 能算 P/S 的 */
-    valued: number
-    /** 数据源说明（为什么覆盖不全） */
-    note: string
-    /** 分位所用的历史窗口（从实际数据算，不写死） */
-    windowFrom: string | null
-    windowTo: string | null
-    /** 窗口年数（保留一位小数） */
-    windowYears: number | null
-  }
-  /**
-   * 数据新鲜度（v0.45.0）
-   * 估值页之前最大的问题是"看着像实时，其实行情停在几周前" —— 必须显式暴露。
-   */
-  freshness: {
-    /** 行情最后一天 */
-    priceUntil: string | null
-    /** 比率最后同步时间（ISO） */
-    lastSyncAt: string | null
-    /** 落后自然天数 */
-    daysBehind: number | null
-    status: 'ok' | 'lag' | 'stale' | 'unknown'
-  }
+  generatedAt: string; model: string; methodology: string[]
+  coverage: { total: number; priced: number; valued: number; referenced: number; blocked: number; lossMaking: number
+    note: string; windowFrom: string | null; windowTo: string | null; windowYears: number | null }
+  freshness: { priceUntil: string | null; newestPriceDate: string | null; lastSyncAt: string | null; daysBehind: number | null; status: 'ok' | 'lag' | 'stale' | 'unknown' }
   segments: (SegmentSummary & { psMedian: number | null; percentileMedian: number | null; valuationCovered: number })[]
   companies: MarketCompanyRow[]
 }
-
-function median(xs: number[]): number | null {
-  const clean = xs.filter((v) => Number.isFinite(v)).sort((a, b) => a - b)
-  if (clean.length === 0) return null
-  const mid = Math.floor(clean.length / 2)
-  return clean.length % 2 === 0 ? (clean[mid - 1] + clean[mid]) / 2 : clean[mid]
+function median(values: number[]) {
+  const clean = values.filter(Number.isFinite).sort((a,b) => a-b), i = Math.floor(clean.length/2)
+  return clean.length ? clean.length % 2 ? clean[i] : (clean[i-1]+clean[i])/2 : null
 }
 
-export function buildMarketOverview(db: DatabaseSync): MarketOverview {
-  const fundamentals = deriveAll(db)
-  const fundBySymbol = new Map<string, DerivedMetrics>(fundamentals.map((f) => [f.company.symbol, f]))
-
-  const rows: MarketCompanyRow[] = UNIVERSE.map((c) => {
-    const f = fundBySymbol.get(c.symbol)
-    const prices = loadPrices(db, c.symbol)
-    const series = buildDailyValuation(prices, loadFundamentals(db, c.symbol))
-    const latest = series.length > 0 ? series[series.length - 1] : null
-    const psSeries = series.map((p) => p.ps).filter((v): v is number => v !== null)
-
-    let missing: string | null = null
-    if (prices.length === 0) missing = 'FMP 免费档未覆盖该标的行情（可手工补录收盘价）'
-    else if (!latest) missing = '缺少股本或营收，无法计算市值'
-    else if (latest.ps === null) missing = '缺少营收，无法计算 P/S'
-
-    const psHistory = (
-      db
-        .prepare(
-          'SELECT fiscal_end AS fiscalEnd, ps FROM company_ratios WHERE symbol = ? AND ps IS NOT NULL ORDER BY fiscal_end DESC LIMIT 8',
-        )
-        .all(c.symbol) as unknown as { fiscalEnd: string; ps: number }[]
-    )
-      .map((r) => ({ fiscalEnd: r.fiscalEnd, ps: Number(r.ps) }))
-      .reverse()
-
-    return {
-      symbol: c.symbol,
-      name: c.name,
-      segment: c.segment,
-      segmentLabel: SEGMENT_LABELS[c.segment],
-      role: c.role,
-      fiscalEnd: f?.latest?.fiscalEnd ?? null,
-      revenue: f?.latest?.revenue ?? null,
-      netIncome: f?.latest?.netIncome ?? null,
-      revenueGrowth: f?.revenueGrowth ?? null,
-      netMargin: f?.netMargin ?? null,
-      roe: f?.roe ?? null,
-      stale: f?.stale ?? false,
-      close: latest?.close ?? null,
-      marketCap: latest?.marketCap ?? null,
-      ps: latest?.ps ?? null,
-      psPercentile: latest?.ps != null && psSeries.length >= 60 ? percentile(latest.ps, psSeries) : null,
-      pe: latest?.pe ?? null,
-      pePercentile: latest?.pe != null ? percentile(latest.pe, series.map((p) => p.pe).filter((v): v is number => v !== null)) : null,
-      points: series.length,
-      manualPrice: latest?.manual === true,
-      missingValuation: missing,
-      psHistory,
-    }
+export function buildMarketOverview(db: DatabaseSync, opts: { now?: number } = {}): MarketOverview {
+  const now = opts.now ?? Date.now(), today = new Date(now).toISOString().slice(0,10)
+  const fundamentals = deriveAll(db, today)
+  const rows: MarketCompanyRow[] = UNIVERSE.map(company => {
+    const prices = loadPrices(db,company.symbol).filter(p => p.date <= today && Number.isFinite(p.close) && p.close > 0)
+    const price = prices.at(-1) ?? null
+    const facts = loadFundamentals(db,company.symbol)
+    // 公司详情与倍数严格使用报价日期当时可见的同一财报版本。
+    const f = deriveMetrics(company,facts,price?.date ?? today)
+    const actions = loadSplitHistory(db,company.symbol)
+    const splitVerified = Boolean(price && actions.checkedAt && actions.checkedAt.slice(0,10) >= price.date && actions.checkedAt <= new Date(now).toISOString())
+    const series = buildDailyValuation(prices,facts, {splits:actions.splits,adjustmentAsOf:price?.date})
+    const latest = series.at(-1)?.date === price?.date ? series.at(-1)! : null
+    const priceAgeDays = price ? Math.max(0,Math.floor((now-Date.parse(price.date))/86_400_000)) : null
+    const financialAgeDays = f?.latest ? Math.max(0,Math.floor((now-Date.parse(f.latest.fiscalEnd))/86_400_000)) : null
+    const reasons: string[] = []
+    if (!price) reasons.push('暂无行情，不能计算倍数')
+    if (priceAgeDays !== null && priceAgeDays > 7) reasons.push(`行情滞后 ${priceAgeDays} 天`)
+    if (!latest) reasons.push('缺少可配对的已披露股本或年报')
+    if (financialAgeDays !== null && financialAgeDays > 550) reasons.push('年报超过 550 天，暂停估值')
+    if (latest && !latest.basis?.pitReliable) reasons.push('缺少真实申报日')
+    if (latest && !latest.basis?.shareBasisReliable) reasons.push('股本申报口径未核验或与每股利润不一致')
+    if (price && !splitVerified) reasons.push('拆股资料未核验到行情日期')
+    const valid = Boolean(price && latest && splitVerified && latest.basis?.pitReliable && latest.basis.shareBasisReliable &&
+      priceAgeDays !== null && priceAgeDays <= 7 && financialAgeDays !== null && financialAgeDays <= 550)
+    const reference = latest ? monthlyReference(series,latest,valid) : null
+    const ps = valid ? latest!.ps : null, pe = valid ? latest!.pe : null
+    if (valid && ps === null) reasons.push('营收不可用或非正数，P/S 不计算')
+    if (valid && pe === null) reasons.push(f?.latest?.netIncome !== null && (f?.latest?.netIncome ?? 1) <= 0 ? '年报亏损，P/E 不适用' : '缺少同口径净利润，P/E 不计算')
+    const psRank = ps === null ? null : reference?.psPercentile ?? null
+    const peRank = pe === null ? null : reference?.pePercentile ?? null
+    const weighted = [{name:'P/S',rank:psRank,weight:60},{name:'P/E',rank:peRank,weight:40}].filter(x => x.rank !== null)
+    const relativeScore = weighted.length ? Math.round(weighted.reduce((sum,x) => sum + x.rank! * x.weight,0) / weighted.reduce((sum,x) => sum+x.weight,0) * 100) : null
+    if (valid && psRank === null) reasons.push(`可用月末样本 ${reference?.months ?? 0}/24，历史 P/S 参照不足`)
+    const valuationState: MarketCompanyRow['valuationState'] = !price ? 'unavailable' : !valid || ps === null ? 'blocked' : relativeScore === null || peRank === null ? 'limited' : 'ready'
+    const interpretation = relativeScore === null ? valid && ps !== null ? '可读倍数 · 参照不足' : '资料待核验' : relativeScore >= 80 ? '历史相对高位' : relativeScore <= 20 ? '历史相对低位' : '历史相对中段'
+    return { symbol:company.symbol,name:company.name,segment:company.segment,segmentLabel:SEGMENT_LABELS[company.segment],role:company.role,
+      fiscalEnd:f?.latest?.fiscalEnd??null,filedAt:f?.latest?.filedAt??null,revenue:f?.latest?.revenue??null,netIncome:f?.latest?.netIncome??null,
+      revenueGrowth:f?.revenueGrowth??null,netMargin:f?.netMargin??null,roe:f?.roe??null,stale:f?.stale??false,
+      close:price?.close??null,marketCap:valid?latest!.marketCap:null,ps,pe,psPercentile:psRank,pePercentile:peRank,
+      points:series.length,manualPrice:price?.manual===true,missingValuation:!valid?reasons.join('；'):null,
+      // 趋势改用经过相同核验的月末历史；旧的外部年度倍数不混进新口径。
+      psHistory:[],priceDate:price?.date??null,priceAgeDays,financialAgeDays,splitCheckedAt:actions.checkedAt,basis:latest?.basis??null,
+      valuationState,relativeScore,interpretation,reasons,metricsUsed:weighted.map(x=>x.name),
+      historyMonths:reference?.months??0,peMonths:reference?.peMonths??0,historyFrom:reference?.from??null,historyUntil:reference?.until??null,
+      historicalPsMedian:reference?.psMedian??null,historicalPeMedian:reference?.peMedian??null,peerPercentile:null,peerCount:0 }
   })
-
-  const baseSegments = summarizeSegments(fundamentals, SEGMENT_LABELS)
-  const segments = baseSegments.map((s) => {
-    const inSeg = rows.filter((r) => r.segment === s.segment && r.ps !== null)
-    return {
-      ...s,
-      psMedian: median(inSeg.map((r) => r.ps as number)),
-      percentileMedian: median(inSeg.map((r) => r.psPercentile).filter((v): v is number => v !== null)),
-      valuationCovered: inSeg.length,
-    }
-  })
-
-  const priced = rows.filter((r) => r.points > 0).length
-  const valued = rows.filter((r) => r.ps !== null).length
-
-  // 窗口从实际数据算，不写死 —— 写死"近 3 年"而实际是 5 年，就是在骗人
-  const span = db.prepare('SELECT MIN(date) AS a, MAX(date) AS b FROM equity_daily').get() as
-    | { a: string | null; b: string | null }
-    | undefined
-  const windowFrom = span?.a ?? null
-  const windowTo = span?.b ?? null
-  const windowYears =
-    windowFrom && windowTo
-      ? Number(((Date.parse(windowTo) - Date.parse(windowFrom)) / (365 * 86_400_000)).toFixed(1))
-      : null
-
-  const lastSyncAt =
-    (db.prepare('SELECT MAX(updated_at) AS u FROM company_ratios').get() as { u: string | null } | undefined)?.u ?? null
-  const daysBehind = windowTo
-    ? Math.max(0, Math.floor((Date.now() - Date.parse(`${windowTo}T00:00:00Z`)) / 86_400_000))
-    : null
-  const status: 'ok' | 'lag' | 'stale' | 'unknown' =
-    daysBehind === null ? 'unknown' : daysBehind <= 2 ? 'ok' : daysBehind <= 5 ? 'lag' : 'stale'
-
-  return {
-    generatedAt: new Date().toISOString(),
-    freshness: { priceUntil: windowTo, lastSyncAt, daysBehind, status },
-    coverage: {
-      total: rows.length,
-      priced,
-      valued,
-      note:
-        valued < rows.length
-          ? `行情数据来自 FMP 免费档，只覆盖部分标的（${valued}/${rows.length} 可算估值）；` +
-            '未覆盖的标的不显示倍数，不是"没有估值"'
-          : '全部标的均可计算估值',
-      windowFrom,
-      windowTo,
-      windowYears,
-    },
-    segments,
-    companies: rows,
+  for (const row of rows) {
+    const peers = rows.filter(r => r.symbol !== row.symbol && r.segment === row.segment && r.ps !== null)
+    row.peerCount = peers.length
+    if (row.ps !== null && peers.length >= 3) row.peerPercentile =
+      (peers.filter(p => p.ps! < row.ps!).length + peers.filter(p => p.ps === row.ps).length/2)/peers.length
   }
-}
-
-function percentile(value: number, series: number[]): number | null {
-  const clean = series.filter((v) => Number.isFinite(v))
-  if (clean.length < 60) return null
-  let below = 0
-  for (const v of clean) if (v < value) below += 1
-  return Number((below / clean.length).toFixed(3))
+  const segments = summarizeSegments(fundamentals,SEGMENT_LABELS).map(s => {
+    const members = rows.filter(r=>r.segment===s.segment&&r.ps!==null)
+    return {...s,psMedian:median(members.map(r=>r.ps!)),percentileMedian:median(members.map(r=>r.relativeScore).filter((v):v is number=>v!==null).map(v=>v/100)),valuationCovered:members.length}
+  })
+  const dates = rows.map(r=>r.priceDate).filter((v):v is string=>v!==null).sort()
+  const priceUntil = dates[0]??null, newestPriceDate = dates.at(-1)??null
+  const daysBehind = priceUntil ? Math.max(0,Math.floor((now-Date.parse(priceUntil))/86_400_000)) : null
+  const from = rows.map(r=>r.historyFrom).filter((v):v is string=>v!==null).sort()[0]??null
+  const until = rows.map(r=>r.historyUntil).filter((v):v is string=>v!==null).sort().at(-1)??null
+  const valued=rows.filter(r=>r.ps!==null).length
+  return {generatedAt:new Date(now).toISOString(),model:VALUATION_MODEL,
+    methodology:['P/S 与 P/E 均使用同一估算市值分子；财务口径为最近已披露年报，不冒充 TTM 或预测盈利。',
+      '以实际拆股记录统一价格与股本基准。股本申报、拆股核验、行情和财报时效不达标时停止给出估值结论。',
+      '历史相对位置使用近 3 年已结束月份的月末快照，至少 24 个有效月份；当月不进入基准，并列取中位秩。',
+      '双因子相对位置为 P/S 60% + P/E 40%；缺项按可用权重归一并标明。该位置不是公允价值、目标价或买卖信号。',
+      '同层 P/S 参照至少需要另外 3 家可用公司，仅作背景；不同商业模式、利润率和增长阶段仍不可直接等同。'],
+    freshness:{priceUntil,newestPriceDate,lastSyncAt:(db.prepare('SELECT MAX(updated_at) AS u FROM company_fundamentals').get() as {u:string|null}).u,daysBehind,
+      status:daysBehind===null?'unknown':daysBehind<=2?'ok':daysBehind<=7?'lag':'stale'},
+    coverage:{total:rows.length,priced:dates.length,valued,referenced:rows.filter(r=>r.relativeScore!==null).length,
+      blocked:rows.filter(r=>r.valuationState==='blocked').length,lossMaking:rows.filter(r=>r.netIncome!==null&&r.netIncome<=0).length,
+      note:`${valued}/${rows.length} 家通过当前估值核验；行情、申报、股本和拆股资料分别检查，缺失不补零。`,windowFrom:from,windowTo:until,
+      windowYears:from&&until?Number(((Date.parse(until)-Date.parse(from))/(365.25*86_400_000)).toFixed(1)):null},segments,companies:rows}
 }

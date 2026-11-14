@@ -309,10 +309,9 @@ function startMarketSync(app: FastifyInstance): void {
             app.log.warn('行情同步跳过：未配置 FMP_API_KEY')
           } else {
             const db = getDb()
-            const { syncPrices, syncRatios } = await import('./market/prices.ts')
-            const prices = await syncPrices(db)
-            const ratios = await syncRatios(db)
-            app.log.info({ prices, ratios }, '行情同步完成')
+            const { syncMarketData } = await import('./market/refresh.ts')
+            const report = await syncMarketData(db)
+            app.log.info(report, '财报、拆股与行情同步完成')
           }
         } catch (err) {
           app.log.error({ err }, '行情同步失败（不影响采集）')

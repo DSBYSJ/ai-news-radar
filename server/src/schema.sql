@@ -200,6 +200,8 @@ CREATE TABLE IF NOT EXISTS company_fundamentals (
   equity       REAL,
   eps_diluted  REAL,
   shares       REAL,
+  shares_as_of TEXT,
+  shares_filed_at TEXT,
   revenue_tag  TEXT,                 -- 用了哪个 us-gaap 标签（各公司不一致，留痕便于核对）
   -- 1 = 有真实申报日，可用于严格时点回测；0 = 缺申报日退回财年末（仅可展示，不可用于严格回测）
   pit_reliable INTEGER NOT NULL DEFAULT 1,
@@ -240,6 +242,13 @@ CREATE TABLE IF NOT EXISTS company_ratios (
   net_income_per_share REAL,
   updated_at          TEXT NOT NULL,
   PRIMARY KEY (symbol, fiscal_end)
+);
+
+-- 拆股历史与成功核验时刻。空数组表示已核验且无拆股，缺行表示尚未核验。
+CREATE TABLE IF NOT EXISTS market_split_history (
+  symbol TEXT PRIMARY KEY,
+  splits TEXT NOT NULL,
+  checked_at TEXT NOT NULL
 );
 
 -- 新闻→股价联动的事件级观察记录（v0.43.0）

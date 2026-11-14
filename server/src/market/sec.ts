@@ -116,6 +116,8 @@ export interface AnnualFundamentals {
   epsDiluted: number | null
   /** 用于计算市值；SEC 只给"某一时点"的股本，取最近一次申报值 */
   shares: number | null
+  sharesAsOf?: string | null
+  sharesFiledAt?: string | null
   /** 首次申报日（不是财年结束日）—— point-in-time 判断"这天能不能看到这份财报"必须用它 */
   filedAt: string
 }
@@ -230,11 +232,10 @@ function instantFacts(
   const f = facts[tag]
   if (!f) return []
   const arr = pickUnits(f.units, unitKeys)
-  // 时点型事实同理：取最早申报，代表"当时可知"
+  // 保留申报版本，匹配财报时再按其实际公开日期截断。
   const byEnd = new Map<string, Fact>()
   for (const x of arr) {
-    const prev = byEnd.get(x.end)
-    if (!prev || x.filed < prev.filed) byEnd.set(x.end, x)
+    byEnd.set(`${x.end}|${x.filed}`, x)
   }
   return [...byEnd.values()].sort((a, b) => a.end.localeCompare(b.end))
 }
@@ -250,10 +251,13 @@ export interface CompanyFacts {
 /** 拉取并解析一家公司的年度基本面 */
 export async function fetchCompanyFundamentals(cik: string): Promise<CompanyFacts> {
   const text = await secGet(`https://data.sec.gov/api/xbrl/companyfacts/CIK${cik}.json`)
-  const json = JSON.parse(text) as {
+  return parseCompanyFacts(JSON.parse(text), cik)
+}
+
+export function parseCompanyFacts(json: {
     entityName?: string
     facts?: Record<string, Record<string, { units: Record<string, Fact[]> }>>
-  }
+  }, cik = ''): CompanyFacts {
   const namespaces = json.facts ?? {}
   const gaap = namespaces['us-gaap'] ?? {}
   const ifrs = namespaces['ifrs-full'] ?? {}
@@ -285,6 +289,7 @@ export async function fetchCompanyFundamentals(cik: string): Promise<CompanyFact
   const shares = firstNonEmpty([
     () => instantFacts(gaap, 'CommonStockSharesOutstanding', SHARE_UNITS),
     () => instantFacts(gaap, 'EntityCommonStockSharesOutstanding', SHARE_UNITS),
+    () => instantFacts(namespaces['dei'] ?? {}, 'EntityCommonStockSharesOutstanding', SHARE_UNITS),
   ])
 
   const vkey = (x: Fact): string => `${x.end}|${x.filed}`
@@ -292,16 +297,17 @@ export async function fetchCompanyFundamentals(cik: string): Promise<CompanyFact
 
   const netByKey = map(netIncome, vkey)
   const epsByKey = map(eps, vkey)
-  // 权益/股本取"不晚于该财年末的最近一条"（同一财年各版本的资产负债表相同，不随重述变）
-  const pickLatest = (arr: Fact[], end: string): Fact | null => {
+  // 权益按财年末配对，股本可取申报时最近公开值；均不能读取后续版本。
+  const pickLatest = (arr: Fact[], end: string, filed: string): Fact | null => {
     let best: Fact | null = null
-    for (const x of arr) if (x.end <= end) best = x
+    for (const x of arr) if (x.end <= end && x.filed <= filed &&
+      (!best || x.end > best.end || x.end === best.end && x.filed > best.filed)) best = x
     return best
   }
 
   const annual: AnnualFundamentals[] = revenueSeries.map((r) => {
-    const eq = pickLatest(equity, r.end)
-    const sh = pickLatest(shares, r.end)
+    const eq = pickLatest(equity, r.end, r.filed)
+    const sh = pickLatest(shares, r.filed, r.filed)
     return {
       fiscalEnd: r.end,
       filedAt: r.filed,
@@ -311,6 +317,8 @@ export async function fetchCompanyFundamentals(cik: string): Promise<CompanyFact
       equity: eq?.val ?? null,
       epsDiluted: epsByKey.get(vkey(r))?.val ?? null,
       shares: sh?.val ?? null,
+      sharesAsOf: sh?.end ?? null,
+      sharesFiledAt: sh?.filed ?? null,
     }
   })
 
