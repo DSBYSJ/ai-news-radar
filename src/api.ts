@@ -31,6 +31,7 @@ import type {
   SummaryListItem,
   VelocityResponse,
 } from './types.ts'
+import type { MarketSyncReport } from './lib/marketSync.ts'
 
 const BASE = '/api/news'
 
@@ -109,7 +110,7 @@ export const api = {
   riskSaveParams: (params: unknown) =>
     post<{ ok: boolean; params?: RiskParams; errors?: string[] }>('/risk/params', { params }),
   riskResetParams: () => post<{ ok: boolean; params: RiskParams }>('/risk/params/reset'),
-  riskRecompute: (days = 180) => post<{ ok: boolean; jobId?: string }>('/risk/recompute', undefined),
+  riskRecompute: (days = 180) => post<{ ok: boolean; jobId?: string }>(`/risk/recompute?days=${encodeURIComponent(days)}`, undefined),
   riskRecomputeStatus: (id: string) =>
     get<{ status: string; report?: unknown; error?: string }>(`/risk/recompute/${id}`),
 
@@ -122,7 +123,7 @@ export const api = {
   /** 手动触发行情同步（异步任务） */
   marketSync: () => post<{ ok: boolean; jobId?: string; error?: string }>('/market/sync', undefined),
   marketSyncStatus: (id: string) =>
-    get<{ status: string; report?: unknown; error?: string }>(`/market/sync/${id}`),
+    get<{ status: string; report?: MarketSyncReport; error?: string }>(`/market/sync/${id}`),
   /** 新闻热度 × 股价联动（观察记录 + 每日快照，只读本地表） */
   marketLinkage: (asOf?: string) => get<LinkageResponse>('/market/linkage', { asOf }),
   volume: (days: number) => get<{ days: number; points: DailyPoint[] }>('/trend/volume', { days }),

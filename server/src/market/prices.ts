@@ -51,10 +51,10 @@ export async function syncPrices(
       inTx = true
       for (const r of eod) {
         upsert.run(c.symbol, r.date, r.price, r.volume)
-        rows += 1
       }
       db.exec('COMMIT')
       inTx = false
+      rows += eod.length
     } catch (err) {
       // 只有真的开了事务才回滚：否则 ROLLBACK 会抛 "no transaction is active"，
       // 把真正的错误（网络/参数）盖掉，排查时完全看不到原因
@@ -111,10 +111,10 @@ export async function syncRatios(db: DatabaseSync, opts: { only?: string[] } = {
       inTx = true
       for (const r of ratios) {
         upsert.run(c.symbol, r.fiscalEnd, r.pe, r.ps, r.pb, r.revenuePerShare, r.netIncomePerShare, now)
-        rows += 1
       }
       db.exec('COMMIT')
       inTx = false
+      rows += ratios.length
     } catch (err) {
       // 只有真的开了事务才回滚：否则 ROLLBACK 会抛 "no transaction is active"，
       // 把真正的错误（网络/参数）盖掉，排查时完全看不到原因

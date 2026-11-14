@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { api } from '../../api.ts'
+import { marketSyncMessage } from '../../lib/marketSync.ts'
 import type { MarketOverview } from '../../types.ts'
 
 /**
@@ -46,11 +47,15 @@ export default function MarketStatusBar({
         if (st.status === 'done') {
           setMsg('同步完成，正在刷新…')
           await onRefreshed()
-          setMsg('已是最新')
+          setMsg(marketSyncMessage(st.report))
           return
         }
         if (st.status === 'error') {
           setMsg(`同步失败：${st.error ?? '未知原因'}`)
+          return
+        }
+        if (st.status === 'unknown') {
+          setMsg('同步任务已失效，请重新发起同步')
           return
         }
       }

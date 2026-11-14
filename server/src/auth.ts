@@ -6,11 +6,14 @@ import { config } from './config.ts'
  * 登录鉴权：校验骑行看板下发的 cd_session Cookie（JWT / HS256，共享 JWT_SECRET）。
  *
  * ⚠️ 合规要求（见 docs/合规检查清单.md 第一节）：本项目不得面向公众，
- *   所有 /api/* 必须鉴权；未配置 JWT_SECRET 时不拦截（仅本地开发），上线前必须配置。
+ *   所有 /api/* 必须鉴权；生产环境未配置 JWT_SECRET 时拒绝启动。
  */
 function base64UrlToJson(part: string): Record<string, unknown> | null {
   try {
-    return JSON.parse(Buffer.from(part, 'base64url').toString('utf8')) as Record<string, unknown>
+    const value: unknown = JSON.parse(Buffer.from(part, 'base64url').toString('utf8'))
+    return value !== null && typeof value === 'object' && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : null
   } catch {
     return null
   }
@@ -25,14 +28,21 @@ export function verifySessionToken(token: string, secret: string): { email: stri
   if (parts.length !== 3) return null
 
   const [header, payload, signature] = parts
+  // 先限制签名的字符集，避免等字符数的多字节输入令 timingSafeEqual 抛异常。
+  if (!/^[A-Za-z0-9_-]{43}$/.test(signature)) return null
+  if (base64UrlToJson(header)?.alg !== 'HS256') return null
   const expected = createHmac('sha256', secret).update(`${header}.${payload}`).digest('base64url')
   if (signature.length !== expected.length) return null
   if (!timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return null
 
   const claims = base64UrlToJson(payload)
-  if (!claims || typeof claims.email !== 'string') return null
-  // exp 若存在则校验（秒级时间戳）
-  if (typeof claims.exp === 'number' && Date.now() / 1000 > claims.exp) return null
+  if (!claims || typeof claims.email !== 'string' || !claims.email.trim()) return null
+  const now = Date.now() / 1000
+  // NumericDate 必须为有限数字；到期时刻即失效，nbf 到达前不接受。
+  if (claims.exp !== undefined &&
+    (typeof claims.exp !== 'number' || !Number.isFinite(claims.exp) || now >= claims.exp)) return null
+  if (claims.nbf !== undefined &&
+    (typeof claims.nbf !== 'number' || !Number.isFinite(claims.nbf) || now < claims.nbf)) return null
 
   return { email: claims.email }
 }

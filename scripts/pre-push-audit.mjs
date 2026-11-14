@@ -53,13 +53,15 @@ const FORBIDDEN_PATHS = [
   { re: /^启动提示词\.md$/, desc: '内部启动提示词' },
   // 放行 .env.example：它是"需要哪些变量"的模板，本来就应该进仓库；
   // 真值只写在 .env（已 gitignore）。之前一刀切导致模板无法更新。
-  { re: /^server\/\.env(?!\.example$)(\..+)?$/, desc: '后端环境变量（含密钥）' },
+  { re: /(^|\/)\.env(?!\.example$)(\..+)?$/, desc: '环境变量（含密钥）' },
   { re: /^server\/scripts\//, desc: '运维脚本目录' },
   { re: /^server\/README\.md$/, desc: '服务器说明' },
   { re: /(^|\/)\.env\.local$/, desc: '本地环境变量' },
   { re: /\.(pem|p12|pfx|key)$/i, desc: '证书/私钥文件' },
   { re: /(^|\/)id_(ed25519|rsa)(_deploy)?$/, desc: 'SSH 私钥' },
   { re: /^scripts\/audit-words\.local$/, desc: '审计词表（含真值）' },
+  { re: /^public\/login\.html$/, desc: '本地登录页（含演示凭据）' },
+  { re: /(^|\/)data\/|\.db(?:-(?:wal|shm|journal))?$/i, desc: '运行时数据库及数据目录' },
 ]
 
 /** 外部词表：每行一个真值（域名 / 主机名 / 内网标识），# 开头为注释 */
@@ -73,11 +75,12 @@ function loadLocalWords() {
 }
 
 function git(args, input) {
-  return execFileSync('git', args, {
+  return execFileSync('git', ['-c', 'core.quotepath=false', ...args], {
     cwd: ROOT,
     encoding: 'utf8',
     maxBuffer: 256 * 1024 * 1024,
     input,
+    stdio: ['pipe', 'pipe', 'pipe'],
   })
 }
 
@@ -129,12 +132,7 @@ function scanLine(line, words) {
 function scanCommits(range) {
   const words = loadLocalWords()
   const findings = []
-  let patch = ''
-  try {
-    patch = git(['log', '--no-color', '-p', '--unified=0', '--format=@@@%H %s', range])
-  } catch {
-    return findings
-  }
+  const patch = git(['log', '--no-color', '--no-renames', '-p', '--unified=0', '--format=@@@%H', range, '--'])
   let file = '(unknown)'
   let commit = ''
   for (const line of patch.split(/\r?\n/)) {
@@ -170,17 +168,10 @@ function scanCommits(range) {
 /** 检查提交里是否夹带了禁止路径 */
 function scanPaths(range) {
   const findings = []
-  let names = ''
-  try {
-    names = git(['diff', '--name-only', ...range.split('..'), '--'])
-  } catch {
-    try {
-      names = git(['ls-tree', '-r', '--name-only', range])
-    } catch {
-      return findings
-    }
-  }
-  for (const p of names.split(/\r?\n/).filter(Boolean)) {
+  // 检查每个提交：中间加入、随后删除的敏感文件仍然会进入公开历史。
+  // 删除已有敏感文件应允许通过，所以只看新增/修改，不看纯删除。
+  const names = git(['log', '--format=', '--name-only', '--no-renames', '--diff-filter=ACMRT', '-z', range, '--'])
+  for (const p of names.split('\0').map((p) => p.replace(/^\n+/, '')).filter(Boolean)) {
     for (const rule of FORBIDDEN_PATHS) {
       if (rule.re.test(p)) findings.push({ id: 'forbidden-path', desc: rule.desc, file: p, evidence: p })
     }
@@ -217,12 +208,7 @@ function main() {
   if (argv[0] === '--staged') {
     const words = loadLocalWords()
     const findings = []
-    let diff = ''
-    try {
-      diff = git(['diff', '--cached', '--unified=0'])
-    } catch {
-      /* ignore */
-    }
+    const diff = git(['diff', '--cached', '--no-renames', '--unified=0'])
     let file = '(unknown)'
     for (const line of diff.split(/\r?\n/)) {
       if (line.startsWith('+++ b/')) {
@@ -241,7 +227,7 @@ function main() {
         })
       }
     }
-    for (const p of git(['diff', '--cached', '--name-only']).split(/\r?\n/).filter(Boolean)) {
+    for (const p of git(['diff', '--cached', '--name-only', '--no-renames', '--diff-filter=ACMRT', '-z']).split('\0').filter(Boolean)) {
       for (const rule of FORBIDDEN_PATHS) {
         if (rule.re.test(p)) findings.push({ id: 'forbidden-path', desc: rule.desc, file: p, evidence: p })
       }
@@ -257,6 +243,7 @@ function main() {
     }
     process.exit(report([...scanPaths(range), ...scanCommits(range)]))
   }
+  if (argv.length > 0) throw new Error('未知审计参数')
 
   // pre-push 模式：stdin 每行 <local_ref> <local_sha> <remote_ref> <remote_sha>
   let stdin = ''
@@ -276,20 +263,29 @@ function main() {
       }
     })()
     if (!upstream) {
-      console.log('ℹ️ 未提供推送范围，且当前分支无上游 —— 跳过审计')
-      process.exit(0)
+      throw new Error('无法确定推送范围')
     }
     process.exit(report([...scanPaths(`${upstream}..HEAD`), ...scanCommits(`${upstream}..HEAD`)]))
   }
 
   const all = []
   for (const line of lines) {
-    const [, localSha, , remoteSha] = line.split(/\s+/)
-    if (!localSha || ZERO.test(localSha)) continue // 删除分支，无内容可泄
+    const fields = line.split(/\s+/)
+    const [, localSha, , remoteSha] = fields
+    if (fields.length !== 4 || !/^[a-f0-9]{40,64}$/.test(localSha ?? '') || !/^[a-f0-9]{40,64}$/.test(remoteSha ?? '')) {
+      throw new Error('无效的推送引用')
+    }
+    if (ZERO.test(localSha)) continue // 删除分支，无内容可泄
     const range = !remoteSha || ZERO.test(remoteSha) ? localSha : `${remoteSha}..${localSha}`
     all.push(...scanPaths(range), ...scanCommits(range))
   }
   process.exit(report(all))
 }
 
-main()
+try {
+  main()
+} catch {
+  // Git 失败绝不能当成“没发现”：拒绝推送，且不打印可能含真值的异常。
+  console.error('⛔ 审计执行失败，无法确认推送内容安全；已拒绝推送。请检查 Git 范围和仓库状态。')
+  process.exit(2)
+}

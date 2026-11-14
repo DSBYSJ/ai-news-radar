@@ -1,12 +1,25 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
+import { once } from 'node:events'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { test } from 'node:test'
 
 /** MCP stdio 服务器冒烟测试：握手 → tools/list → tools/call */
-test('MCP stdio：initialize / tools/list / tools/call 全链路', async () => {
+test('MCP stdio：initialize / tools/list / tools/call 全链路', async (t) => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'news-mcp-'))
   const child = spawn(process.execPath, [path.join(import.meta.dirname, '../src/mcp/stdio.ts')], {
     stdio: ['pipe', 'pipe', 'pipe'],
+    env: { ...process.env, DATABASE_PATH: path.join(dir, 'test.db') },
+  })
+  t.after(async () => {
+    if (child.exitCode === null && child.signalCode === null) {
+      const exited = once(child, 'exit')
+      child.kill()
+      await exited
+    }
+    rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 })
   })
 
   const lines: string[] = []
@@ -32,8 +45,6 @@ test('MCP stdio：initialize / tools/list / tools/call 全链路', async () => {
   while (lines.length < 3 && Date.now() < deadline) {
     await new Promise((r) => setTimeout(r, 100))
   }
-
-  child.kill()
 
   const parsed = lines.map((l) => JSON.parse(l) as { id?: number; result?: Record<string, unknown> })
   const init = parsed.find((p) => p.id === 1)

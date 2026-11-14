@@ -14,6 +14,7 @@ import { benchmarkTrend } from '../aihot/benchmark.ts'
 import { buildMarketOverview } from '../market/overview.ts'
 import { hasFmpKey } from '../market/fmp.ts'
 import { syncPrices, syncRatios } from '../market/prices.ts'
+import { UNIVERSE } from '../market/universe.ts'
 import { computeStats, coverageSummary, listSnapshots, type LinkageStats } from '../market/linkageObs.ts'
 import { deleteAlias, listAliases, listMapping, upsertAlias } from '../entities/alias.ts'
 import { realign } from '../entities/realign.ts'
@@ -36,9 +37,9 @@ interface Query {
   [key: string]: string | undefined
 }
 
-function num(value: unknown, fallback: number): number {
-  const n = Number(value)
-  return Number.isFinite(n) ? n : fallback
+function num(value: unknown, fallback: number, min = 1, max = 400): number {
+  const n = typeof value === 'string' && value.trim() ? Number(value) : NaN
+  return Math.min(max, Math.max(min, Math.trunc(Number.isFinite(n) ? n : fallback)))
 }
 
 function cutoff(days: number): string {
@@ -117,8 +118,8 @@ export async function newsRoutes(app: FastifyInstance): Promise<void> {
     const db = getDb()
     const days = num(q.days, 7)
     const limit = Math.min(num(q.limit, 50), 200)
-    const offset = Math.max(num(q.offset, 0), 0)
-    const minScore = num(q.minScore, 0)
+    const offset = num(q.offset, 0, 0, 1_000_000)
+    const minScore = num(q.minScore, 0, 0, 100)
 
     // 默认只看 AI 相关；includeOfftopic=1 时包含被剔除的非 AI 内容（便于排查）
     const where: string[] = ['a.published_at >= ?']
@@ -323,9 +324,9 @@ export async function newsRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/news/hot', async (req) => {
     const q = req.query as Query
     return {
-      hours: num(q.hours, 48),
+      hours: num(q.hours, 48, 1, 720),
       updatedAt: new Date().toISOString(),
-      items: hotRanking(getDb(), { hours: num(q.hours, 48), limit: num(q.limit, 10) }),
+      items: hotRanking(getDb(), { hours: num(q.hours, 48, 1, 720), limit: num(q.limit, 10, 1, 200) }),
     }
   })
 
@@ -633,7 +634,7 @@ export async function newsRoutes(app: FastifyInstance): Promise<void> {
     { status: 'running' | 'done' | 'error'; startedAt: string; finishedAt?: string; report?: unknown; error?: string }
   >()
 
-  app.post('/api/news/market/sync', async (req) => {
+  app.post('/api/news/market/sync', async (req, reply) => {
     if (!hasFmpKey()) return { ok: false, error: '未配置 FMP_API_KEY，无法同步行情' }
     const running = [...marketJobs.values()].find((j) => j.status === 'running')
     if (running) return { ok: false, error: '已有同步任务在运行，请稍后', jobId: null }
@@ -643,9 +644,13 @@ export async function newsRoutes(app: FastifyInstance): Promise<void> {
       typeof q.only === 'string' && q.only.trim()
         ? q.only.split(',').map((x) => x.trim().toUpperCase()).filter(Boolean)
         : undefined
+    if (only && (only.length === 0 || only.some((symbol) => !UNIVERSE.some((c) => c.symbol === symbol)))) {
+      return reply.code(400).send({ ok: false, error: 'only 包含无效标的', jobId: null })
+    }
 
     const id = `mk_${Date.now().toString(36)}`
-    marketJobs.set(id, { status: 'running', startedAt: new Date().toISOString() })
+    const startedAt = new Date().toISOString()
+    marketJobs.set(id, { status: 'running', startedAt })
     setImmediate(() => {
       void (async () => {
         try {
@@ -653,14 +658,17 @@ export async function newsRoutes(app: FastifyInstance): Promise<void> {
           const prices = await syncPrices(db, { only })
           const ratios = await syncRatios(db, { only })
           marketCache = null // 清缓存，下一次 overview 重新算
+          const noUpdates = prices.rows === 0 && ratios.rows === 0
           marketJobs.set(id, {
-            status: 'done',
-            startedAt: '',
+            status: noUpdates ? 'error' : 'done',
+            startedAt,
             finishedAt: new Date().toISOString(),
             report: { prices, ratios },
+            ...(noUpdates ? { error: '行情和比率均未更新，请检查数据源状态及订阅权限' } : {}),
           })
         } catch (err) {
-          marketJobs.set(id, { status: 'error', startedAt: '', finishedAt: new Date().toISOString(), error: String(err) })
+          marketCache = null // 同步中途抛错时，已写入的部分数据也必须可见。
+          marketJobs.set(id, { status: 'error', startedAt, finishedAt: new Date().toISOString(), error: String(err) })
         }
       })()
     })
