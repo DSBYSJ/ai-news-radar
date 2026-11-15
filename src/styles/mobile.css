@@ -144,17 +144,23 @@
  * 但那是**文档内边距**，只在 scrollTop=0 时有效；页面一滚动，内容就从留白下方钻到
  * 状态栏底下，和时钟/信号图标叠在一起（趋势页、估值页滚动时都能复现）。
  * 修法：在状态栏高度铺一层与页面底色同色的固定遮罩，内容滚过去直接被盖住。
- * 用 body::before 而非新增 DOM，不参与任何布局计算；z-index 略低于既有噪点层
- * body::after(9999)，避免把颗粒质感挡掉。
+ * 注意两点（都是踩过的坑）：
+ *   1) 不能用 body::before —— 它已被主题占用（sonar-ping 光点 / aurora 极光两层装饰，
+ *      且写着 z-index:-1），规则会被覆盖，遮罩根本不出现。改用空闲的 html::before。
+ *   2) 不能只写 env(safe-area-inset-top)：实测该 WebView 上报 0，高度会算成 0。
+ *      用 max() 给一个 48px 兜底（见下方说明），既覆盖上报为 0 的情况，
+ *      也能在上报真实值更大时跟随。
+ * z-index 取 9998，略低于既有噪点层 body::after(9999)，不挡颗粒质感。
  */
 @media (max-width: 800px) {
-  body::before {
+  html::before {
     content: '';
     position: fixed;
     top: 0;
     left: 0;
     right: 0;
-    height: env(safe-area-inset-top, 0px);
+    /* 48px ≈ Android 常见状态栏高度；env() 有值且更大时以其为准 */
+    height: max(env(safe-area-inset-top, 0px), 48px);
     background: var(--bg);
     z-index: 9998;
     pointer-events: none;

@@ -2,6 +2,30 @@
 
 版本号唯一来源：各 `package.json`。发布前照「升版本 → 写 changelog → 跑验证 → 推送部署」四步走。
 
+## 0.45.9（2026-11-15）
+
+**修正 0.45.8：状态栏遮罩其实没生效**
+
+0.45.8 部署后在真机验证，趋势速览卡片换行生效了，但状态栏遮挡**依旧存在**。
+两个原因，都属实现失误，一并修正：
+
+### 一、选错了伪元素
+
+遮罩写在 `body::before` 上，而 `body::before` **已被主题占用**：`sonar-ping` 光点层与
+`aurora` 极光层都挂在它上面，且各自带着 `z-index:-1` 和 `inset:0`。同名的伪元素只有一个，
+后写入的规则把遮罩的 `height` / `background` 覆盖掉，遮罩从未出现。
+→ 改用整份样式表里**完全空闲**的 `html::before`（已确认 `html` / `#root` / `.app-shell`
+的伪元素均未被占用）。
+
+### 二、`env(safe-area-inset-top)` 在这个 WebView 里上报 0
+
+写 `height: env(safe-area-inset-top)` 时高度算成 0px，等于没有遮罩。说明 Capacitor 壳虽然
+是 edge-to-edge，却没把真实内边距透传给 CSS 环境变量。
+→ 改为 `height: max(env(safe-area-inset-top, 0px), 48px)`：上报为 0 时用 48px 兜底
+（Android 常见状态栏高度），上报值更大时跟随上报值。
+
+同时把踩坑过程写进 `src/styles/mobile.css` 的注释，避免以后有人"优化"回 `body::before`。
+
 ## 0.45.8（2026-11-15）
 
 **移动端两处显示缺陷：内容钻进状态栏、趋势速览卡片文字被截断**
