@@ -5,6 +5,7 @@ import './index.css'
 import './styles/refined.css'
 import './styles/readable.css'
 import './styles/evidence.css'
+import './styles/mobile.css'
 
 const el = document.getElementById('root')
 if (!el) throw new Error('#root 不存在')

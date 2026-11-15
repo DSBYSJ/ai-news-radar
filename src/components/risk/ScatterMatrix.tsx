@@ -20,11 +20,11 @@ export default function ScatterMatrix({ items }: Props) {
     <div className="entity-signal-head"><span>实体 / 主要信号</span><span>来源均衡负面占比</span><span>标注样本 / 覆盖</span><span>负面比例变化</span></div>
     {rows.map((item,i) => <div className="entity-signal-row" key={item.entity}>
       <div className="entity-signal-name"><span className="entity-rank num">{String(i+1).padStart(2,'0')}</span><div><strong>{item.entity}</strong><p>{item.reason ?? '负面报道结构信号'}</p></div></div>
-      <div className="entity-signal-meter" style={{'--signal-tone': 'var(--accent)'} as CSSProperties}>
+      <div className="entity-signal-meter" data-label="来源均衡负面占比" style={{'--signal-tone': 'var(--accent)'} as CSSProperties}>
         <div><span style={{width:`${Math.min(100,Math.max(0,item.score))}%`}} /></div><strong className="num">{item.balancedShare===null?'—':(item.balancedShare*100).toFixed(1)}<small>%</small></strong>
       </div>
-      <div className="entity-signal-sample"><strong className="num">{item.classified}/{item.mentions}</strong><span>覆盖 {(item.coverage*100).toFixed(0)}% · {item.publishers} 合格源</span></div>
-      <div className="entity-signal-change"><strong className="num">{item.negativeChange === null ? '—' : `${item.negativeChange >= 0 ? '+' : ''}${(item.negativeChange*100).toFixed(1)}pp`}</strong><span>{item.negativeChange === null ? '可比来源样本不足' : '近 7 天较前 7 天'}</span></div>
+      <div className="entity-signal-sample" data-label="已标注 / 全部报道"><strong className="num">{item.classified}/{item.mentions}</strong><span>覆盖 {(item.coverage*100).toFixed(0)}% · {item.publishers} 合格源</span></div>
+      <div className="entity-signal-change" data-label="近 7 天负面比例变化"><strong className="num">{item.negativeChange === null ? '—' : `${item.negativeChange >= 0 ? '+' : ''}${(item.negativeChange*100).toFixed(1)}pp`}</strong><span>{item.negativeChange === null ? '可比来源样本不足' : '近 7 天较前 7 天'}</span></div>
     </div>)}
     <p className="entity-signals-note">URL 与源内标题去重，未知情绪不当中性。占比需至少 2 个合格源（各 3 条已标注报道），整体标注覆盖 ≥60%；变化只比较两期均达门槛的相同来源。情绪为机器标签，未经逐篇核实，不代表公司财务风险。</p>
   </div>

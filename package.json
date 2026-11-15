@@ -1,7 +1,7 @@
 {
   "name": "ai-news-web",
   "private": true,
-  "version": "0.45.6",
+  "version": "0.45.7",
   "type": "module",
   "scripts": {
     "dev": "vite",
