@@ -9,7 +9,8 @@ export async function syncMarketData(db: DatabaseSync, opts: { only?: string[] }
   const wanted = UNIVERSE.filter(c => !opts.only?.length || opts.only.includes(c.symbol)).map(c => c.symbol)
   const needs = wanted.filter(symbol => {
     const row = db.prepare('SELECT MAX(updated_at) AS updated, MAX(shares_filed_at) AS checked FROM company_fundamentals WHERE symbol = ?').get(symbol) as {updated:string|null;checked:string|null}
-    return !row.checked || !row.updated || Date.now()-Date.parse(row.updated)>86_400_000
+    const facts = db.prepare('SELECT updated_at FROM market_financial_facts WHERE symbol = ?').get(symbol)
+    return !facts || !row.checked || !row.updated || Date.now()-Date.parse(row.updated)>86_400_000
   })
   const fundamentals = needs.length ? await syncFundamentals(db,{only:needs}).catch(() => ({companies:needs.length,rows:0,skipped:needs.map(symbol=>({symbol,reason:'SEC 更新失败，保留已有财报'})),ms:0}))
     : {companies:0,rows:0,skipped:[],ms:0}

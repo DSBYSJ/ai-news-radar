@@ -32,9 +32,12 @@ export function PressureAttribution({data}:{data?:MarketPressure}) {
       <div><h4>{f.label}</h4><span className="num">{f.value?.toFixed(2)} {f.unit}</span></div>
       <strong className="num">{f.score.toFixed(1)}<small>历史分位 /100</small></strong>
       <div className="pressure-feature-track"><span style={{width:`${f.score}%`}} /></div>
+      <div className="pressure-delta"><span>较 {data.comparison?.date??'上一比较日'}</span><b className="num">{f.change===null?'—':`${f.change>=0?'+':''}${f.change.toFixed(2)} ${f.changeUnit}`}</b></div>
       <p>{f.referenceFrom} ~ {f.referenceUntil}<br />{f.observations} 个既往观测 · 当前不入基准</p>
+      <a className="evidence-source-link" href={f.sourceUrl} target="_blank" rel="noreferrer">FRED 原始序列 ↗</a>
     </article>)}</div>
     {data.reasons.map(reason=><p className="measurement-empty" key={reason}>{reason}</p>)}
     <p className="measurement-detail-note">{data.formula} {data.note}</p>
+    {data.comparison&&<p className="measurement-detail-note">变动比较使用同一套当前历史分布，比较 {data.comparison.date} 与 {data.asOf}；不会把滚动基准变化当成市场变化。实现波动率的差值为年化百分点。</p>}
   </section>
 }

@@ -15,7 +15,7 @@ import { publisherOf } from './events.ts'
  *   sufficient 数据充分 / partial 部分数据 / insufficient 样本不足 / stale 数据过期
  * 每个维度各自给状态与阈值，用户能直接看到是哪一环不满足。
  *
- * 另外：独立信源数 ≠ 文章数。同一事件被 10 家转载不是 10 个独立信号，
+ * 另外：出版来源数 ≠ 文章数。同一事件被 10 家转载不是 10 个独立信号，
  * 所以信源维度单独计算。
  */
 
@@ -165,7 +165,7 @@ export function assessQuality(
     },
     {
       key: 'sources',
-      label: '独立信源',
+      label: '出版来源',
       value: `${independentSources} 个`,
       status: grade(independentSources, 5, 3),
       rule: '≥5 充分，3–4 部分，<3 不足（转载不等于独立信号）',
@@ -205,7 +205,7 @@ export function assessQuality(
 
   const notes: string[] = []
   if (staleDays !== null && staleDays > 7) notes.push('部分宏观背景过期；V3 压力能否计算，以信用/指数共同观测及历史门槛为准')
-  if (independentSources < 3) notes.push('独立信源过少，叙事类指标容易受单一来源影响')
+  if (independentSources < 3) notes.push('出版来源过少，叙事类指标容易受单一来源影响')
   if (unavailable.length > 0) notes.push(`有 ${unavailable.length} 项未参与计算，详见下方清单`)
 
   return {

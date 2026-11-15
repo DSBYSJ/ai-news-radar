@@ -7,6 +7,7 @@ import { marketPressure, type MarketPressure } from './pressure.ts'
 import { loadParams } from './params.ts'
 import { assessQuality, type RiskQuality } from './quality.ts'
 import { eventRisk, type EventRisk } from './events.ts'
+import { entityEvidence, type EntityEvidence } from './entityEvidence.ts'
 import {
   type CrsFactor,
   type CrsResult,
@@ -34,22 +35,7 @@ export interface CrisisAssessment {
   factors: CrsFactor[]
 }
 
-export interface VulnerableEntity {
-  entity: string
-  /** 负面提及数 */
-  negative: number
-  /** 总提及数 */
-  mentions: number
-  /** 负面占比 0~1 */
-  negativeShare: number
-  /** 近 7 天 vs 前 7 天提及变化（正=升温） */
-  heatChange: number | null
-  /** 融资类提及数，仅保留兼容，不参与实体加分 */
-  funding: number
-  /** 脆弱性得分 0~100 */
-  score: number
-  reason: string
-}
+export type VulnerableEntity = EntityEvidence
 
 export interface RiskReport {
   model: 'risk-evidence-v3'
@@ -92,81 +78,6 @@ const DISCLAIMER =
   'V3 是描述性监测模型，未经独立预测验证，不输出危机概率；旧版回测不能证明新版有效。宏观历史按观测日期回放，缺少历史发布版本与修订记录，不冒充真实可交易的发布时点回测。' +
   '公司事件的规则强度独立呈现，不与宏观读数或新闻占比合成。'
 
-/** 实体诊断：负面占比与近期负面升温；缺少融资报道不是财务危机证据。 */
-function vulnerableEntities(db: DatabaseSync, days: number, now: number, limit = 10): VulnerableEntity[] {
-  const rows = db
-    .prepare(
-      `SELECT m.entity AS entity,
-              COUNT(*) AS mentions,
-              SUM(CASE WHEN a.sentiment = 'negative' THEN 1 ELSE 0 END) AS neg,
-              SUM(CASE WHEN a.category = 'funding' THEN 1 ELSE 0 END) AS fund
-         FROM mentions m JOIN articles a ON a.id = m.article_id
-        WHERE a.ai_relevant = 1 AND a.published_at >= ? AND a.published_at <= ?
-        GROUP BY m.entity
-       HAVING mentions >= 3`,
-    )
-    .all(new Date(now - days * 86_400_000).toISOString(), new Date(now).toISOString()) as unknown as {
-    entity: string
-    mentions: number
-    neg: number
-    fund: number
-  }[]
-  if (rows.length === 0) return []
-
-  // 近 7 天 vs 前 7 天的提及变化
-  const recentRows = db
-    .prepare(
-      `SELECT m.entity AS entity, COUNT(*) AS n, SUM(CASE WHEN a.sentiment = 'negative' THEN 1 ELSE 0 END) AS neg
-         FROM mentions m JOIN articles a ON a.id = m.article_id
-        WHERE a.ai_relevant = 1 AND a.published_at >= ? AND a.published_at <= ?
-        GROUP BY m.entity`,
-    )
-    .all(new Date(now - 7 * 86_400_000).toISOString(), new Date(now).toISOString()) as unknown as { entity: string; n: number; neg: number }[]
-  const prevRows = db
-    .prepare(
-      `SELECT m.entity AS entity, COUNT(*) AS n, SUM(CASE WHEN a.sentiment = 'negative' THEN 1 ELSE 0 END) AS neg
-         FROM mentions m JOIN articles a ON a.id = m.article_id
-        WHERE a.ai_relevant = 1 AND a.published_at >= ? AND a.published_at < ?
-        GROUP BY m.entity`,
-    )
-    .all(
-      new Date(now - 14 * 86_400_000).toISOString(),
-      new Date(now - 7 * 86_400_000).toISOString(),
-    ) as unknown as { entity: string; n: number; neg: number }[]
-  const recentMap = new Map(recentRows.map((r) => [r.entity, Number(r.n)]))
-  const prevMap = new Map(prevRows.map((r) => [r.entity, Number(r.n)]))
-  const recentNeg = new Map(recentRows.map(r => [r.entity, Number(r.neg)]))
-  const prevNeg = new Map(prevRows.map(r => [r.entity, Number(r.neg)]))
-
-  const scored = rows.map((r) => {
-    const mentions = Number(r.mentions)
-    const negative = Number(r.neg ?? 0)
-    const funding = Number(r.fund ?? 0)
-    const negativeShare = mentions > 0 ? negative / mentions : 0
-    const recent = recentMap.get(r.entity) ?? 0
-    const prev = prevMap.get(r.entity) ?? 0
-    const heatChange = prev > 0 ? (recent - prev) / prev : null
-    const negativeIncrease = recent >= 3 && prev >= 3
-      ? Math.max(0, (recentNeg.get(r.entity) ?? 0) / recent - (prevNeg.get(r.entity) ?? 0) / prev) : 0
-    const score = Math.round(Math.min(100, negativeShare * 70 + Math.min(1, negativeIncrease / 0.3) * 30))
-    const reasons: string[] = []
-    if (negativeShare >= 0.3) reasons.push(`负面占比 ${(negativeShare * 100).toFixed(0)}%`)
-    if (negativeIncrease > 0) reasons.push(`近 7 日负面占比上升 ${(negativeIncrease * 100).toFixed(0)}pp`)
-    return {
-      entity: r.entity,
-      negative,
-      mentions,
-      negativeShare: Number(negativeShare.toFixed(3)),
-      heatChange: heatChange === null ? null : Number(heatChange.toFixed(2)),
-      funding,
-      score,
-      reason: reasons.length > 0 ? reasons.join('、') : '负面偏多',
-    }
-  })
-
-  return scored.filter(r => r.negative > 0).sort((a, b) => b.score - a.score || b.negative - a.negative).slice(0, limit)
-}
-
 export async function riskReport(
   db: DatabaseSync,
   opts: { days?: number; now?: number; macroKey?: string; macro?: MacroSnapshot } = {},
@@ -188,7 +99,7 @@ export async function riskReport(
   const divergences: Divergence[] = []
 
   // 公司事件与宏观分脱钩：CRS 低时仍然显示公司层面的负面信号。
-  const vulnerable = vulnerableEntities(db, narrative.windowDays, now, 10)
+  const vulnerable = entityEvidence(db, narrative.windowDays, now, 10)
   const events = eventRisk(db, { now })
 
   const crisis: CrisisAssessment | null = pressure.score !== null
@@ -209,10 +120,10 @@ export async function riskReport(
   const lead = events.events[0]
   const assessment: RiskReport['assessment'] = {
     level,
-    headline: lead && eventLevel >= 30 ? `${lead.entity}出现${lead.category}信号` : (pressure.score??0)>=75 ? '市场压力位于近期历史较高位置' : level === 'unknown' ? '数据覆盖有限，暂不作低风险判断' : '已覆盖事件暂无较强触发，市场读数单独解读',
+    headline: lead && eventLevel >= 30 ? `${lead.entity}有${lead.category}相关报道` : (pressure.score??0)>=75 ? '市场压力位于近期历史较高位置' : level === 'unknown' ? '数据覆盖有限，暂不作低风险判断' : '已覆盖事件暂无较强触发，市场读数单独解读',
     detail: lead && eventLevel >= 30
       ? `近 7 天事件强度 ${events.score}；市场压力读数 ${pressure.score ?? '未计算'}。两者量纲不同，不合成概率；公司事件单独触发关注。`
-      : '事件冲击、叙事泡沫与宏观压力分别衡量不同问题；任何一条线的低分都不代表整体安全。',
+      : '事件报道、资本叙事与市场压力分别衡量不同问题；任何一条线的低分都不代表整体安全。',
   }
 
   return {

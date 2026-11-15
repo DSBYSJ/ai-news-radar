@@ -115,7 +115,7 @@ test('估值装配：未核验不给精确结论，基准指数最新日期不�
   assert.equal(result.freshness.status,'stale')
 })
 
-test('估值装配：详情与倍数使用报价日可见的同一财报，不能混入次日新申报',t=>{
+test('估值 V3：未溯源的旧年度缓存不会冒充带申报编号的正式事实',t=>{
   const db=new DatabaseSync(':memory:');db.exec(schema);t.after(()=>db.close())
   db.prepare('INSERT INTO equity_daily(symbol,date,close)VALUES(?,?,?)').run('NVDA','2026-11-13',10)
   db.prepare('INSERT INTO market_split_history(symbol,splits,checked_at)VALUES(?,?,?)').run('NVDA','[]','2026-11-14T00:00:00Z')
@@ -123,6 +123,6 @@ test('估值装配：详情与倍数使用报价日可见的同一财报，不�
   insert.run('2025-12-31','2026-02-01',1000,100,100,'2025-12-31','2026-02-01','2026-11-14')
   insert.run('2026-10-31','2026-11-14',2000,200,100,'2026-10-31','2026-11-14','2026-11-14')
   const row=buildMarketOverview(db,{now:Date.parse('2026-11-14T12:00:00Z')}).companies.find(c=>c.symbol==='NVDA')!
-  assert.equal(row.fiscalEnd,'2025-12-31');assert.equal(row.revenue,1000);assert.equal(row.ps,1)
-  assert.equal(row.basis?.fiscalEnd,row.fiscalEnd)
+  assert.equal(row.fiscalEnd,null);assert.equal(row.revenue,null);assert.equal(row.ps,null)
+  assert.ok(row.reasons.some(x=>x.includes('申报编号')))
 })

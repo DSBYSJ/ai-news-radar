@@ -141,6 +141,16 @@ test('V3 压力：当前不入历史基准，追加未到观测不改变过去�
   for(const key of ['creditSpread','nasdaq']){data.series[key].history.push(999);data.series[key].dates.push('2026-11-16')}
   assert.deepEqual(marketPressure(data,{now:NOW}),before)
 })
+
+test('压力变化固定参考分布，20个共同观测前常数背景为50，各项变化可加回总分',()=>{
+  const data=macro()
+  const steady=marketPressure(data,{now:NOW})
+  assert.equal(steady.comparison?.change,0);assert.equal(steady.comparison?.score,50)
+  data.series.creditSpread.history[data.series.creditSpread.history.length-1]=10;data.series.creditSpread.value=10
+  const shock=marketPressure(data,{now:NOW})
+  assert.equal(shock.comparison?.change,25);assert.equal(shock.comparison?.score,50)
+  assert.ok(shock.factors.every(f=>f.sourceUrl.startsWith('https://fred.stlouisfed.org/series/')))
+})
 test('V3 历史：单独版本/窗口保存，不覆盖旧版或其他窗口；未计算保留null',t=>{
   const db=setup(t)
   db.prepare("INSERT INTO risk_daily(date,nfi,crs,created_at)VALUES('2026-11-14',42,42,'2026-11-14')").run()

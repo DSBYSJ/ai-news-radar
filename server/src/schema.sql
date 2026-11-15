@@ -337,6 +337,12 @@ CREATE TABLE IF NOT EXISTS risk_daily (
 );
 
 -- V3 与旧 risk_daily 分开保存；不同叙事窗口也不拼接。
+CREATE TABLE IF NOT EXISTS market_financial_facts (
+  symbol TEXT PRIMARY KEY,
+  payload TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS risk_snapshots (
   date TEXT NOT NULL,
   window_days INTEGER NOT NULL,

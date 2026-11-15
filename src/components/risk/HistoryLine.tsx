@@ -1,5 +1,4 @@
 import { useRef, useState } from 'react'
-import { colorOf } from './riskColors.ts'
 import { segmentedLine } from '../../lib/riskDisplay.ts'
 
 /**
@@ -17,6 +16,7 @@ interface Point {
 }
 
 interface Props {
+  metric?: 'nfi' | 'crs'
   points: Point[]
   overlay?: { name: string; values: (number | null)[]; color: string } | null
   height?: number
@@ -29,14 +29,14 @@ const PAD_R = 10
 const PAD_T = 12
 const PAD_B = 24
 
-export default function HistoryLine({ points, overlay, height = 210, events = [] }: Props) {
+export default function HistoryLine({ points, overlay, height = 210, events = [],metric }: Props) {
   const svgRef = useRef<SVGSVGElement | null>(null)
   const [hoverIdx, setHoverIdx] = useState<number | null>(null)
 
   if (points.length < 2) {
     return (
       <p className="py-8 text-center text-[11px] text-slate-500">
-        没有历史快照 —— 到「后台 → 风险参数」点「保存并异步重算」生成
+        没有可用历史快照，可在后台的风险方法说明中重建历史。
       </p>
     )
   }
@@ -44,7 +44,8 @@ export default function HistoryLine({ points, overlay, height = 210, events = []
   const innerW = W - PAD_L - PAD_R
   const innerH = height - PAD_T - PAD_B
   const xOf = (i: number): number => PAD_L + (i / (points.length - 1)) * innerW
-  const yOf = (v: number): number => PAD_T + innerH - (v / 100) * innerH
+  const yMax=metric==='nfi'?Math.min(100,Math.max(5,Math.ceil(Math.max(...points.map(p=>p.nfi??0))/5)*5)):100
+  const yOf = (v: number): number => PAD_T + innerH - (v / yMax) * innerH
 
   const linePath = (key: 'nfi' | 'crs'): string => segmentedLine(points.map(p => p[key]), xOf, yOf)
 
@@ -70,17 +71,17 @@ export default function HistoryLine({ points, overlay, height = 210, events = []
         viewBox={`0 0 ${W} ${height}`}
         className="w-full cursor-crosshair"
         role="img"
-        aria-label="NFI 与 CRS 历史走势"
+        aria-label={metric==='nfi'?'资本叙事占比历史，百分比':metric==='crs'?'市场压力位置历史':'NFI 与 CRS 历史走势'}
         onMouseMove={(e) => handleMove(e.clientX)}
         onMouseLeave={() => setHoverIdx(null)}
         onTouchMove={(e) => handleMove(e.touches[0].clientX)}
         onTouchEnd={() => setHoverIdx(null)}
       >
-        {[0, 25, 50, 75, 100].map((v) => (
+        {[0, .25, .5, .75, 1].map(x=>x*yMax).map((v) => (
           <g key={v}>
             <line x1={PAD_L} y1={yOf(v)} x2={W - PAD_R} y2={yOf(v)} className="stroke-[var(--chart-grid)]" strokeWidth="1" />
             <text x={PAD_L - 5} y={yOf(v) + 3} textAnchor="end" className="fill-slate-500" style={{ fontSize: 8.5 }}>
-              {v}
+              {Number(v.toFixed(2))}
             </text>
           </g>
         ))}
@@ -143,12 +144,12 @@ export default function HistoryLine({ points, overlay, height = 210, events = []
           style={{ left: `${Math.min(72, (hoverIdx! / (points.length - 1)) * 100)}%` }}
         >
           <p className="num text-slate-100">{active.date}</p>
-          <p className="num mt-0.5" style={{ color: colorOf(active.nfi) }}>
-            NFI {active.nfi ?? '—'}
-          </p>
-          <p className="num" style={{ color: colorOf(active.crs) }}>
+          {metric!=='crs'&&<p className="num mt-0.5" style={{ color: '#3da9fc' }}>
+            NFI {active.nfi ?? '—'}%
+          </p>}
+          {metric!=='nfi'&&<p className="num" style={{ color: '#f5a623' }}>
             CRS {active.crs ?? '—'}
-          </p>
+          </p>}
           {overlay && overlay.values[hoverIdx!] !== null && overlay.values[hoverIdx!] !== undefined && (
             <p className="num" style={{ color: overlay.color }}>
               {overlay.name} {overlay.values[hoverIdx!]}
@@ -158,18 +159,18 @@ export default function HistoryLine({ points, overlay, height = 210, events = []
       )}
 
       <div className="mt-1 flex flex-wrap items-center gap-3 text-[10px] text-slate-500">
-        <span className="flex items-center gap-1">
+        {metric!=='crs'&&<span className="flex items-center gap-1">
           <span className="inline-block h-0.5 w-4 rounded bg-[#3da9fc]" /> NFI
-        </span>
-        <span className="flex items-center gap-1">
+        </span>}
+        {metric!=='nfi'&&<span className="flex items-center gap-1">
           <span className="inline-block h-0.5 w-4 rounded bg-[#f5a623]" /> CRS
-        </span>
+        </span>}
         {overlay && (
           <span className="flex items-center gap-1">
             <span className="inline-block h-0.5 w-4 rounded" style={{ backgroundColor: overlay.color }} /> {overlay.name}（联动）
           </span>
         )}
-        <span className="num ml-auto">共 {points.length} 个快照 · hover 看十字准星</span>
+        <span className="num ml-auto">{points.length} 个快照 · 纵轴 0–{yMax}{metric==='nfi'?'%':''}</span>
       </div>
     </div>
   )

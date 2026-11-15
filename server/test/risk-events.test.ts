@@ -68,13 +68,15 @@ test('传闻单独列为待核实，不作为已发生冲击计入总强度', (t
   assert.ok(r.unconfirmed[0].score <= 35)
 })
 
-test('多源直接报道提高证据权重；大量无关新闻不稀释重大事件', (t) => {
+test('多出版源只增加覆盖，不能证明事实更真；无关新闻不稀释关注度', (t) => {
   const db = setup(t)
   add(db, 1, '黄仁勋辞去英伟达 CEO 职务', { url: 'https://one.example/story' })
   const one = eventRisk(db, { now: NOW })
   add(db, 2, 'Nvidia CEO Jensen Huang resigns', { url: 'https://two.example/story' })
   const two = eventRisk(db, { now: NOW })
-  assert.ok(two.score! > one.score!)
+  assert.equal(two.score, one.score)
+  assert.equal(two.events[0].confidence,'multiple')
+  assert.equal(two.events[0].verification,'media_report')
   for (let n = 3; n <= 60; n++) add(db, n, `AI model release ${n}`)
   assert.equal(eventRisk(db, { now: NOW }).score, two.score)
 })
@@ -108,4 +110,56 @@ test('领导层变动归属正确公司，不把回应方也判为发生离任',
   const r = eventRisk(db, { now: NOW })
   assert.equal(r.events.length, 1)
   assert.equal(r.events[0].entity, 'OpenAI')
+})
+
+test('否认与相反表述进入争议观察，不能只过滤否认却继续给原报道计分',t=>{
+  const db=setup(t)
+  add(db,1,'Nvidia CEO Jensen Huang resigns')
+  add(db,2,'英伟达否认 CEO 黄仁勋辞职消息',{url:'https://nvidianews.nvidia.com/news/denial'})
+  const r=eventRisk(db,{now:NOW})
+  assert.equal(r.score,0);assert.equal(r.events.length,0);assert.equal(r.unconfirmed[0].verification,'disputed')
+  assert.ok(r.unconfirmed[0].evidence.some(e=>e.stance==='denied'))
+})
+test('第三方公司网站或用户论坛不等于当事公司公告，同标题跨域不增加独立证据',t=>{
+  const db=setup(t)
+  add(db,1,'Nvidia CEO Jensen Huang resigns',{url:'https://microsoft.com/news'})
+  add(db,2,'Nvidia CEO Jensen Huang resigns',{url:'https://forums.developer.nvidia.com/story'})
+  add(db,3,'Nvidia CEO Jensen Huang resigns',{url:'https://two.example/story'})
+  const e=eventRisk(db,{now:NOW}).events[0]
+  assert.equal(e.confidence,'single');assert.equal(e.verification,'media_report');assert.equal(e.independentSources,1)
+})
+test('疑问假设与预期离任不当已发生事件；未采到的新闻不提前出现',t=>{
+  const db=setup(t)
+  add(db,1,'如果英伟达 CEO 黄仁勋辞职会怎样？')
+  add(db,2,'Nvidia CEO will resign next year')
+  add(db,3,'OpenAI CEO Sam Altman resigns')
+  db.prepare('UPDATE raw_items SET fetched_at=? WHERE guid=?').run(new Date(NOW+3600000).toISOString(),'3')
+  const r=eventRisk(db,{now:NOW});assert.equal(r.events.length,0);assert.equal(r.unconfirmed.length,1)
+})
+test('28天回查锚定旧报道，转载进入7天窗口不能把事件年龄重置',t=>{
+  const db=setup(t)
+  add(db,1,'Nvidia CEO Jensen Huang resigns',{hours:10*24})
+  add(db,2,'Nvidia CEO Jensen Huang resigns',{hours:1})
+  assert.equal(eventRisk(db,{now:NOW}).events[0].ageHours,240)
+})
+test('高管传闻不提高已直接报道的另一职位冲击强度',t=>{
+  const db=setup(t)
+  add(db,1,'Nvidia CFO resigns')
+  const score=eventRisk(db,{now:NOW}).score
+  add(db,2,'传闻英伟达 CEO 黄仁勋或将辞职')
+  const r=eventRisk(db,{now:NOW});assert.equal(r.score,score);assert.equal(r.events[0].severity,62)
+})
+
+test('历史访谈、要求辞职、辞去别家公司董事职位不会误判为新的本公司离任',t=>{
+  const db=setup(t)
+  add(db,1,'The OpenAI board member who fired Sam Altman says we still cannot trust AI CEOs')
+  add(db,2,'黄仁勋遭美国议员要求辞职，英伟达面临国会问询压力')
+  add(db,3,'谷歌高管哈里森辞去 SpaceX 董事会职务，任职已超十年')
+  const r=eventRisk(db,{now:NOW});assert.equal(r.events.length,0);assert.equal(r.unconfirmed.length,1)
+})
+test('前CEO离任与CFO接任标题属于同一离任线索，不会再制造CFO辞职事件',t=>{
+  const db=setup(t)
+  add(db,1,'英伟达宣布黄仁勋辞职，CFO科莱特·克雷斯出任临时CEO')
+  add(db,2,'Nvidia CEO Jensen Huang resigns',{url:'https://two.example/story'})
+  const r=eventRisk(db,{now:NOW});assert.equal(r.events.length,1);assert.equal(r.events[0].id,'NVDA:leadership:chief')
 })

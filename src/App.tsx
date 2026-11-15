@@ -323,7 +323,7 @@ export default function App() {
         {/* 第二层：说明 + 读数（读数在窄屏隐藏，避免挤成两行） */}
         <div className="mt-2.5 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
           <p className="min-w-0 truncate text-[11.5px] text-slate-400 dark:text-slate-500">
-            看的是「变化」：哪个方向在升温，哪些事件被多家独立源印证
+            看的是「变化」：哪个方向在升温，哪些变化被不同来源持续报道
           </p>
 
           {health ? (

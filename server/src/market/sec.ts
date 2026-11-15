@@ -1,6 +1,7 @@
 
 import { setDefaultResultOrder } from 'node:dns'
 import { setDefaultAutoSelectFamily } from 'node:net'
+import { parseFinancialFacts, type FinancialFact } from './financialFacts.ts'
 
 /**
  * ⚠️ 必须强制 IPv4 优先：境内服务器上 Node 默认会先试 AAAA 记录，
@@ -96,6 +97,7 @@ export async function loadTickerMap(force = false): Promise<Map<string, TickerEn
 
 /** XBRL 事实数组里的一条 */
 interface Fact {
+  accn?: string
   start?: string
   end: string
   val: number
@@ -246,6 +248,7 @@ export interface CompanyFacts {
   annual: AnnualFundamentals[]
   /** 用了哪个营收标签，写进报告便于核对 */
   revenueTag: string | null
+  financialFacts: FinancialFact[]
 }
 
 /** 拉取并解析一家公司的年度基本面 */
@@ -322,7 +325,7 @@ export function parseCompanyFacts(json: {
     }
   })
 
-  return { cik, entityName: json.entityName ?? '', annual, revenueTag }
+  return { cik, entityName: json.entityName ?? '', annual, revenueTag, financialFacts: parseFinancialFacts(json,cik) }
 }
 
 export function secUserAgent(): string {

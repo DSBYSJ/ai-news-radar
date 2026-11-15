@@ -62,6 +62,9 @@ export async function syncFundamentals(
       }
       db.exec('BEGIN')
       inTx = true
+      db.prepare(`INSERT INTO market_financial_facts(symbol,payload,updated_at) VALUES(?,?,?)
+        ON CONFLICT(symbol) DO UPDATE SET payload=excluded.payload,updated_at=excluded.updated_at`)
+        .run(c.symbol,JSON.stringify(facts.financialFacts),now)
       for (const a of facts.annual) {
         upsert.run(
           c.symbol,

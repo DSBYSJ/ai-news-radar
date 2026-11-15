@@ -498,7 +498,12 @@ export interface MarketCompanyRow {
   historyMonths: number; peMonths: number; historyFrom: string | null; historyUntil: string | null
   historicalPsMedian: number | null; historicalPeMedian: number | null
   peerPercentile: number | null; peerCount: number
+  financial: { kind:'ttm'|'annual'; periodStart:string;periodEnd:string;filedAt:string;revenue:number;netIncome:number|null;
+    shares:FinancialFact|null;components:{operation:'annual'|'add'|'subtract';revenue:FinancialFact;netIncome:FinancialFact|null}[];reasons:string[] } | null
+  psRange:[number,number]|null;peRange:[number,number]|null;peHistoryFrom:string|null;peHistoryUntil:string|null
 }
+
+export interface FinancialFact {metric:'revenue'|'netIncome'|'shares';tag:string;unit:'USD'|'shares';start:string|null;end:string;filed:string;accession:string;form:string;value:number;url:string}
 
 export interface MarketSegmentRow {
   segment: string
@@ -748,7 +753,8 @@ export interface RiskEvent {
   confidence: 'official' | 'multiple' | 'single' | 'unconfirmed'
   sources: number; articles: number; firstSeen: string; lastSeen: string
   halfLifeHours: number; ageHours: number; decay: number; confidenceWeight: number
-  evidence: { title: string; url: string; source: string; publisher: string; publishedAt: string }[]
+  evidence: { title: string; url: string; source: string; publisher: string; publishedAt: string;stance?:'reported'|'uncertain'|'denied' }[]
+  disputed:boolean;verification:'issuer_statement'|'media_report'|'unverified'|'disputed';independentSources:number
   note: string
 }
 
@@ -799,7 +805,8 @@ export interface NfiResult {
 
 export interface MarketPressure {
   model: string;score:number|null;status:'ready'|'unavailable';asOf:string|null;reasons:string[];formula:string;note:string
-  factors:(RiskFactorV2&{unit:string;referenceFrom:string;referenceUntil:string;observations:number})[]
+  factors:(RiskFactorV2&{unit:string;referenceFrom:string;referenceUntil:string;observations:number;previousValue:number|null;change:number|null;changeUnit:string;scoreChange:number|null;sourceUrl:string})[]
+  comparison:{date:string;score:number;change:number}|null
 }
 
 export interface Divergence {
@@ -813,6 +820,7 @@ export interface Divergence {
 }
 
 export interface VulnerableEntity {
+  classified:number;coverage:number;publishers:number;balancedShare:number|null;negativeChange:number|null
   entity: string
   negative: number
   mentions: number

@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api.ts'
 import type { MacroPoint, RiskReport, RiskBacktest } from '../types.ts'
-import GaugeArc from '../components/risk/GaugeArc.tsx'
 import { NarrativeSignals, NarrativeAttribution, PressureAttribution } from '../components/risk/RiskMeasurements.tsx'
 import MacroCard, { type MacroCardData } from '../components/risk/MacroCard.tsx'
 import MacroDrawer, { TRANSMISSION } from '../components/risk/MacroDrawer.tsx'
@@ -73,19 +72,19 @@ export default function RiskPage() {
       {loading && !report && <div className="risk-panel risk-loading animate-pulse" aria-label="正在读取风险数据" />}
       {error && <p className="risk-error" role="alert">读取失败：{error}{report ? '。下方保留上次结果，请刷新后再判断。' : ''}</p>}
       {report && <>
-        {report.eventRisk && <EventRiskPanel data={report.eventRisk} assessment={report.assessment} />}
 
-        <div className="section-heading"><div><span className="section-index">01</span><h3>叙事与市场，分开解读</h3></div><span>叙事窗口 {days} 天 · 事件窗口固定 7 天</span></div>
+
+        <div className="section-heading"><div><span className="section-index">01</span><h3>三条观察线，独立衡量</h3></div><span>叙事窗口 {days} 天 · 事件窗口固定 7 天</span></div>
         <div className="risk-score-grid">
           <section className="risk-panel score-panel"><div className="panel-heading"><h3>资本叙事占比</h3><span className="metric-code">NFI · V3</span></div>
             <p className="panel-description">融资/上市或金融追逐措辞，占了多少报道？</p>
-            <GaugeArc neutral suffix="%" decimals={1} value={report.nfi?.score ?? null} label="CAPITAL ATTENTION" bandLabel={report.nfi?.score == null ? '计算条件不足' : '出版来源均衡占比'} height={145} />
+            <div className="evidence-readout"><strong className="num">{report.nfi?.score?.toFixed(1)??'—'}<small>%</small></strong><span>合格来源均衡后的报道占比</span></div><div className="evidence-scale"><i style={{width:`${report.nfi?.score??0}%`}} /></div>
             <p className="score-footnote">直接测量报道比例，交集只计一次。不是泡沫概率。</p>
             {report.nfi?.sampling&&<p className="measurement-detail-note">本次 {report.nfi.sampling.eligiblePublishers} 个合格出版源 · {report.nfi.sampling.eligibleArticles.toLocaleString()} 条去重报道。{report.nfi.reasons?.join('；')}</p>}
           </section>
           <section className="risk-panel score-panel"><div className="panel-heading"><h3>市场压力位置</h3><span className="metric-code">CRS · V3</span></div>
             <p className="panel-description">信用与股市压力，处在各自历史什么位置？</p>
-            <GaugeArc neutral decimals={1} value={report.pressure?.score ?? null} label="MARKET PRESSURE" bandLabel={report.pressure?.score==null?'计算条件不足':'四项平均历史分位'} height={145} />
+            <div className="evidence-readout"><strong className="num">{report.pressure?.score?.toFixed(1)??'—'}<small>/ 100</small></strong><span>四项边际历史分位的平均</span></div><div className="evidence-scale"><i style={{width:`${report.pressure?.score??0}%`}} /><b /></div>{report.pressure?.comparison&&<p className="evidence-change"><strong className="num">{report.pressure.comparison.change>=0?'+':''}{report.pressure.comparison.change.toFixed(1)}</strong> 较 20 个共同观测前 · 固定当前参考分布</p>}
             <p className="score-footnote">50 是历史中间位置，不是安全线；不含新闻加分。</p>
             <p className="measurement-detail-note">共同观测：{report.pressure?.asOf??'无可用日期'}。各项需至少 252 个既往观测；计算依据见下方。</p>
           </section>
@@ -96,6 +95,7 @@ export default function RiskPage() {
           </section>
         </div>
 
+        {report.eventRisk && <EventRiskPanel data={report.eventRisk} assessment={report.assessment} />}
         <div className="section-heading"><div><span className="section-index">02</span><h3>市场环境</h3></div><span>点击指标查看历史与传导逻辑 ↗</span></div>
         <div className="macro-grid">{macroCards.map(c => <MacroCard key={c.key} data={c} onDrill={() => setDrillKey(c.key)} />)}</div>
         {report.quality && <QualityBar quality={report.quality} />}
@@ -105,9 +105,9 @@ export default function RiskPage() {
           <section className="risk-panel analysis-panel"><div className="panel-heading"><h3>资本叙事，如何避免重复计数</h3><span>互斥部分相加</span></div>
             <NarrativeAttribution data={report.nfi} />
           </section>
-          <section className="risk-panel analysis-panel"><div className="panel-heading"><h3>历史观察</h3><span>NFI / CRS</span></div>
+          <section className="risk-panel analysis-panel"><div className="panel-heading"><h3>历史观察</h3><span>同口径历史</span></div>
             <p className="panel-description">仅展示同一 V3 口径与 {days} 天窗口。NFI 是报道占比，CRS 是平均历史分位，不能直接比较两条线的高低。</p>
-            <HistoryLine points={history} height={220} />
+            <div className="evidence-history-pair"><div><h4>资本叙事占比 <small>%</small></h4><HistoryLine metric="nfi" points={history.map(p=>({...p,crs:null}))} height={160} /></div><div><h4>市场压力位置 <small>/ 100</small></h4><HistoryLine metric="crs" points={history.map(p=>({...p,nfi:null}))} height={160} /></div></div>
           </section>
         </div>
         <PressureAttribution data={report.pressure} />

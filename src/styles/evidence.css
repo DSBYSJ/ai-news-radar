@@ -1,0 +1,72 @@
+/* Evidence workspace: quiet surfaces, clear hierarchy, raw units and source trails. */
+.risk-page,.market-page { --evidence-accent:var(--accent); }
+.risk-page-header { border-bottom:1px solid var(--line);padding-bottom:28px;margin-bottom:4px; }
+.risk-page .section-heading { margin-top:8px;margin-bottom:0;padding-top:8px; }
+.app-shell .app-header { margin-bottom:26px; }
+.risk-page .risk-panel,.market-page .card { box-shadow:0 3px 12px #10272b04;border-color:var(--line); }
+.risk-page .score-panel { position:relative;overflow:hidden;padding:28px; }
+.risk-page .score-panel::before { content:'';height:3px;background:var(--accent);position:absolute;top:0;left:28px;right:28px;opacity:.7; }
+.risk-page .risk-score-grid { gap:20px;align-items:stretch; }
+.evidence-readout { margin:24px 0 20px; }
+.evidence-readout > strong { display:block;font-size:64px;line-height:1.15;letter-spacing:-.06em;font-weight:500;color:var(--ink); }
+.evidence-readout small { font-size:19px;letter-spacing:0;margin-left:9px;color:var(--ink-faint);font-weight:400; }
+.evidence-readout > span { display:block;margin-top:10px;font-size:12px;color:var(--ink-muted); }
+.evidence-scale { height:5px;border-radius:5px;background:var(--surface-sunk);position:relative;overflow:hidden;margin-bottom:22px; }
+.evidence-scale i { display:block;height:100%;background:var(--accent);border-radius:5px; }
+.evidence-scale b { position:absolute;left:50%;height:100%;top:0;border-left:2px solid var(--surface); }
+.evidence-change { font-size:12px;color:var(--ink-muted);line-height:1.8;margin:-5px 0 15px; }
+.evidence-change strong { color:var(--ink);margin-right:4px;font-weight:600; }
+.risk-page .score-footnote { border-top:1px solid var(--line-soft);padding-top:14px; }
+.risk-page .structure-panel { padding:28px; }
+.risk-page .measurement-observation { padding:12px 0; }
+.risk-page .measurement-observation strong { font-size:20px; }
+.risk-page .event-risk-panel { margin-top:8px;background:var(--surface);border:1px solid var(--line);box-shadow:0 3px 12px #10272b04; }
+.risk-page .event-risk-panel::before { opacity:0; }
+.risk-page .risk-judgement { background:var(--surface-2);border-radius:12px;padding:22px 24px;margin-top:22px;gap:28px; }
+.risk-page .judgement-number { min-width:112px; }
+.risk-page .judgement-number .num { color:var(--ink);font-size:45px; }
+.risk-page .event-title { margin:9px 0 5px;max-width:920px; }
+.event-verification { font-size:12px;color:var(--ink-muted);margin:4px 0 9px; }
+.risk-page .event-evidence-grade { border:1px solid var(--line);background:var(--surface-2);color:var(--ink-muted);border-radius:5px; }
+.risk-page .event-intensity { min-width:86px;color:var(--ink-muted); }
+.risk-page .event-intensity strong { color:var(--ink);font-size:25px; }
+.risk-page .risk-analysis-grid { grid-template-columns:1fr; }
+.evidence-history-pair { display:grid;grid-template-columns:1fr 1fr;gap:30px;margin-top:22px; }
+.evidence-history-pair > div { min-width:0; }
+.evidence-history-pair h4 { font-size:14px;color:var(--ink);margin-bottom:10px; }
+.evidence-history-pair small { color:var(--ink-faint);font-weight:400;margin-left:8px; }
+.pressure-delta { display:flex;justify-content:space-between;gap:12px;font-size:11px;color:var(--ink-muted);margin-top:12px;flex-wrap:wrap; }
+.pressure-delta b { color:var(--ink-2);font-weight:500; }
+.evidence-source-link { display:inline-block;color:var(--accent);font-size:12px;margin-top:12px; }
+.evidence-source-link:hover,.filing-ledger a:hover { text-decoration:underline;text-underline-offset:4px; }
+.market-page { gap:22px; }
+.market-page .valuation-summary { border-radius:12px; }
+.market-page .valuation-context { background:var(--surface-2);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:12px;padding:22px 26px; }
+.market-page .valuation-context h3 { font-size:20px; }
+.market-page .valuation-workspace { padding:30px; }
+.valuation-focus-controls { display:flex;justify-content:space-between;gap:20px;align-items:center;margin-top:25px; }
+.valuation-focus-controls input { min-width:190px;width:240px;max-width:100%;border:1px solid var(--line);background:var(--surface-2);padding:9px 13px;border-radius:9px;color:var(--ink);font-size:13px; }
+.valuation-focus-controls input:focus { outline:2px solid var(--accent);outline-offset:2px; }
+.market-page .valuation-controls { margin-top:18px; }
+.market-page .valuation-list-heading { font-size:12px;padding-bottom:16px; }
+.market-page .valuation-company-row { padding-block:24px; }
+.market-page .valuation-company-name strong { font-size:17px; }
+.financial-period-tag { display:inline-block;font-size:10px;color:var(--ink-muted);font-style:normal;margin-top:7px;background:var(--surface-sunk);padding:2px 6px;border-radius:4px; }
+.market-page .valuation-multiples strong { font-size:23px; }
+.market-page .valuation-company[data-expanded='true'] { background:color-mix(in srgb,var(--accent) 3%,transparent); }
+.market-page .valuation-detail { background:var(--surface-2);gap:26px;padding:25px; }
+.filing-ledger { grid-column:1/-1;border-top:1px solid var(--line);padding-top:22px;min-width:0; }
+.filing-ledger h4 { display:flex;align-items:center;justify-content:space-between;gap:15px; }
+.filing-ledger h4 span { font-size:11px;color:var(--ink-faint);font-weight:400; }
+.filing-totals { display:flex;gap:40px;margin:16px 0 20px;font-size:12px;color:var(--ink-muted); }
+.filing-totals strong { color:var(--ink);font-size:21px;font-weight:500;margin-left:10px; }
+.filing-source { display:grid;grid-template-columns:100px minmax(0,1fr) 150px;align-items:start;gap:18px;padding:15px 0;border-top:1px solid var(--line-soft);font-size:12px;color:var(--ink-2); }
+.filing-operation { color:var(--ink-muted); }
+.filing-source a,.filing-share-source a { color:var(--accent); }
+.filing-source small { display:block;margin-top:4px;font-size:11px;overflow-wrap:anywhere;color:var(--ink-faint); }
+.filing-source > span:last-child { text-align:right; }
+.filing-share-source { border-top:1px solid var(--line-soft);padding-top:15px;margin-top:5px;color:var(--ink-muted);font-size:12px;line-height:1.9;overflow-wrap:anywhere; }
+html.dark .risk-page .risk-panel,html.dark .market-page .card,html.dark .risk-page .event-risk-panel { box-shadow:0 4px 20px #0000000d; }
+@media(max-width:1100px){.evidence-readout>strong{font-size:54px}.risk-page .risk-score-grid{gap:14px}.risk-page .score-panel,.risk-page .structure-panel{padding:23px}.filing-source{grid-template-columns:90px minmax(0,1fr) 130px;gap:12px}.valuation-focus-controls{gap:12px}}
+@media(max-width:800px){.evidence-history-pair{grid-template-columns:1fr;gap:24px}.valuation-focus-controls{flex-wrap:wrap}.valuation-focus-controls input{width:100%}.market-page .valuation-workspace{padding:22px}.evidence-readout>strong{font-size:48px}.risk-page .risk-judgement{padding:18px;gap:18px}.filing-totals{gap:20px;flex-wrap:wrap}.filing-source{grid-template-columns:80px minmax(0,1fr)}.filing-source>span:last-child{grid-column:2;text-align:left}.filing-source>span:last-child small{display:inline;margin-left:15px}}
+@media(max-width:520px){.risk-page .risk-score-grid{grid-template-columns:minmax(0,1fr)}.risk-page .score-panel,.risk-page .structure-panel{padding:23px}.evidence-readout{margin-block:20px}.evidence-readout>strong{font-size:58px}.risk-page .risk-judgement{align-items:flex-start}.risk-page .judgement-number{min-width:78px}.risk-page .judgement-number .num{font-size:35px}.risk-page .risk-judgement h4{font-size:16px}.risk-page .event-intensity{min-width:48px}.risk-page .event-monogram{display:none}.risk-page-header{padding-bottom:22px}.market-page .valuation-detail{padding:18px}.filing-source{grid-template-columns:minmax(0,1fr);gap:6px}.filing-source>span:last-child{grid-column:1}.filing-ledger h4{align-items:flex-start;flex-direction:column}.market-page .valuation-company-row{gap:15px 14px}}

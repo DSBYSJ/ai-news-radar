@@ -22,7 +22,7 @@ function setup(t: { after: (fn: () => void) => void }) {
 function add(db: DatabaseSync, i: number, sentiment: string, hours = 1) {
   const at = new Date(NOW - hours * 3_600_000).toISOString()
   db.prepare('INSERT INTO raw_items(id,source_id,guid,url,url_norm,title,published_at,fingerprint,fetched_at)VALUES(?,?,?,?,?,?,?,?,?)')
-    .run(i,'s',String(i),`https://example.com/${i}`,`https://example.com/${i}`,'Model news',at,String(i),at)
+    .run(i,'s',String(i),`https://example.com/${i}`,`https://example.com/${i}`,`Model news ${i}`,at,String(i),at)
   db.prepare('INSERT INTO articles(id,raw_id,url,title,category,entities,sentiment,published_at,created_at)VALUES(?,?,?,?,?,?,?,?,?)')
     .run(i,i,`https://example.com/${i}`,'Model news','model_release','["OpenAI"]',sentiment,at,at)
   db.prepare('INSERT INTO mentions(article_id,entity)VALUES(?,?)').run(i,'OpenAI')
@@ -53,7 +53,8 @@ test('实体风险：不受低 CRS 门槛屏蔽；没有融资报道本身不增
   db.exec("UPDATE articles SET sentiment='negative'")
   const negative = await riskReport(db, { now: NOW, macro: macro() })
   assert.equal(negative.crisis,null,'宏观历史不足时仍独立展示实体负面信号')
-  assert.equal(negative.vulnerableEntities[0].score, 70)
+  assert.equal(negative.vulnerableEntities[0].negativeShare, 1)
+  assert.equal(negative.vulnerableEntities[0].balancedShare,null,'单源不冒充来源均衡比例')
   assert.ok(!negative.vulnerableEntities[0].reason.includes('无融资'))
 })
 
