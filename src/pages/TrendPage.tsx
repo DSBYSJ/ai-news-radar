@@ -54,7 +54,7 @@ function Metric({
     <div className="min-w-[132px] flex-1 rounded-lg bg-slate-50/80 px-3 py-2 dark:bg-white/[0.03]">
       <p className="truncate text-[10.5px] text-slate-400 dark:text-slate-500">{label}</p>
       <p className={`num mt-0.5 text-[17px] font-semibold leading-tight ${tone}`}>{value}</p>
-      {sub && <p className="mt-0.5 truncate text-[10px] text-slate-400 dark:text-slate-500">{sub}</p>}
+      {sub && <p className="metric-sub mt-0.5 truncate text-[10px] text-slate-400 dark:text-slate-500">{sub}</p>}
     </div>
   )
 }

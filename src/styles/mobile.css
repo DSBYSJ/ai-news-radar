@@ -137,3 +137,40 @@
   .valuation-summary > strong { grid-column: 2; grid-row: 1/3; }
   .valuation-summary > span { grid-column: 1; }
 }
+
+/* ============ 状态栏遮挡（v0.45.8）============
+ * 根因：Capacitor 壳是 edge-to-edge（WebView 顶到屏幕最上沿），index.html 的
+ * viewport-fit=cover 让 env(safe-area-inset-top) 有值，`.app-shell` 用它做顶部留白。
+ * 但那是**文档内边距**，只在 scrollTop=0 时有效；页面一滚动，内容就从留白下方钻到
+ * 状态栏底下，和时钟/信号图标叠在一起（趋势页、估值页滚动时都能复现）。
+ * 修法：在状态栏高度铺一层与页面底色同色的固定遮罩，内容滚过去直接被盖住。
+ * 用 body::before 而非新增 DOM，不参与任何布局计算；z-index 略低于既有噪点层
+ * body::after(9999)，避免把颗粒质感挡掉。
+ */
+@media (max-width: 800px) {
+  body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: env(safe-area-inset-top, 0px);
+    background: var(--bg);
+    z-index: 9998;
+    pointer-events: none;
+  }
+
+  /* 趋势页 2×2 速览卡片：副标题原本是单行 truncate，在 384px 视口下
+   * “两期数据不足，无法算环比”被截成“两期数据不足，无…”，信息直接丢失。
+   * 移动端放开换行、限 2 行，兼顾信息完整与卡片等高；桌面端（>800px）仍保持单行。
+   */
+  .metric-sub {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    white-space: normal;
+    overflow: hidden;
+    text-overflow: clip;
+    line-height: 1.5;
+  }
+}
